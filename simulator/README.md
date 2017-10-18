@@ -1,3 +1,5 @@
+  The algorithm functions are currently called as part of a loop. They should really be executed concurrently.
+  
   - Desc      : A simulator tool writen in python using pygame. Designed to allow testing of navigation and mapping algorithms.
   - Guide  :
     - Ensure python 2.7 is installed
