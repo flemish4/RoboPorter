@@ -32,14 +32,17 @@
           Data will appear in lidarAngles and lidarMap when lidarReady is True again
         - Movement is calculated using the speedVector variables, some error is introduced. wheelSpeeds is set, porterImuOrientation is           set, this is the realPorterOrientation with some error added - use this bearing in mind we do not know how accurate the imu is
         - calculatePorterPosition() is a good start for converting wheelSpeeds and porterImuOrientation into porterLocation
-      - Settings :
-        - simSpeed        : Used to vary the simulation speed (untested)
-        - simFrameTime    : Length of frame, may be useful for slower machines
-        - scale           : The number of real world cm per pixel
-        - realPorterSize  : [x,y] the size of the porter in cm
-        - (wheel|orientation|encoder)Error : percentage error included when calculating values
-        - font            : Font used in menu
-        - winX, winY      : Size of the program window in pixels
-        - views           : Relative size, position and colour of and 'views' in the program
-        - tileRealW       : Real world width/height of one tile - i.e. the smallest unit you can draw on the map
-        - lidarRpm        : RPM of the lidar
+    - Stop :
+      - Desc : Stops any running feature
+    
+  - Settings :
+    - simSpeed        : Used to vary the simulation speed (untested)
+    - simFrameTime    : Length of frame, may be useful for slower machines
+    - scale           : The number of real world cm per pixel
+    - realPorterSize  : [x,y] the size of the porter in cm
+    - (wheel|orientation|encoder)Error : percentage error included when calculating values
+    - font            : Font used in menu
+    - winX, winY      : Size of the program window in pixels
+    - views           : Relative size, position and colour of and 'views' in the program
+    - tileRealW       : Real world width/height of one tile - i.e. the smallest unit you can draw on the map
+    - lidarRpm        : RPM of the lidar
