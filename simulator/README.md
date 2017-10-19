@@ -1,4 +1,4 @@
-  The algorithm functions are currently called as part of a loop. They should really be executed concurrently.
+  The algorithm functions are currently called as part of a loop. They should really be executed concurrently. I am working on this........
   
   - Desc      : A simulator tool writen in python using pygame. Designed to allow testing of navigation and mapping algorithms.
   - Guide  :
