@@ -6,6 +6,8 @@ import glob
 import math
 import random 
 from bresenham import bresenham
+import multiprocessing
+import threading
 
 # Porter global variables
 global USAvgDistances
@@ -20,6 +22,7 @@ global lastCommand
 global speedVector
 global dataReady
 global threadLock
+global exitFlag
 global USThreashholds
 global stoppingDistance
 global lidarRun
@@ -27,7 +30,8 @@ global lidarAngles
 global lidarMap
 global lidarReady
 global porterImuOrientation
-wheelSpeeds        = [0,0]    
+exitFlag = False #multiprocessing Exit flag
+wheelSpeeds         = [0,0]    
 lidarReady          = True
 lidarAngles         = {}
 lidarMap            = set()
@@ -36,7 +40,7 @@ obstruction         = False
 lastCommand         = ""
 speedVector         = [0, 0]
 dataReady           = False
-threadLock          = False
+threadLock = threading.Lock()
 USThreashholds      = {"front":30,"back":30,"side":20}
 stoppingDistance    = 20
 porterOrientation   = 0
@@ -47,9 +51,17 @@ global realObstruction
 global realCollision
 global realPorterLocation
 global realPorterOrientation
+global simThread
 realPorterOrientation = 0
 realObstruction         = False
 realCollision         = False
+
+
+class MultiThreadBase(threading.Thread): #Parent class for threading
+    def __init__(self, threadID, name): #Class constructor
+        threading.Thread.__init__(self) #Initiate thread
+        self.threadID = threadID #Thread number
+        self.name = name #Readable thread name
 
 
 class Button(pygame.sprite.Sprite):
@@ -81,6 +93,8 @@ class Button(pygame.sprite.Sprite):
 
 class porterSim() :
     def __init__(self): 
+        global exitFlag
+        global threadLock
         pygame.init()
         pygame.font.init()  
         self.simSpeed           = 1 # Scale time 
@@ -126,7 +140,8 @@ class porterSim() :
         self.map                = set() # A set of tuples each (x,y) of a wall tile  
         self.fineMap            = set() # A set of tuples each (x,y) of a wall pixel hence fine
         self.rectMap            = []    # A list of rects(pygame object) each equivilent to a tile in self.map - used for collision detection
-        self.stopping           = False # Is the current task stopping - allows variables to be reset when ending sim etc.
+        with threadLock :
+            exitFlag          = False # Is the current task stopping - allows variables to be reset when ending sim etc.
         
         print "scale: " + str(self.scale) + "cm/p, tileW: " + str(self.tileW) + "p, tileRealW: " + str(self.tileRealW) + "cm, nTileX: " + str(self.nTileX) + ", nTileY: " + str(self.nTileY) + ", maxX: " + str(self.scale*self.tileW*self.nTileX/100) + "m, maxY: " + str(self.scale*self.tileW*self.nTileY/100) + "m" 
         
@@ -228,7 +243,9 @@ class porterSim() :
     
     
     def mapBuilder(self, e) :
-        if self.stopping == False :
+        global exitFlag
+        global threadLock
+        if exitFlag == False :
             if self.firstRun : 
                 self.createViews()
                 self.firstRun = False
@@ -255,7 +272,8 @@ class porterSim() :
                     self.addTile(e)
         else :
             self.runMode = self.nextRunMode
-            self.stopping = False
+            with threadLock:
+                exitFlag = False
             self.genRectMap()
             self.genFineMap()
             self.firstRun = True
@@ -342,10 +360,11 @@ class porterSim() :
         global realPorterLocation
         porterRect = self.porterReal["surface"].get_rect()
         porterRect = porterRect.move(realPorterLocation)
-        if porterRect.collidelist(self.rectMap) != -1 :
-            realCollision = True
-        else :
-            realCollision = False
+        with threadLock :
+            if porterRect.collidelist(self.rectMap) != -1 :
+                realCollision = True
+            else :
+                realCollision = False
 
         return realCollision
         
@@ -357,11 +376,12 @@ class porterSim() :
         porterRect = porterRect.move(realPorterLocation)
         porterRect.inflate_ip(2*USThreashholds["front"]/self.scale, 2*USThreashholds["front"]/self.scale)
         
-        if porterRect.collidelist(self.rectMap) != -1 :
-            realObstruction = True
-            print "Real Obstruction: " + str(realObstruction)
-        else :
-            realObstruction = False
+        with threadLock :
+            if porterRect.collidelist(self.rectMap) != -1 :
+                realObstruction = True
+                print "Real Obstruction: " + str(realObstruction)
+            else :
+                realObstruction = False
     
         return realObstruction
     
@@ -429,8 +449,9 @@ class porterSim() :
         endPos = (int(round(startPos[0] + r*math.cos(math.radians(porterAbsAngle)))), int(round(startPos[1] + r*math.sin(math.radians(porterAbsAngle)))))
         
         if r <(4000/self.scale) :  # If within 40m which it definitely will be...
-            lidarAngles[angle] = r
-            lidarMap.add((endPos))
+            with threadLock :
+                lidarAngles[angle] = r
+                lidarMap.add((endPos))
             # Draw lidar line and hit point on portermap
             pygame.draw.circle(self.views["portermap"]["surface"],self.black,endPos,5)
             pygame.draw.line(self.views["portermap"]["surface"], self.black, startPos, endPos)
@@ -444,14 +465,16 @@ class porterSim() :
         if lidarRun == "a":
             # Start 360 scan
             self.lidarPos = -180
-            lidarReady  = False
-            lidarMap    = set()
-            lidarAngles = {}
+            with threadLock :
+                lidarReady  = False
+                lidarMap    = set()
+                lidarAngles = {}
             
         elif (len(lidarRun)>1) and (lidarRun[0] == "a") :
             # Get single sample
-            lidarAngles = {}
-            lidarMap    = set()
+            with threadLock :
+                lidarAngles = {}
+                lidarMap    = set()
             try :
                 angle = int(lidarRun[1:])
                 self.getLidarSample(angle)
@@ -463,12 +486,14 @@ class porterSim() :
             endPos = int(round(self.lidarPos + self.lidarNSamples))
             if endPos >= 180 :
                 endPos = 180
-                lidarReady = True
+                with threadLock :
+                    lidarReady = True
             for angle in range(self.lidarPos,endPos) :
                 self.getLidarSample(angle)
         
             self.lidarPos = endPos
-        lidarRun = ""
+        with threadLock :
+            lidarRun = ""
     
     
     def drawLidarGrid(self) :
@@ -482,16 +507,18 @@ class porterSim() :
         global porterLocation
         global realPorterOrientation
         global porterOrientation
+        global porterImuOrientation
         # Configure variables if first loop
         if self.firstRun :
             self.firstRun = False
             self.porter = {}
             self.porterReal = {}
-            porterOrientation = 0
-            porterImuOrientation = porterOrientation
-            realPorterOrientation = 0
-            porterLocation = (0,0)
-            realPorterLocation = (0,0)
+            with threadLock :
+                porterOrientation = 0
+                porterImuOrientation = porterOrientation
+                realPorterOrientation = 0
+                porterLocation = (0,0)
+                realPorterLocation = (0,0)
         # If sim hasn't started - allow porter to be placed
         if not self.simRunning :    
             if e.type == pygame.MOUSEBUTTONDOWN:
@@ -501,8 +528,9 @@ class porterSim() :
                         and e.pos[0] < (self.views["realmap"]["absPos"][0] + self.views["realmap"]["absSize"][0]) \
                         and e.pos[1] < (self.views["realmap"]["absPos"][1] + self.views["realmap"]["absSize"][1]) :
                         # Calculate new porter position
-                        porterLocation              = (e.pos[0]+self.views["realmap"]["absPos"][0]-(self.pixelPorterSize[0]/2), e.pos[1]- self.views["realmap"]["absPos"][1]-(self.pixelPorterSize[1]/2))
-                        realPorterLocation          = (e.pos[0]+ self.views["realmap"]["absPos"][0]-(self.pixelPorterSize[0]/2),e.pos[1]- self.views["realmap"]["absPos"][1]-(self.pixelPorterSize[1]/2))
+                        with threadLock :
+                            porterLocation              = (e.pos[0]+self.views["realmap"]["absPos"][0]-(self.pixelPorterSize[0]/2), e.pos[1]- self.views["realmap"]["absPos"][1]-(self.pixelPorterSize[1]/2))
+                            realPorterLocation          = (e.pos[0]+ self.views["realmap"]["absPos"][0]-(self.pixelPorterSize[0]/2),e.pos[1]- self.views["realmap"]["absPos"][1]-(self.pixelPorterSize[1]/2))
                         # Create new porter
                         self.porterReal["surface"]  = self.createPorter(self.views["realmap"]["surface"], self.views["realmap"]["rect"], realPorterLocation[0], realPorterLocation[1], porterOrientation)
                         self.porter["surface"]      = self.createPorter(self.views["portermap"]["surface"], self.views["portermap"]["rect"], porterLocation[0], porterLocation[1], porterOrientation)
@@ -518,15 +546,17 @@ class porterSim() :
                 if e.button == 2 :
                     if self.porterAdded  :
                         self.simRunning = True
+                        return True
                 
                 if e.button == 3 :
-                    # Rotate porter 90
-                    if porterOrientation > 90 :
-                        porterOrientation -= 270
-                    else :
-                        porterOrientation += 90
-                    porterImuOrientation = porterOrientation    
-                    realPorterOrientation = porterOrientation
+                    with threadLock :
+                        # Rotate porter 90
+                        if porterOrientation > 90 :
+                            porterOrientation -= 270
+                        else :
+                            porterOrientation += 90
+                        porterImuOrientation = porterOrientation    
+                        realPorterOrientation = porterOrientation
                     
 
     def realMovePorter(self) :
@@ -536,6 +566,8 @@ class porterSim() :
         global porterImuOrientation
         global speedVector
         global wheelSpeeds
+        global exitFlag
+        global threadLock
         
         if not realCollision :
             if speedVector != [0,0] :
@@ -560,51 +592,55 @@ class porterSim() :
                     new_heading = orientation + wd;
                     porterImuOrientation = porterOrientation + math.degrees(wd)*(1+ (self.orientationError*(0.5-random.random())))
 
-
-                realPorterLocation = (new_x,new_y)
-                realPorterOrientation = math.degrees(new_heading) + 90
-                
-                wheelSpeeds = (realWheelSpeeds[0]*(1 +(self.encoderError*(0.5-random.random()))), realWheelSpeeds[1]*(1 + (self.encoderError*(0.5-random.random()))))
-
-                realPorterOrientation = self.constrainAngle(realPorterOrientation, 180, -180)
-                # if realPorterOrientation > 180 :
-                    # realPorterOrientation -= 360
-                # elif realPorterOrientation < -180 :
-                    # realPorterOrientation += 360
+                with threadLock :
+                    realPorterLocation = (new_x,new_y)
+                    realPorterOrientation = math.degrees(new_heading) + 90
+                    wheelSpeeds = (realWheelSpeeds[0]*(1 +(self.encoderError*(0.5-random.random()))), realWheelSpeeds[1]*(1 + (self.encoderError*(0.5-random.random()))))
+                    realPorterOrientation = self.constrainAngle(realPorterOrientation, 180, -180)
                     
                 #collision detection
                 if self.checkPorterObstruction() :
                     if self.checkPorterCollision() :
-                        realPorterLocation = (x,y)
-                        realPorterOrientation = o
-                        wheelSpeeds = [0,0]
-                        self.stopping = True
+                        with threadLock :
+                            realPorterLocation = (x,y)
+                            realPorterOrientation = o
+                            wheelSpeeds = [0,0]
+                            exitFlag = True
                         self.nextRunMode = ""
             else :
-                wheelsSpeeds = [0,0]
+                with threadLock :
+                    wheelsSpeeds = [0,0]
 
 
 
                     
     def runSim(self, e) :
-        global porterLocation #vector holding local location [x,y] in cm
+        global porterLocation 
         global realPorterLocation
         global lidarReady
         global lidarMap
         global lidarAngles
-
-        if not self.stopping :
+        global exitFlag
+        global threadLock
+                    
+        if not exitFlag :
             self.createViews()
-            self.placePorter(e)
+            if not self.simRunning :
+                if self.placePorter(e) :
+                    # start thread for algorithm
+                    if self.runMode == "runMapSim" :
+                        simThread = mappingThread(1, "mappingThread",self.simFrameTime, self.scale, self.pixelPorterSize)
+                        simThread.start()
+
+                    elif self.runMode == "runNavSim" : 
+                        simThread = navigationThread(1, "navigationThread",self.simFrameTime, self.scale, self.pixelPorterSize)
+                        simThread.start()
             
             if self.simRunning : 
                 self.realMovePorter()
+                self.calculatePorterPosition()
                 self.checkLidar()
                 self.drawLidarGrid()
-                if self.runMode == "runMapSim" :
-                    self.mapping()      ####### USER FUNCTION
-                elif self.runMode == "runNavSim" : 
-                    self.navigation()
                 
             if self.porterAdded :
                 self.drawPorter(self.views["realmap"]["surface"], self.views["realmap"]["rect"], realPorterLocation[0],realPorterLocation[1], realPorterOrientation, self.porterReal["surface"])
@@ -617,25 +653,34 @@ class porterSim() :
             self.porterAdded = False
             self.simRunning = False
             self.runMode = self.nextRunMode
-            self.stopping = False
             self.firstRun = True
-            lidarReady = True
-            lidarMap = set()
-            lidarAngles = {}
+            while threading.activeCount() > 1 :
+                time.sleep(0.1)
+            with threadLock :
+                exitFlag = False
+                lidarReady = True
+                lidarMap = set()
+                lidarAngles = {}
                     
         
     def stop(self) :
         # Maybe deal with any errors?
-        self.firstRun = False
+        self.firstRun = True
         self.runMode=self.nextRunMode
         pass
 
 
     def main(self) :
+        global exitFlag
+        global threadLock
         while True:
             e = pygame.event.poll()
             #Check for quit event
             if e.type == pygame.QUIT:
+                with threadLock :
+                    exitFlag = True
+                while threading.activeCount() > 1 :
+                    time.sleep(0.1)
                 quit()
             
             # Check for menu event
@@ -646,7 +691,8 @@ class porterSim() :
                         if button["button"].pressed(e.pos) :
                             # This button was clicked!
                             if self.runMode != "" and self.runMode != None: # REVISIT : How is runMode EVER set to None??
-                                self.stopping = True
+                                with threadLock :
+                                    exitFlag = True
                                 self.nextRunMode  = name
                             else :
                                 self.runMode = name
@@ -675,8 +721,7 @@ class porterSim() :
         
     #####
     # Porter emulation functions here
-    #####
-    
+    #####    
     def calculatePorterPosition(self) :
         global porterLocation
         global porterOrientation
@@ -702,43 +747,34 @@ class porterSim() :
                     new_y = y - R * math.cos(wd + orientation) + R * math.cos(orientation);
                     new_heading = orientation + wd;
                 
-                porterLocation = (new_x,new_y)
-                porterOrientation = (math.degrees(new_heading) + 90)*0.5 + porterImuOrientation*0.5
-                porterOrientation = self.constrainAngle(porterOrientation, 180, -180)
+                with threadLock :
+                    porterLocation = (new_x,new_y)
+                    porterOrientation = (math.degrees(new_heading) + 90)*0.5 + porterImuOrientation*0.5
+                    porterOrientation = self.constrainAngle(porterOrientation, 180, -180)
 
+                    
+class simThreadBase(MultiThreadBase) :
     
-    def mapping(self) :
-        # May not need all of these
-        global USAvgDistances
-        global wheelSpeeds
-        global obstruction
-        global maxSpeeds
-        global porterLocation #vector holding local location [x,y] in cm
-        global porterOrientation #angle from north (between -180,180) in degrees
-        global lastCommand
-        global speedVector
-        global dataReady
-        global threadLock
-        global USThreashholds
-        global stoppingDistance
-        global realObstruction
-        global realPorterLocation
-        global realPorterOrientation
-        global lidarReady
-        global lidarMap
-        global lidarAngles
-        global lidarRun
+    def __init__(self, threadID, name, simFrameTime, scale, pixelPorterSize):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.simFrameTime = simFrameTime
+        self.scale = scale
+        self.pixelPorterSize = pixelPorterSize
 
-        # Calculates porter position based on wheel speeds and IMU - IMU is overpowered (accurate)...
-        self.calculatePorterPosition()
-
-        # Things you may want to do
-        # speedVector = [50,100]
-        # if lidarReady :
-        #     lidarRun = "a"    
+    def constrainAngle(self, angle, max, min) :
+        while angle >= max :
+            angle -= 360
+        while angle < min :
+            angle += 360
+        return angle
 
         
-    def navigation(self) :
+                
+                
+class mappingThread(simThreadBase):
+    def run(self):   
         # May not need all of these
         global USAvgDistances
         global wheelSpeeds
@@ -750,6 +786,7 @@ class porterSim() :
         global speedVector
         global dataReady
         global threadLock
+        global exitFlag
         global USThreashholds
         global stoppingDistance
         global realObstruction
@@ -758,15 +795,53 @@ class porterSim() :
         global lidarReady
         global lidarMap
         global lidarAngles
-        global lidarRun
+        global lidarRun    
+        # Things you may want to do
+        with threadLock :
+            speedVector = [50,100]
+        
+        done = False
+        while (not done) and (not exitFlag) :
 
-        # Calculates porter position based on wheel speeds and IMU - IMU is overpowered (accurate)...
-        self.calculatePorterPosition()
+            if lidarReady :
+                with threadLock :
+                    lidarRun = "a"
+                    
+            while not lidarReady :
+                time.sleep(0.1)
+            
+            time.sleep(1)
+
+
+    
+class navigationThread(simThreadBase):
+    def run(self):            # May not need all of these
+        global USAvgDistances
+        global wheelSpeeds
+        global obstruction
+        global maxSpeeds
+        global porterLocation #vector holding local location [x,y] in cm
+        global porterOrientation #angle from north (between -180,180) in degrees
+        global lastCommand
+        global speedVector
+        global dataReady
+        global threadLock
+        global exitFlag
+        global USThreashholds
+        global stoppingDistance
+        global realObstruction
+        global realPorterLocation
+        global realPorterOrientation
+        global lidarReady
+        global lidarMap
+        global lidarAngles
+        global lidarRun    
 
         # Things you may want to do
-        # speedVector = [50,100]
-        # if lidarReady :
-        #     lidarRun = "a"
+        # with threadLock :
+        #   speedVector = [50,100]
+        #   if lidarReady :
+        #       lidarRun = "a"  
         
         
 if __name__ == "__main__" :
