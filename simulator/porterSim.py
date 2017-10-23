@@ -370,6 +370,7 @@ class porterSim() :
         
     def checkPorterObstruction(self) :
         global realObstruction
+        global obstruction
         # REVISIT : Unfortunately a square collision box is the only reasonable way to achieve this using pygame
         #           i.e. if porter is rotated the bounding box will be bigger than it should be
         porterRect = self.porterReal["surface"].get_rect()
@@ -382,6 +383,9 @@ class porterSim() :
                 print "Real Obstruction: " + str(realObstruction)
             else :
                 realObstruction = False
+    
+        # REVISIT : is this representitive?
+        obstruction = realObstruction
     
         return realObstruction
     
@@ -637,10 +641,14 @@ class porterSim() :
                         simThread.start()
             
             if self.simRunning : 
-                self.realMovePorter()
-                self.calculatePorterPosition()
-                self.checkLidar()
-                self.drawLidarGrid()
+                if threading.activeCount() == 1 :
+                    self.simRunning = False
+                    exitFlag = True
+                else :
+                    self.realMovePorter()
+                    self.calculatePorterPosition()
+                    self.checkLidar()
+                    self.drawLidarGrid()
                 
             if self.porterAdded :
                 self.drawPorter(self.views["realmap"]["surface"], self.views["realmap"]["rect"], realPorterLocation[0],realPorterLocation[1], realPorterOrientation, self.porterReal["surface"])
@@ -797,20 +805,24 @@ class mappingThread(simThreadBase):
         global lidarAngles
         global lidarRun    
         # Things you may want to do
-        with threadLock :
-            speedVector = [50,100]
+        #with threadLock :
+        #    speedVector = [50,100]
         
-        done = False
-        while (not done) and (not exitFlag) :
+        #done = False
+        #while (not done) and (not exitFlag) :
 
-            if lidarReady :
-                with threadLock :
-                    lidarRun = "a"
-                    
-            while not lidarReady :
-                time.sleep(0.1)
-            
-            time.sleep(1)
+        
+        
+        if lidarReady :
+            with threadLock :
+                lidarRun = "a"
+                lidarReady = False
+                
+        while not lidarReady :
+            time.sleep(0.1)
+        
+        print "done"
+        #time.sleep(1)
 
 
     
