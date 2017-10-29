@@ -245,6 +245,7 @@ class porterSim() :
     def mapBuilder(self, e) :
         global exitFlag
         global threadLock
+        saveQuit = False
         if exitFlag == False :
             if self.firstRun : 
                 self.createViews()
@@ -258,13 +259,20 @@ class porterSim() :
                         self.draw_on = 1
                     self.addTile(e)
                 if e.button == 2 :
-                    # SAVE and quit
-                    with open(time.strftime("%Y-%m-%d %H%M%S", time.gmtime()) + '.map', 'wb') as f:
-                        pickle.dump(self.map, f)
-                    self.runMode = ""
-                    self.genFineMap()
-                    self.genRectMap()
-                    self.draw_on = 0
+                    saveQuit = True
+                    
+            if e.type == pygame.KEYDOWN :
+                if e.key == pygame.K_s :
+                    saveQuit = True
+                    
+            if saveQuit :
+                # SAVE and quit
+                with open(time.strftime("%Y-%m-%d %H%M%S", time.gmtime()) + '.map', 'wb') as f:
+                    pickle.dump(self.map, f)
+                self.runMode = ""
+                self.genFineMap()
+                self.genRectMap()
+                self.draw_on = 0
             if e.type == pygame.MOUSEBUTTONUP:
                 self.draw_on = 0
             if e.type == pygame.MOUSEMOTION:
@@ -512,6 +520,7 @@ class porterSim() :
         global realPorterOrientation
         global porterOrientation
         global porterImuOrientation
+        startSim = False
         # Configure variables if first loop
         if self.firstRun :
             self.firstRun = False
@@ -548,9 +557,8 @@ class porterSim() :
                             self.porterReal["surface"] = None
                             self.porter["surface"]  = None
                 if e.button == 2 :
-                    if self.porterAdded  :
-                        self.simRunning = True
-                        return True
+                    startSim = True
+            
                 
                 if e.button == 3 :
                     with threadLock :
@@ -562,6 +570,14 @@ class porterSim() :
                         porterImuOrientation = porterOrientation    
                         realPorterOrientation = porterOrientation
                     
+            if e.type == pygame.KEYDOWN :
+                if e.key == pygame.K_s :
+                    startSim = True
+                    
+            if startSim :
+                    if self.porterAdded  :
+                        self.simRunning = True
+                        return True        
 
     def realMovePorter(self) :
         # May not need all of these
