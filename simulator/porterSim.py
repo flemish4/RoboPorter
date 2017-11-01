@@ -14,8 +14,7 @@ global USAvgDistances
 global wheelSpeeds
 global obstruction
 global maxSpeeds
-global LIDARAngles
-global LIDARMap
+global pathMap
 global porterLocation #vector holding local location [x,y] in cm
 global porterOrientation #angle from north (between -180,180) in degrees
 global lastCommand
@@ -30,7 +29,11 @@ global lidarAngles
 global lidarMap
 global lidarReady
 global porterImuOrientation
-exitFlag = False #multiprocessing Exit flag
+global realPorterSize
+global dataMap
+dataMap             = set()
+exitFlag            = False #multiprocessing Exit flag
+pathMap             = {}
 wheelSpeeds         = [0,0]    
 lidarReady          = True
 lidarAngles         = {}
@@ -45,6 +48,7 @@ USThreashholds      = {"front":30,"back":30,"side":20}
 stoppingDistance    = 20
 porterOrientation   = 0
 porterImuOrientation = porterOrientation
+realPorterSize     = (73,70)
 
 # RealPorter global variables
 global realObstruction
@@ -86,27 +90,25 @@ class Button(pygame.sprite.Sprite):
                     else: return False
                 else: return False
             else: return False
-        else: return False
- 
-        
+        else: return False 
         
 
 class porterSim() :
     def __init__(self): 
         global exitFlag
         global threadLock
+        global realPorterSize
         pygame.init()
         pygame.font.init()  
         self.simSpeed           = 1 # Scale time 
         self.simFrameTime       = 0.015 
         self.simFrameRate       = 1/self.simFrameTime
-        self.scale              = 2 # 1pixel = 1cm
-        self.realPorterSize     = (73,70)
+        self.scale              = 2 # 1pixel = 2cm
         self.wheelSpeedError    = 0.05
         self.orientationError   = 0.5
         self.encoderError       = 0.05
         self.lidarError         = 0.02
-        self.pixelPorterSize    = (self.realPorterSize[0]/self.scale,self.realPorterSize[1]/self.scale)
+        self.pixelPorterSize    = (realPorterSize[0]/self.scale,realPorterSize[1]/self.scale)
         self.font               = pygame.font.SysFont('Arial', 20)
         self.winX, self.winY    = 1600, 843
         self.views          =    {  "realmap"   :   {   "relSize": (0.5,0.95),
@@ -418,7 +420,7 @@ class porterSim() :
         return int(round(qx)), int(round(qy))
 
     
-    def constrainAngle(self, angle, max, min) :
+    def constrainAngle360(self, angle, max, min) :
         while angle >= max :
             angle -= 360
         while angle < min :
@@ -439,7 +441,7 @@ class porterSim() :
         x0 = int(round(realPorterLocation[0]) + self.pixelPorterSize[0]/2)
         y0 = int(round(realPorterLocation[1]) + self.pixelPorterSize[1]/2)
         # Absolute angle
-        a    = self.constrainAngle(realPorterOrientation + angle - 90, 360,0)
+        a    = self.constrainAngle360(realPorterOrientation + angle - 90, 360,0)
         # End points of line 
         xMax = x0 + int(round(self.longestR*math.cos(math.radians(a))))
         yMax = y0 + int(round(self.longestR*math.sin(math.radians(a))))
@@ -457,13 +459,13 @@ class porterSim() :
         # Calculate location relative to porter (not realPorter)
         startPos = (porterLocation[0] + self.pixelPorterSize[0]/2, porterLocation[1] + self.pixelPorterSize[1]/2)
         r = math.sqrt((point[0]-x0)**2+(point[1]-y0)**2)
-        porterAbsAngle = self.constrainAngle(porterOrientation -90 + angle, 360, 0)
+        porterAbsAngle = self.constrainAngle360(porterOrientation -90 + angle, 360, 0)
         endPos = (int(round(startPos[0] + r*math.cos(math.radians(porterAbsAngle)))), int(round(startPos[1] + r*math.sin(math.radians(porterAbsAngle)))))
         
         if r <(4000/self.scale) :  # If within 40m which it definitely will be...
             with threadLock :
-                lidarAngles[angle] = r
-                lidarMap.add((endPos))
+                lidarAngles[angle] = r * self.scale
+                lidarMap.add((endPos[0]*self.scale,endPos[1]*self.scale))
             # Draw lidar line and hit point on portermap
             pygame.draw.circle(self.views["portermap"]["surface"],self.black,endPos,5)
             pygame.draw.line(self.views["portermap"]["surface"], self.black, startPos, endPos)
@@ -511,7 +513,13 @@ class porterSim() :
     def drawLidarGrid(self) :
         global lidarMap
         for point in lidarMap :
-            pygame.draw.circle(self.views["portermap"]["surface"], self.black, point, 1)
+            pygame.draw.circle(self.views["portermap"]["surface"], self.black, (point[0]/self.scale,point[1]/self.scale), 1)
+    
+    def drawDataMap(self) :
+        global dataMap
+        with threadLock :
+            for point in dataMap :
+                pygame.draw.circle(self.views["portermap"]["surface"], (255,0,0), (point[0]/self.scale,point[1]/self.scale), 10)
     
     
     def placePorter(self, e) : # UI for placing porter when starting sim
@@ -616,7 +624,7 @@ class porterSim() :
                     realPorterLocation = (new_x,new_y)
                     realPorterOrientation = math.degrees(new_heading) + 90
                     wheelSpeeds = (realWheelSpeeds[0]*(1 +(self.encoderError*(0.5-random.random()))), realWheelSpeeds[1]*(1 + (self.encoderError*(0.5-random.random()))))
-                    realPorterOrientation = self.constrainAngle(realPorterOrientation, 180, -180)
+                    realPorterOrientation = self.constrainAngle360(realPorterOrientation, 180, -180)
                     
                 #collision detection
                 if self.checkPorterObstruction() :
@@ -642,6 +650,7 @@ class porterSim() :
         global lidarAngles
         global exitFlag
         global threadLock
+        global pathMap
                     
         if not exitFlag :
             self.createViews()
@@ -657,12 +666,15 @@ class porterSim() :
                         simThread.start()
             
             if self.simRunning : 
+                #print "running"
                 if threading.activeCount() == 1 :
+                    print "stopping"
                     self.simRunning = False
                     exitFlag = True
                 else :
                     self.realMovePorter()
                     self.calculatePorterPosition()
+                    self.drawDataMap()
                     self.checkLidar()
                     self.drawLidarGrid()
                 
@@ -684,6 +696,7 @@ class porterSim() :
                 exitFlag = False
                 lidarReady = True
                 lidarMap = set()
+                pathMap  = {}
                 lidarAngles = {}
                     
         
@@ -704,6 +717,7 @@ class porterSim() :
                 with threadLock :
                     exitFlag = True
                 while threading.activeCount() > 1 :
+                    print "waiting"
                     time.sleep(0.1)
                 quit()
             
@@ -774,7 +788,108 @@ class porterSim() :
                 with threadLock :
                     porterLocation = (new_x,new_y)
                     porterOrientation = (math.degrees(new_heading) + 90)*0.5 + porterImuOrientation*0.5
-                    porterOrientation = self.constrainAngle(porterOrientation, 180, -180)
+                    porterOrientation = self.constrainAngle360(porterOrientation, 180, -180)
+
+
+
+class pathMapClass() :
+    def __init__(self, lidarMapStore) :
+        global realPorterSize
+        self.wallMap = set()
+        self.mapGridResolution       = 10 #cm how far apart are the grid nodes
+        self.wallSafetyDistance      = realPorterSize[0] / 2
+        self.wallSafetyGridRadius    = math.ceil(self.wallSafetyDistance / self.mapGridResolution)
+        self.stdWeight               = 1
+        self.cornerPenaltyWeight     = 1
+        self.cornerAngleWeight       = 1
+        self.angleOffsetLookup       =  {   0 : [0,-1],
+                                            1 : [1,1],
+                                            2 : [1,0],
+                                            3 : [1,1],
+                                            4 : [0,1],
+                                            5 : [-1,1],
+                                            6 : [-1,0],
+                                            7 : [-1,-1],
+                                        }
+                                        
+        # Find map limits
+        self.pathMapLimits = {   "xMin" : 0,
+                            "xMax" : 0,
+                            "yMin" : 0,
+                            "yMax" : 0,
+                        }
+        with threadLock :
+            for point in lidarMapStore :
+                if point[0] < self.pathMapLimits["xMin"] :
+                    self.pathMapLimits["xMin"] = point[0]
+                if point[0] > self.pathMapLimits["xMax"] :
+                    self.pathMapLimits["xMax"] = point[0]
+                if point[1] < self.pathMapLimits["yMin"] :
+                    self.pathMapLimits["yMin"] = point[1]
+                if point[1] > self.pathMapLimits["yMax"] :
+                    self.pathMapLimits["yMax"] = point[1]
+                    
+        self.pathMapLimits["xMin"] = self.pathMapLimits["xMin"] - realPorterSize[0]*2
+        self.pathMapLimits["xMax"] = self.pathMapLimits["xMax"] + realPorterSize[0]*2
+        self.pathMapLimits["yMin"] = self.pathMapLimits["yMin"] - realPorterSize[1]*2
+        self.pathMapLimits["yMax"] = self.pathMapLimits["yMax"] + realPorterSize[1]*2
+                    
+                    
+        with threadLock :
+            for point in lidarMapStore :
+                xPoint = self.roundBase(point[0],self.mapGridResolution)
+                yPoint = self.roundBase(point[1],self.mapGridResolution)
+                for x in self.getRange(xPoint - self.wallSafetyGridRadius , xPoint + self.wallSafetyGridRadius) :
+                    for y in self.getRange(yPoint - self.wallSafetyGridRadius , yPoint + self.wallSafetyGridRadius) :
+                        self.wallMap.add((x,y))
+
+        
+    def printVars(self, vars, title="") :
+        oStr = title + "::: "
+        for name, data in vars.iteritems() :
+            oStr += str(name) + ": " + str(data) + ", "
+            
+        print oStr
+        
+        
+    def constrainInt(self, i, max, min) :
+        while i >= max :
+            i -= max
+        while i < min :
+            i += max
+        return i    
+        
+    def roundBase(self, x, base):
+        return int(base * round(float(x)/base))
+        
+    def getRange(self,x,y) :
+        if x > y :
+            numRange = reversed(range(int(y), int(x)+1))
+        else :
+            numRange = range(int(x), int(y)+1)
+        return numRange
+                    
+    def getEdges(self, id, dest) :
+        edges = {}
+        x = id[0]
+        y = id[1]
+        a = id[2]
+        # Add link to next node
+        nx = x + self.angleOffsetLookup[a][0]
+        ny = y + self.angleOffsetLookup[a][1]
+        dist = ( dest[0] - nx )**2 + ( dest[1] - ny )**2
+        edges[(nx, ny, self.constrainInt(a+4,8,0))] = { "weight" : dist }
+        # Add links to same node at different angles
+        dist = ( x - dest[0] )**2 + ( y - dest[1] )**2
+        for aLink in range(0,8) :
+            if aLink != a :
+                self.printVars({"weight" : dist + self.cornerPenaltyWeight + abs(aLink-a)*self.cornerAngleWeight,
+                                "dist"   : dist,
+                                "cornerP": self.cornerPenaltyWeight,
+                                "t3"     : abs(aLink-a)*self.cornerAngleWeight}, "edgeTest")
+                edges[(x,y,aLink)] = { "weight" : dist + self.cornerPenaltyWeight + abs(aLink-a)*self.cornerAngleWeight }
+
+        return edges
 
                     
 class simThreadBase(MultiThreadBase) :
@@ -787,17 +902,41 @@ class simThreadBase(MultiThreadBase) :
         self.scale = scale
         self.pixelPorterSize = pixelPorterSize
 
-    def constrainAngle(self, angle, max, min) :
+    def constrainAngle360(self, angle, max, min) :
         while angle >= max :
             angle -= 360
         while angle < min :
             angle += 360
         return angle
-
+        
+    def constrainInt(self, i, max, min) :
+        while i >= max :
+            i -= max
+        while i < min :
+            i += max
+        return i
+        
+    def roundBase(self, x, base):
+        return int(base * round(float(x)/base))
+        
+    def getRange(self,x,y) :
+        if x > y :
+            numRange = reversed(range(int(y), int(x)+1))
+        else :
+            numRange = range(int(x), int(y)+1)
+        return numRange
+        
+    def printVars(self, vars, title="") :
+        oStr = title + "::: "
+        for name, data in vars.iteritems() :
+            oStr += str(name) + ": " + str(data) + ", "
+            
+        print oStr
         
                 
                 
 class mappingThread(simThreadBase):
+
     def run(self):   
         # May not need all of these
         global USAvgDistances
@@ -820,25 +959,142 @@ class mappingThread(simThreadBase):
         global lidarMap
         global lidarAngles
         global lidarRun    
+        global pathMap
+        global realPorterSize
+        global dataMap
         # Things you may want to do
         #with threadLock :
         #    speedVector = [50,100]
         
         #done = False
         #while (not done) and (not exitFlag) :
-
-        
-        
+        dataMap                 = set()
+        pointDistThresh         = 4
+        oldAngleThresh          = 0.174533
+        mapGridResolution       = 10 #cm how far apart are the grid nodes
+        wallSafetyDistance      = realPorterSize[0] / 2
+        wallSafetyGridRadius    = math.ceil(wallSafetyDistance / mapGridResolution)
+        stdWeight               = 1
+        cornerPenaltyWeight     = 1
+        cornerAngleWeight       = 1
+        angleOffsetLookup       = { 0 : [0,-1],
+                                    1 : [1,1],
+                                    2 : [1,0],
+                                    3 : [1,1],
+                                    4 : [0,1],
+                                    5 : [-1,1],
+                                    6 : [-1,0],
+                                    7 : [-1,-1],
+                                  }
+        print wallSafetyGridRadius
         if lidarReady :
             with threadLock :
                 lidarRun = "a"
                 lidarReady = False
                 
-        while not lidarReady :
+        while (not lidarReady) and (not exitFlag):
             time.sleep(0.1)
         
+        # Store lidar data
+        with threadLock :
+            lidarMapStore = lidarMap
+   
+        # Create pathMap
+        pathMap = pathMapClass(lidarMapStore)
+
+        
+        
+        
+        
+        
+        # FAILED ATTEMPT - no reliable order in lidarMapStore when combined so can't rely on it
+        # # Find nearest point
+        # closestPoint    = []
+        # pointsDone      = []
+        # oldPoint        = None
+        # foundPoint      = False
+        # for point in lidarMapStore :
+            # dataMap = set()
+            # dataMap.add(point)
+            # print "point: " + str(point)
+            # if oldPoint == None :
+                # oldPoint = point
+                # continue
+            # dy = (float(oldPoint[1])-point[1])
+            # dx = (float(oldPoint[0])-point[0])
+            # if dx == 0 :
+                # oldPointAngle = math.pi/2
+            # else :
+                # oldPointAngle = math.atan(dy/dx)
+            # print "oldPointAngle: " + str(oldPointAngle)
+            # for compPoint in lidarMapStore :
+                # print "compPoint: " + str(compPoint)
+                # # Don't compare with self
+                # if point == compPoint :
+                    # print "not with self"
+                    # continue
+                # # Don't compare with points in line with previous point
+                # dy = (float(compPoint[1])-point[1])
+                # dx = (float(compPoint[0])-point[0])
+                # if dx == 0 :
+                    # print "dx == 0"
+                    # compPointAngle = math.pi/2
+                # else :
+                    # compPointAngle = math.atan(dy/dx)
+                    # print "compPointAngle: " + str(compPointAngle)
+                # if (compPointAngle > (oldPointAngle - oldAngleThresh)) and (compPointAngle < (oldPointAngle + oldAngleThresh)) :
+                    # print "Angle too similar - skipping"
+                    # continue
+                # # Find distance between the two points
+                # dist = (compPoint[0] - point[0])**2 + (compPoint[1] - point[1])**2
+                # # If first iteration, set any point to be closest
+                # if len(closestPoint) == 0 :
+                    # print "First run setting closestPoint and minDist"
+                    # closestPoint = compPoint
+                    # minDist = dist
+                # else :
+                    # print "If new dist is smaller then change it"
+                    # # If this point is closer then set it as new closest
+                    # if dist < minDist :
+                        # minDist = dist 
+                        # closestPoint = compPoint
+                        
+            # oldPoint = point
+            # # Now check if the minDist is within the threshold
+            # if minDist > pointDistThresh :
+                # # This point does not have a valid neighbor, use this
+                # foundPoint = True
+                # break
+            # else :
+                # # This point has been completed successfully
+                # pointsDone.append((point))
+                
+        # if foundPoint :
+            # print "SUCCESS" 
+            # dataMap.add(closestPoint)
+            # dataMap.add(point)
+            # dataMap.add(((closestPoint[0]+point[0])/2,(closestPoint[1]+point[1])/2))
+                    
+                
+        # Loop
+        
+            # Select location
+        
+        
+            # Navigate to location A* or until stopped by obstacle
+        
+        
+            # Rescan 
+        
+        
+            # Add lidar data ICP
+        
+        
+        # Until lidar data is a closed loop
+        
+        while not exitFlag :
+            time.sleep(0.1)
         print "done"
-        #time.sleep(1)
 
 
     
