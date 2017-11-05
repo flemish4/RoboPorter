@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/css/bootstrap.min.css" integrity="sha384-PsH8R72JQ3SOdhVi3uxftmaW6Vc51MKb0q5P2rRUpPvrszuE4W1povHYgTpBfshb" crossorigin="anonymous">
+	<script type="text/javascript" src="https://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.1.1.min.js"></script> <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js" integrity="sha384-vFJXuSJphROIrBnz7yo7oB41mKfc8JzQZiCq4NCceLEaO4IHwicKwpJf9c9IpFgh" crossorigin="anonymous"></script>
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.min.js" integrity="sha384-alpBpkh1PFOepccYVYDB4do5UnbKysX5WZXm3XxPqe5iKTfUKjNkCk9SaVuEZflJ" crossorigin="anonymous"></script>
+	<script type="text/javascript" src="resources/jquery.js"></script>
+
+	<link href="resources/menu.css" rel="stylesheet" type="text/css">
+	<link href="resources/login.css" rel="stylesheet" type="text/css">
+	<link href="resources/main.css" rel="stylesheet" type="text/css">
+	<title>RoboPorter</title>
+	
+	<script>
+	.navbar-nav{
+  	margin-left:5px;
+ 	 width:100%;
+	}
+	
+	</script>
+
+	</head>
+
+	<body>
+	<div class="container">
+		<nav class="navbar navbar-expand-md navbar-dark bg-dark">
+			<a class="navbar-brand" href="#">Roboporter</a>
+			<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav">
+				<span class="navbar-toggler-icon"></span>
+			</button>
+			<div class="collapse navbar-collapse" id="navbarNav">
+				<div class="navbar-nav">
+					<a class="nav-item nav-link active" href="#" id="link-home">Home<span class="sr-only">(current)</span></a>
+					<a class="nav-item nav-link" href="#" id="link-control">Control</a>
+					<a class="nav-item nav-link" href="#" id="link-nav">Navigation</a>
+					<a class="nav-item nav-link" href="#" id="link-map">Mapping</a>
+					<a class="nav-item nav-link" href="#" id="link-debug">Debug</a>
+					<a class="nav-item nav-link" href="#" id="link-status">Status</a>
+					<a class="nav-item nav-link ml-auto" href="php/logout.php">Sign Out</a>
+				</div>
+			</div>
+		</nav>
+	
+
+
+		<div id="div-home">
+			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Home</h2></div></div>
+		</div>
+
+
+		<div id="div-control">
+			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Control</h2></div></div>
+			<div class="row no-gutters">
+				<div class="col-12 col-md-4">
+					<div class="row justify-content-center" style="margin:1%;">
+						<div class="col-6" style=""><button class="btn btn-secondary" id="forward-btn"style="width:100%;">Forward</button></div>
+					</div>	
+					<div class="row justify-content-center" style="margin:1%;">
+						<div class="col-6" style=""><button class="btn btn-secondary" id="left-btn" style="width:100%;">Left</button></div>
+						<div class="col-6" style=""><button class="btn btn-secondary" id="right-btn" style="width:100%;">Right</button></div>
+					</div>
+					<div class="row justify-content-center" style="margin:1%;">
+						<div class="col-6" style=""><button class="btn btn-secondary" id="back-btn" style="width:100%;">Backwards</button></div>
+					</div>
+					<div class="row justify-content-center"style="margin:5%;">
+						<button class="btn btn-danger" id="stop-btn" style="width:100%">STOP</button>
+					</div>
+					<div class="row justify-content-center"style="margin:5%;">
+						<button class="btn" data-toggle="collapse" href="#manualcontrol">Manual Control</button>
+					</div>
+					<div class="row justify-content-center">
+						<div class="collapse" id="manualcontrol">
+							<div class="col-12 card card-body text-center" >
+								<div class="form-group">
+									<small class="form-text">Enter values between 0% and 100% of full speed</small>
+									<label for="left-motor-amount">Left Motor</label>
+									<input type="text" id="left-motor-amount" class="form-control">
+									<label for="right-motor-amount">Right Motor</label>
+									<input type="text" id="right-motor-amount" class="form-control">
+									<button type="submit" class="btn" style="margin:5%;" id="man-control-send" >Send</button>
+								</div>
+							</div>
+						</div>
+					</div>
+					
+				</div>
+				<div class="col-12 col-md-8">
+					<div class="row justify-content-center" style="padding-left:5% ; ">
+						<div class="col-12 text-center">
+							<button class="btn btn-secondary" id="auto-btn" style="margin:1%;">Autopilot</button>
+							<button class="btn btn-secondary" id="shutdown-btn" style="margin:1%;">Shutdown Server</button>
+							<button class="btn btn-secondary" id="autopiolot-btn" style="margin:1%;">Safety ON/OFF</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div id="div-nav">
+			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Navigation</h2></div></div>
+		</div>
+		<div id="div-map">
+			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Mapping</h2></div></div>		
+		</div>
+		<div id="div-debug">
+			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Debug</h2></div></div>		
+		</div>
+		<div id="div-status">
+				<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Status</h2></div></div>	
+		</div>
+
+	</div>
+	</body>
+</html>
