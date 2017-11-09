@@ -585,8 +585,22 @@ class porterSim() :
             if startSim :
                     if self.porterAdded  :
                         self.simRunning = True
-                        return True        
+                        return True
+                    
+    def movePorter (self,e) :
+        global speedVector
+        
+        if e.type == pygame.KEYDOWN:
 
+            if e.key == pygame.K_a:
+                speedVector[0]-=40
+            elif e.key == pygame.K_d:
+                speedVector[0]+=40
+            elif e.key == pygame.K_w:
+                speedVector[1]-=40
+            elif e.key == pygame.K_s:
+                speedVector[1]+=40
+                
     def realMovePorter(self) :
         # May not need all of these
         global realPorterLocation
@@ -596,6 +610,7 @@ class porterSim() :
         global wheelSpeeds
         global exitFlag
         global threadLock
+        global movePorter
         
         if not realCollision :
             if speedVector != [0,0] :
@@ -677,6 +692,7 @@ class porterSim() :
                     self.drawDataMap()
                     self.checkLidar()
                     self.drawLidarGrid()
+                    self.movePorter(e)
                 
             if self.porterAdded :
                 self.drawPorter(self.views["realmap"]["surface"], self.views["realmap"]["rect"], realPorterLocation[0],realPorterLocation[1], realPorterOrientation, self.porterReal["surface"])
@@ -1119,8 +1135,8 @@ class navigationThread(simThreadBase):
         global lidarReady
         global lidarMap
         global lidarAngles
-        global lidarRun    
-
+        global lidarRun
+        
         # Things you may want to do
         # with threadLock :
         #   speedVector = [50,100]
