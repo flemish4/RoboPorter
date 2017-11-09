@@ -20,6 +20,7 @@ global porterOrientation #angle from north (between -180,180) in degrees
 global lastCommand
 global speedVector
 global dataReady
+global manualControl
 global threadLock
 global exitFlag
 global USThreashholds
@@ -31,6 +32,7 @@ global lidarReady
 global porterImuOrientation
 global realPorterSize
 global dataMap
+manControl       = False    
 dataMap             = set()
 exitFlag            = False #multiprocessing Exit flag
 pathMap             = {}
@@ -589,17 +591,25 @@ class porterSim() :
                     
     def movePorter (self,e) :
         global speedVector
-        
+        global manControl
+        global threadLock
         if e.type == pygame.KEYDOWN:
-
-            if e.key == pygame.K_a:
-                speedVector[0]-=40
-            elif e.key == pygame.K_d:
-                speedVector[0]+=40
-            elif e.key == pygame.K_w:
-                speedVector[1]-=40
-            elif e.key == pygame.K_s:
-                speedVector[1]+=40
+            with threadLock :
+                if e.key == pygame.K_a:
+                    speedVector[0]+=40
+                elif e.key == pygame.K_d:
+                    speedVector[0]-=40
+                elif e.key == pygame.K_w:
+                    speedVector[0]+=40
+                    speedVector[1]+=40
+                elif e.key == pygame.K_s:
+                    speedVector[0]-=40
+                    speedVector[1]-=40
+                elif e.key == pygame.K_e:
+                    speedVector[0]=0
+                    speedVector[1]=0
+                    
+                manControl = True
                 
     def realMovePorter(self) :
         # May not need all of these
@@ -611,9 +621,10 @@ class porterSim() :
         global exitFlag
         global threadLock
         global movePorter
+        global manControl
         
         if not realCollision :
-            if speedVector != [0,0] :
+            if (speedVector != [0,0]) or manControl :
                 realWheelSpeeds = (speedVector[0]*(1 +(self.wheelSpeedError*(0.5-random.random()))), speedVector[1]*(1 + (self.wheelSpeedError*(0.5-random.random()))))
                 
                 leftDelta  = self.simFrameTime * realWheelSpeeds[0] / self.scale
@@ -650,6 +661,8 @@ class porterSim() :
                             wheelSpeeds = [0,0]
                             exitFlag = True
                         self.nextRunMode = ""
+                        
+                manControl = False
             else :
                 with threadLock :
                     wheelsSpeeds = [0,0]
@@ -687,12 +700,12 @@ class porterSim() :
                     self.simRunning = False
                     exitFlag = True
                 else :
+                    self.movePorter(e)
                     self.realMovePorter()
                     self.calculatePorterPosition()
                     self.drawDataMap()
                     self.checkLidar()
                     self.drawLidarGrid()
-                    self.movePorter(e)
                 
             if self.porterAdded :
                 self.drawPorter(self.views["realmap"]["surface"], self.views["realmap"]["rect"], realPorterLocation[0],realPorterLocation[1], realPorterOrientation, self.porterReal["surface"])
