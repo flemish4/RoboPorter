@@ -31,6 +31,7 @@ global lidarMap
 global lidarReady
 global porterImuOrientation
 global realPorterSize
+global realPorterRadius
 global dataMap
 manControl       = False    
 dataMap             = set()
@@ -50,7 +51,8 @@ USThreashholds      = {"front":30,"back":30,"side":20}
 stoppingDistance    = 20
 porterOrientation   = 0
 porterImuOrientation = porterOrientation
-realPorterSize     = (73,70)
+realPorterSize      = (73,70)
+realPorterRadius    = math.sqrt(realPorterSize[0]**2+realPorterSize[1]**2
 
 # RealPorter global variables
 global realObstruction
@@ -706,7 +708,7 @@ class porterSim() :
                     self.calculatePorterPosition()
                     self.drawDataMap()
                     self.checkLidar()
-                    #self.drawLidarGrid()
+                    self.drawLidarGrid()
                 
             if self.porterAdded :
                 self.drawPorter(self.views["realmap"]["surface"], self.views["realmap"]["rect"], realPorterLocation[0],realPorterLocation[1], realPorterOrientation, self.porterReal["surface"])
@@ -950,7 +952,8 @@ class pathMapClass() :
         yMax = y0 + int(round(dist*math.sin(math.radians(a))))
         # List of points along line
         linePoints = list(bresenham(x0,y0,xMax, yMax))
-        # print linePoints
+        linePoints = [(self.roundBase(point[0],self.mapGridResolution),self.roundBase(point[1],self.mapGridResolution)) for point in linePoints]
+        linePoints = set(linePoints)
 
         # Find collision location
         for point in linePoints :
@@ -1183,7 +1186,7 @@ class mappingThread(simThreadBase):
             with threadLock :
                 lidarMapStore = lidarMapStore | lidarMap   
         
-        
+            break
         
         while not exitFlag :
             time.sleep(0.1)
