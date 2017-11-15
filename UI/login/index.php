@@ -10,7 +10,6 @@
 <style>
 html, body {
   height: 100%;
-
 }
 .row{
   min-height: 100%;  /* Fallback for vh unit */
@@ -21,7 +20,7 @@ html, body {
 
 <script>
 $(document).ready(function(){
-    $('#exampleModal').modal({
+    $('#Modal').modal({
         backdrop: 'static',
         keyboard: false
     })
@@ -44,11 +43,8 @@ $(document).ready(function(){
              }else{
               $('#failed').show() ;
              };
-            });    
-      
+            });     
     });
-   
-
 });  
 </script>
 
@@ -59,7 +55,7 @@ $(document).ready(function(){
 
 <div class="container-fluid">
 
-<div class="modal hide fade" tabindex="-1" role="dialog" id="exampleModal">
+<div class="modal hide fade" tabindex="-1" role="dialog" id="Modal">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
       <div class="modal-header">
