@@ -1,6 +1,6 @@
 $(document).ready(function(){
     var timearray = [] ; 
-    var s = new WebSocket("ws://localhost:5555");
+    var s = new WebSocket("ws://192.168.1.154:5555");
     var canvas1 = document.getElementById('MapCanvas1');
     var context1 = canvas1.getContext('2d');
     var canvas2 = document.getElementById('MapCanvas2');

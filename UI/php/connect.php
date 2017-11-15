@@ -1,6 +1,6 @@
 <?php
 $database_host = "localhost" ; 
-$dbuser = "root" ; 
-$dbpassword = "" ;
+$dbuser = "admin" ; 
+$dbpassword = "password" ;
 $database = "project" ; 
 ?>
