@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+	<link rel="stylesheet" href="resources/css/bootstrap.min.css"  crossorigin="anonymous">
+	<script type="text/javascript" src="resources/jquery-3.2.1.min.js"></script> <script src="resources/popper.js" crossorigin="anonymous"></script>
+	<script src="resources/js/bootstrap.min.js" crossorigin="anonymous"></script>
+	<script type="text/javascript" src="resources/jquery.js"></script>
+
+	<link href="resources/menu.css" rel="stylesheet" type="text/css">
+	<link href="resources/login.css" rel="stylesheet" type="text/css">
+	<link href="resources/main.css" rel="stylesheet" type="text/css">
+	<title>RoboPorter</title>
+
+	<style>
+		body{overflow-y:scroll;}
+	</style>
+	</head>
+
+	<body>
+	<div class="container">
+		<nav class="navbar navbar-expand-md navbar-dark bg-dark" style="width:100% ;">
+			<a class="navbar-brand" href="#">Roboporter</a>
+			<button class="navbar-toggler" type="button"  id="navbar-toggle-id">
+				<span class="navbar-toggler-icon"></span>
+			</button>
+			<div class="collapse navbar-collapse" id="navbarNav">
+				<div class="navbar-nav">
+					<a class="nav-item nav-link active" href="#" id="link-home">Home<span class="sr-only">(current)</span></a>
+					<a class="nav-item nav-link" href="#" id="link-control">Control</a>
+					<a class="nav-item nav-link" href="#" id="link-nav">Navigation</a>
+					<!-- <a class="nav-item nav-link" href="#" id="link-map">Mapping</a> -->
+					<a class="nav-item nav-link" href="#" id="link-debug">Debug</a>
+					<a class="nav-item nav-link" href="#" id="link-status">Status</a>
+					<a class="nav-item nav-link ml-auto" href="php/logout.php">Sign Out</a>
+				</div>
+			</div>
+		</nav>
+	
+		<div id="div-home">
+			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Home</h2></div></div>
+		</div>
+		<div id="div-control">
+			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Control</h2></div></div>
+			<div class="row no-gutters">
+				<div class="col-12 col-md-4">
+					<div class="row justify-content-center" style="margin:1%;">
+						<div class="col-6"><button class="btn btn-secondary" id="forward-btn"style="width:100%;">Forward</button></div>
+					</div>	
+					<div class="row justify-content-center" style="margin:1%;">
+						<div class="col-6" ><button class="btn btn-secondary" id="left-btn" style="width:100%;">Left</button></div>
+						<div class="col-6" ><button class="btn btn-secondary" id="right-btn" style="width:100%;">Right</button></div>
+					</div>
+					<div class="row justify-content-center" style="margin:1%;">
+						<div class="col-6"><button class="btn btn-secondary" id="back-btn" style="width:100%;">Backwards</button></div>
+					</div>
+					<div class="row justify-content-center"style="margin:5%;">
+						<button class="btn btn-danger" id="stop-btn" style="width:100%">STOP</button>
+					</div>
+					<div class="row justify-content-center"style="margin:5%;">
+						<button class="btn" data-toggle="collapse" href="#manualcontrol">Manual Control</button>
+					</div>
+					<div class="row justify-content-center">
+						<div class="collapse" id="manualcontrol">
+							<div class="col-12 card card-body text-center" >
+								<div class="form-group">
+									<small class="form-text">Enter values between 0% and 100% of full speed</small>
+									<label for="left-motor-amount">Left Motor</label>
+									<input type="text" id="left-motor-amount" class="form-control">
+									<label for="right-motor-amount">Right Motor</label>
+									<input type="text" id="right-motor-amount" class="form-control">
+									<button type="submit" class="btn" style="margin:5%;" id="man-control-send" >Send</button>
+								</div>
+							</div>
+						</div>
+					</div>
+					
+				</div>
+				<div class="col-12 col-md-8">
+					<div class="row justify-content-center" style="padding-left:5% ; ">
+						<div class="col-12 text-center">
+							<button class="btn btn-secondary" id="auto-btn" style="margin:1%;">Autopilot</button>
+							<button class="btn btn-secondary" id="shutdown-btn" style="margin:1%;">Shutdown Server</button>
+							<button class="btn btn-secondary" id="autopiolot-btn" style="margin:1%;">Safety ON/OFF</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div id="div-nav">
+			<div class="modal fade" id="newmap-div" data-backdrop="static">
+				<div class="modal-dialog">
+					<div class="modal-content">
+						<div class="modal-header">
+							<h4 class="modal-title">Make a New Map</h4>
+						</div>
+							
+						<div class="modal-body">
+							<p>Placeholder Content</p>
+						</div>
+						<div class="modal-footer">
+							<button type="button" class="btn btn-primary" id="map-next-btn">Next</button>
+							<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Navigation</h2></div></div>
+			<div class="row justify-content-center no-gutters">
+				<div class="col-12 col-md-8" id="mapdiv" style=" width:100%;">
+					<canvas id="MapCanvas1" style="position:absolute; left:0; top:0; border-style:solid ;"></canvas>
+					<canvas id="MapCanvas2" style="z-index:1; position:absolute; left:0; top:0;"></canvas>
+					<canvas id="MapCanvas3" style="z-index:2; position:absolute; left:0; top:0;"></canvas>
+				
+				</div>
+			
+				<div class="col-12 col-md-4" style="padding:3%;" ;>
+					<div class="row" style="margin-top:5% ;"><button class="btn btn-success" id="go-btn" style="margin-top:5% ; width:100%;">Go to Location on Map!</button></div>
+					<div class="row" style="margin-top:5% ;"><button class="btn btn-primary" id="new-map-btn" style="margin-top:5%; width:100%;" data-toggle="modal" data-target="#newmap-div">Map New Floor</button></div>
+					<div class="row justify-content-center no-gutters" style="margin-top:5% ; width:100%;">
+						<div class="col-8">
+							<div class="form-group" style=" width:100%; ">
+								<select id="input" class="form-control"  >
+								<option selected >Choose Room</option>
+								<option >C13</option>
+								<option >C14</option>
+								<option >C12</option>
+								<option >C56</option>
+								<option >C89</option>
+								</select>
+							</div>
+						</div>
+						<div class="col-4"><button class="btn" style=" width:100%; margin-left:5%;">GO!</button></div>
+					</div>
+					<div class="row justify-content-center"></div>
+
+
+				</div>
+				
+			</div>
+		</div>
+		<div id="div-debug">
+			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Debug</h2></div></div>		
+		</div>
+		<div id="div-status">
+				<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Status</h2></div></div>	
+		</div>
+
+	</div>
+	</body>
+</html>

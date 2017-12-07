@@ -1,0 +1,65 @@
+body{
+	font-family: sans-serif ;
+
+}
+
+.login{
+	height: 100% ;
+	position: relative;
+}
+
+.content{
+	height: 100% ; 
+	position: relative
+
+}
+.rightpane{
+	position: relative ; 
+	float: right ; 
+	width: 80% ;
+	height: 100%;
+}
+
+#div-home{
+
+
+}
+
+#div-nav{
+
+
+}
+
+#div-map{
+
+
+}
+#div-debug{
+
+}
+
+#div-battery{
+
+}
+
+.panetitle{
+	width: 95% ; 
+	height: 10% ;
+	background-color: #727272 ; 
+	color: white ; 
+	text-align: center ;
+	font-size: 3em ; 
+	padding-top: 2% ;
+	padding-bottom: 2% ;
+	margin-left: 2.5% ;
+	margin-right: 2.5% ; 
+}
+
+.rightcontent{
+	margin: 2.5% ;
+	height: auto; 
+	width:95% ;
+	height: 80% ; 
+	background-color:#AFAFAF ; 
+
+}
