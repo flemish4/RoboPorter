@@ -19,14 +19,14 @@ global s2
 global s3
 
 s2 = socket.socket()
-host2 = '192.168.1.101'
+host2 = '192.168.1.1'
 port2 = 5003
 s2.connect((host2,port2))
 s2.send("S1")
 s2.setblocking(0)
 
 s3 = socket.socket()
-host3 = '192.168.1.101'
+host3 = '192.168.1.1'
 port3 = 5002
 s3.connect((host3,port3))
 

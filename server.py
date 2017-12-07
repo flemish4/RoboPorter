@@ -330,7 +330,7 @@ class MultiThreadBase(threading.Thread): #Parent class for threading
 
 def porterTracker(exitFlag,imuEnable, porterLocation_Global, porterOrientation, wheelSpeeds, pulsesQueue, speechQueue):
     
-    print "IMU Code Deleted as package could not be found"
+    print "IMU Code Deleted as package could not be found"print "IMU Code Deleted as package could not be found"
     
 def movePorter(lPulses, rPulses, porterLocation_Global, porterOrientation,wheelSpeeds,orientationWheels):  # function for calculating the distance moved
     # Assume that it doesnt "move" when rotating
@@ -494,7 +494,6 @@ class autoPilotThread(MultiThreadBase):
 
                 pidEnable = False
                 self.vanishAngles = []
-
                 turnAngle = numpy.rad2deg(porterOrientation.value)
                 print ("Current Location = ", porterLocation_Global)
                 logging.warning("Not Localised. Motion path unreliable. Trying to find a QR code")

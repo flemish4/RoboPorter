@@ -1,13 +1,12 @@
 $(document).ready(function(){
     var timearray = [] ; 
-    var s = new WebSocket("ws://192.168.1.154:5555");
+    var s = new WebSocket("ws://192.168.1.2:5555");
     var canvas1 = document.getElementById('MapCanvas1');
     var context1 = canvas1.getContext('2d');
     var canvas2 = document.getElementById('MapCanvas2');
     var context2 = canvas2.getContext('2d');
     var canvas3 = document.getElementById('MapCanvas3');
     var context3 = canvas3.getContext('2d');
-
     var imageObj = new Image();
     var scale = null ;
     var realx = null ; 
@@ -157,13 +156,11 @@ $(document).ready(function(){
 
     $("#go-btn").click(function(){
         if(realx != null){
-
             alert("Sent") ;
         }
         else{
             alert("Please click a location on the Map")
         }
-
     }) ; 
 
 
