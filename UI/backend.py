@@ -14,6 +14,11 @@ port = 5555
 global recieved_data
 global thread_close
 
+# s  Connection from backend to UI
+# s2 Debug info
+# s3 Send commands to Main PI
+
+
 global s
 global s2
 global s3
@@ -33,15 +38,15 @@ s3.connect((host3,port3))
 
 def pi_recv():
     global s2
+    print "Started Debug Recieve"
     while 1:
         try:
             data = s2.recv(1024)
             print data
-            #data_send(data)
+            data_send(data)
         except:
             pass
 
-        
 
 def pi_send(data):
     global s3
@@ -56,18 +61,26 @@ def demask(data):
     for eachvalue in data:   
         databytes.append(ord(eachvalue))
     firstmaskbyte = 2
-    mask = [databytes[firstmaskbyte] , databytes[firstmaskbyte+1] , databytes[firstmaskbyte+2] , databytes[firstmaskbyte+3]]
-    del databytes[0:6]
-    for value in databytes:
-        xordatabytes.append(value^mask[maskindex]) # XOR real data and mask bytes to find actual server data
-        if maskindex == 3: # Check if the mask index is 3 and if so set it back to 0 as there are only 4 mask bytes
-            maskindex = 0
-        else:
-            maskindex += 1
+    if databytes[0] != 138:
+        mask = [databytes[firstmaskbyte] , databytes[firstmaskbyte+1] , databytes[firstmaskbyte+2] , databytes[firstmaskbyte+3]]
+        del databytes[0:6]
+        for value in databytes:
+            xordatabytes.append(value^mask[maskindex]) # XOR real data and mask bytes to find actual server data
+            if maskindex == 3: # Check if the mask index is 3 and if so set it back to 0 as there are only 4 mask bytes
+                maskindex = 0
+            else:
+                maskindex += 1
 
-    for value in xordatabytes: #convert decimal list to string
-        finalstring+=chr(value) # append each value to string
-    return finalstring;
+        for value in xordatabytes: #convert decimal list to string
+            finalstring+=chr(value) # append each value to string
+        return finalstring;
+
+def ping():
+    global s
+    sendbytes = []
+    sendbytes.append(137)
+    sendbytes.append(0)
+    s.send(bytearray(sendbytes))
 
 def data_send(datatosend):
     global s
@@ -79,7 +92,7 @@ def data_send(datatosend):
     elif datalength >=126 and datalength <= 65535: # If greater than 126 append 126 then append bit shifted versions of the data. See here for more info: http://stackoverflow.com/questions/8125507/how-can-i-send-and-receive-websocket-messages-on-the-server-side
         sendbytes.append(126)
         sendbytes.append((datalength>>8)&255)
-        sendbytes.append((datalength>>8)&255)
+        sendbytes.append((datalength)&255)
     for value in datatosend: # Add the data to the end of the send bytes array
         sendbytes.append(value)	
     s.send(bytearray(sendbytes))	
@@ -93,7 +106,7 @@ def socket_recieve(s):
         try:
             data = s.recv(4000)
             data = demask(data)
-            print data
+            print "Command from interface recieved ="+data
             pi_send(data)
         except:
             pass
@@ -108,6 +121,7 @@ while 1:
     finalstring = ""
     print ("Waiting For Connection to User Interface")
     s = socket.socket()
+    s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
     s.bind((host,port))
     s.listen(0)
     s.setblocking(1)
@@ -144,7 +158,7 @@ Sec-Websocket-Accept:'''+jointkey+'''
         time.sleep(0.2)
 
         try:
-            data_send("Hello")
+            ping()
         except:
             thread_close = True
             connectionopen = False

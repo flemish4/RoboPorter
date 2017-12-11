@@ -23,6 +23,7 @@ import glob
 import datetime
 import copy
 import cv2
+import json
 
 #import zbar
 #import time
@@ -218,67 +219,6 @@ US2_portAddr = ""
 global h_scores
 h_scores = [0.,0.,0.,0.]
 
-def serialDetect():
-    #This fuction will ping all serial connections to find out what each device is
-
-    global motor_portAddr
-    global US1_portAddr
-    global US2_portAddr
-
-    if platform.startswith('win'):
-        ports = ['COM%s' % (i + 1) for i in range(256)]
-        print "ports are " + ports
-    elif platform == "linux" or platform == "linux2":
-        #check this
-        ports = glob.glob('/dev/tty[A-Za-z]*')
-        print "ports are " + ports
-    else:
-        logging.error("Unsupported Platform")
-
-    for port in ports:
-        try:
-            testConn = serial.Serial(port, 19200)
-            logging.info('Checking device at ', port)
-            testConn.write("whois?\n")
-            response = testConn.readline()
-            if response == "motor\n":
-                logging.info('Motor Controller at ', port)
-                motor_portAddr = port
-            elif response == "us1\n":
-                logging.info('US 1 at ', port)
-                US1_portAddr = port
-            elif response == "us2\n":
-                logging.info('US 2 at ', port)
-                US2_portAddr = port
-        except Exception as e:
-            logging.error("Error Checking Serial ports - %s", e)
-
-def ConnectToSerial():
-    global MotorConn
-    global USConn1
-    global USConn2
-
-    serialDetect()
-
-    logging.info("Trying to connect to Serial Devices")
-    if motor_portAddr != "":
-        try:
-            MotorConn = serial.Serial(motor_portAddr, 19200)
-        except Exception as e:
-            logging.error("%s", e)
-
-    if US1_portAddr != "":
-        try:
-            USConn1 = serial.Serial(US1_portAddr, 19200)
-        except Exception as e:
-            logging.error("%s", e)
-
-    if US2_portAddr != "":
-        try:
-            USConn2 = serial.Serial(US2_portAddr, 19200)
-        except Exception as e:
-            logging.error("%s", e)
-
 def setExitFlag(status):
     global exitFlag
     global exitFlag
@@ -287,7 +227,6 @@ def setExitFlag(status):
     exitFlag.value = status
 
 ###---Class Definitions
-# create a class for the data to be sent over ait
 
 class MultiThreadBase(threading.Thread): #Parent class for threading
     def __init__(self, threadID, name): #Class constructor
@@ -320,716 +259,6 @@ class MultiThreadBase(threading.Thread): #Parent class for threading
             # print (self.name + " Avg loop Runtime - " + str(self.avgRuntime))
             logging.debug("Avg loop Runtime - %s", str(self.avgRuntime))
             self.avgCounter = 0
-
-
-##---------Mapping process
-
-
-
-##----------IMU process
-
-def porterTracker(exitFlag,imuEnable, porterLocation_Global, porterOrientation, wheelSpeeds, pulsesQueue, speechQueue):
-    
-    print "IMU Code Deleted as package could not be found"print "IMU Code Deleted as package could not be found"
-    
-def movePorter(lPulses, rPulses, porterLocation_Global, porterOrientation,wheelSpeeds,orientationWheels):  # function for calculating the distance moved
-    # Assume that it doesnt "move" when rotating
-    # Need to check if this function is mathematically sound for all r, theta.
-
-    timeInterval = 0.1  # sampling interval of the motor controller
-    wheelRadius = 12
-    pulsesPerRev = 360
-    wheelBaseWidth = 62
-    # find the wheel speeds
-    wheelSpeeds[0] = ((lPulses / timeInterval) * 60) / pulsesPerRev
-    wheelSpeeds[1] = ((rPulses / timeInterval) * 60) / pulsesPerRev
-    # print(str(wheelSpeeds))
-
-    # find the distance moved
-    lDist = (2 * numpy.pi * lPulses / pulsesPerRev) * wheelRadius
-    rDist = (2 * numpy.pi * rPulses / pulsesPerRev) * wheelRadius
-
-    r = (lDist + rDist) / 2  # take the average of the distances for now.
-    distDelta = (lDist - rDist)
-
-    orientationWheels.value += distDelta/wheelBaseWidth
-
-    if orientationWheels.value > numpy.pi:
-        orientationWheels.value -= 2*numpy.pi
-    elif orientationWheels.value < -numpy.pi:
-        orientationWheels.value += 2 * numpy.pi
-
-        # # r is the staight line distance traveled... so find x,y components
-    #if lastCommand == "f":
-    if not qrDict['visible'] :
-        porterLocation_Global[0] += r * numpy.cos(numpy.pi/2 - porterOrientation.value)  # x component
-        porterLocation_Global[1] += r * numpy.sin(numpy.pi/2 - porterOrientation.value)  # y component
-
-    #print "Location is " + str(porterLocation_Global)
-    # elif lastCommand == "b":
-    #     porterLocation_Global[0] = porterLocation_Global[0] - r * numpy.cos(numpy.pi/2 - porterOrientation.value)  # x component
-    #     porterLocation_Global[1] = porterLocation_Global[1] - r * numpy.sin(numpy.pi/2 - porterOrientation.value)  # y component
-
-    #print (str(porterLocation_Global) + " __ " + str(porterOrientation.value)+ " __ " + str(orientationWheels.value))
-
-    return porterLocation_Global,wheelSpeeds,orientationWheels.value
-
-
-class autoPilotThread(MultiThreadBase):
-    def __init__(self, threadID, name):
-        threading.Thread.__init__(self)
-        self.threadID = threadID
-        self.name = name
-
-        self.angleToGoal = 0 #angle between the goal and the robot
-        self.angleChange = 0 #angle change required
-
-        self.dX = 0
-        self.dY = 0
-
-        #path-finding parameters
-        self.recPenalty = 0.2 #penalty for recursion
-        self.momentumBonus = 0.5 #bonus for momentum conservation
-        self.alpha = 20 #
-        self.beta = 10000
-
-        #Autopilot Control parameters
-        self.looping = True #DO NOT CHANGE THIS
-        self.obs = False
-        self.distQuantise = 30  # path re-calculation distance
-        self.autoSpeed = 20  # autopilot movement speed
-        self.turningSpeed = 10
-        self.alignmentThreshold = 10  # alignment error in degrees
-        self.hScores = []
-        self.bestScoreIndex = 0
-        self.distThreshold = 20
-
-        self.vanishAngles = []
-
-        self.PID_Tuning = (0.01, 0.01, 0)
-        self.vanishsum = 0
-
-
-    def run(self):
-        global threadLock
-        global dataReady
-        global speedVector
-        global setSpeedVector
-        global distanceToGoal
-        global porterLocation_Global
-        global porterLocation_Local
-        global lastCommand
-        global targetDestination
-        global autoPilot
-        global h_scores
-        global pidEnable
-        global nodeQueue
-        global avoidingObstacle
-        #global porterOrientation
-
-        while not exitFlag.value: #while the system isn't in shutdown mode
-            if not autoPilot: #if autopilot is disabled...
-
-                #targetDestination = [100,0]
-                #self.hScores = self.checkquad()
-                #h_scores = self.hScores
-
-                time.sleep(1) #...sleep for a bit ...zzzzzzz
-            elif AHRSmode is "imu" and not imuEnable.value:
-                logging.warning("IMU not available. Can't turn on Autopilot... Soz...")
-                speechQueue.put("IMU not available. Can't turn on Autopilot...")
-                autoPilot = False
-            # elif self.looping and self.obs:
-            #     #porterLocation_Global = [0,0]  # for now assume local position is the same as global
-            #     # otherwise put robot into exploration more till it finds a QR code, then position. FOR LATER
-            #     logging.info("Iteratve Autopilot mode with Obstacle Avoidance")
-            #     speechQueue.put("Iteratve Autopilot mode with Obstacle Avoidance")  # vocalise
-            #
-            #     self.dX = targetDestination[0] - porterLocation_Global[0]
-            #     self.dY = targetDestination[1] - porterLocation_Global[1]
-            #
-            #     while numpy.sqrt(numpy.square(self.dX) + numpy.square(self.dY)) > self.distThreshold and autoPilot and not exitFlag.value:
-            #     # find the angle of the goal from north
-            #
-            #         speechQueue.put("Quantising the environment")
-            #         logging.info("Quantising The environment")
-            #         time.sleep(1)
-            #
-            #         self.hScores = self.checkquad()
-            #         h_scores = self.hScores
-            #
-            #         if self.bestScoreIndex == 0:
-            #             speechQueue.put("Best way to go is forward")
-            #             logging.info("Best way to go is forward")
-            #             self.moveStraight(dist=30,direction="f")
-            #         elif self.bestScoreIndex == 1:
-            #             speechQueue.put("Best way to go is backwards")
-            #             logging.info("Best way to go is backwards")
-            #             self.moveStraight(dist=30, direction="b")
-            #         elif self.bestScoreIndex == 2:
-            #             speechQueue.put("Best way to go is left")
-            #             logging.info("Best way to go is left")
-            #             self.turn(angleChange= -90)
-            #         elif self.bestScoreIndex == 3:
-            #             speechQueue.put("Best way to go is right")
-            #             logging.info("Best way to go is right")
-            #             self.turn(angleChange= 90)
-            #
-            #         self.dX = targetDestination[0] - porterLocation_Global[0]
-            #         self.dY = targetDestination[1] - porterLocation_Global[1]
-            #
-            #         if obstruction:
-            #             time.sleep(5)
-            #             speechQueue.put("Obstruction, sleeping for a bit")
-            #
-            #     with threadLock:
-            #         lastCommand = "x"
-            #         speedVector = [0, 0]
-            #         dataReady = True
-            #
-            #     speechQueue.put("Successfully arrived at the target")
-            #     logging.info("Successfully arrived at the target")
-            #     autoPilot = False  # turn off autopilot at the end of the maneuver
-            elif not localised.value:
-
-                pidEnable = False
-                self.vanishAngles = []
-                turnAngle = numpy.rad2deg(porterOrientation.value)
-                print ("Current Location = ", porterLocation_Global)
-                logging.warning("Not Localised. Motion path unreliable. Trying to find a QR code")
-                speechQueue.put("I dont know where I am. I might run into some trouble.")
-
-                #rotate until qrFound
-                if not qrDict['visible'] and autoPilot and not exitFlag.value :
-                    if USAvgDistances[7] > USAvgDistances[10]:  # more space on the left
-                        with threadLock:
-                            lastCommand = "l"
-                            setSpeedVector = [-self.turningSpeed, self.turningSpeed]
-                            speedVector = [-self.turningSpeed, self.turningSpeed]
-                            dataReady = True
-                    else:
-                        with threadLock:
-                            lastCommand = "r"
-                            setSpeedVector = [self.turningSpeed, -self.turningSpeed]
-                            speedVector = [self.turningSpeed, -self.turningSpeed]
-                            dataReady = True
-
-                self.angleToGoal = 360
-                #turn for 360'
-                while not qrDict['visible'] and autoPilot and not exitFlag.value and (abs(self.angleChange) > 1): #and <360'
-
-                    self.angleChange = self.angleToGoal - numpy.rad2deg(porterOrientation.value)
-                    print "angle change = " + str(self.angleChange)
-                    print "Orientation = " + str(numpy.rad2deg(porterOrientation.value))
-
-                    if vpValid.value:
-                        if len(self.vanishAngles)>0 and \
-                                abs(self.vanishAngles[len(self.vanishAngles)-1] - porterOrientation.value)>5:
-                            print "vp found"
-                            self.vanishAngles.append(porterOrientation.value)
-                            print (self.vanishAngles)
-                    time.sleep(0.1)
-
-                with threadLock:
-                    lastCommand = "x"
-                    setSpeedVector = [0, 0]
-                    speedVector = [0, 0]
-                    dataReady = True
-
-                if not qrDict['visible'] :
-
-                    while not qrDict['visible'] and autoPilot and not exitFlag.value:
-                        # align to vp
-
-                        if not qrDict['visible'] and not vpValid.value and autoPilot and not exitFlag.value:
-                            if USAvgDistances[7] > USAvgDistances[10]:  # more space on the left
-                                with threadLock:
-                                    lastCommand = "l"
-                                    setSpeedVector = [-self.turningSpeed, self.turningSpeed]
-                                    speedVector = [-self.turningSpeed, self.turningSpeed]
-                                    dataReady = True
-                            else:
-                                with threadLock:
-                                    lastCommand = "r"
-                                    setSpeedVector = [self.turningSpeed, -self.turningSpeed]
-                                    speedVector = [self.turningSpeed, -self.turningSpeed]
-                                    dataReady = True
-
-                        self.vanishAngles = []
-                        while not qrDict['visible'] and not vpValid.value and autoPilot and not exitFlag.value:  # and <360'
-                            time.sleep(0.1)
-                            if vpValid.value:
-                                self.vanishAngles.append(porterOrientation.value)
-
-                        with threadLock:
-                            lastCommand = "x"
-                            setSpeedVector = [0, 0]
-                            speedVector = [0, 0]
-                            dataReady = True
-
-                        # move to the end of the corridor (until obstruction)
-                        if lastCommand != "f":
-                            with threadLock:
-                                pidEnable = True
-                                lastCommand = "f"
-                                setSpeedVector = [self.autoSpeed, self.autoSpeed]
-                                speedVector = [self.autoSpeed, self.autoSpeed]
-                                dataReady = True
-
-                        while not obstruction and not qrDict['visible'] and autoPilot and not exitFlag.value:
-                            time.sleep(0.1)
-
-                        with threadLock:
-                            lastCommand = "x"
-                            setSpeedVector = [0, 0]
-                            speedVector = [0, 0]
-                            dataReady = True
-
-                        #autoPilot = False
-                        time.sleep(2)
-
-                    with threadLock:
-                        lastCommand = "x"
-                        setSpeedVector = [0, 0]
-                        speedVector = [0, 0]
-                        dataReady = True
-
-                if qrDict['visible']:
-                    #qrDict['location']
-                    #qrDict['orientation']
-                    # UPDATE LOCATION WHEN SEEN.
-                    if (0 <= qrDict['orientation'] < 90):
-                        porterLocation_Global = qrDict['location']
-                    elif (90 <= qrDict['orientation'] < 180):
-                        porterLocation_Global = qrDict['location']
-                    elif (180 <= qrDict['orientation'] < 270):
-                        porterLocation_Global = qrDict['location']
-                    elif (270<= qrDict['orientation'] < 360):
-                        porterLocation_Global = qrDict['location']
-                    else:
-                        logging.error("Something is wrong with the QR code I found. It makes no sense")
-                    localised.value = True
-                    print "Found a QR code! I am LOCALISED!"
-                    print qrDict
-                    print ("Current Location = ", porterLocation_Global)
-                else :
-                    print "I cant find a QR code :( "
-
-                autoPilot = False
-                pidEnable = False
-
-            elif self.looping: #iterative mode
-
-                if not nodeQueue.empty():
-                    print "Fetching Next Destination... "
-                    targetDestination = nodeQueue.get()
-                    print ("Destination is " + str(targetDestination))
-
-                    if not localised.value:
-                        logging.warning("Not Localised. Motion path unreliable")
-                        speechQueue.put("I cant find where I am. I might run into some trouble")
-
-                    #porterLocation_Global = porterLocation_Local  # for now assume local position is the same as global
-                    # otherwise put robot into exploration more till it finds a QR code, then position. FOR LATER
-
-                    logging.info("Iteratve Autopilot mode")
-                    speechQueue.put("Iteratve Autopilot mode enabled")  # vocalise
-
-                    speechQueue.put("Looking for the target destination")
-                    logging.info("Looking for the target destination")
-
-                    self.dX = targetDestination[0] - porterLocation_Global[0]
-                    self.dY = targetDestination[1] - porterLocation_Global[1]
-                    print "target = " + str(targetDestination)
-                    print "location = " + str(porterLocation_Global)
-
-
-                    while numpy.sqrt(numpy.square(self.dX) + numpy.square(self.dY)) > self.distThreshold and autoPilot and not exitFlag.value:
-                    # find the angle of the goal from north
-
-                        self.dX = targetDestination[0] - porterLocation_Global[0]
-                        self.dY = targetDestination[1] - porterLocation_Global[1]
-
-                        print "dx = " + str(self.dX) + " dy = " + str(self.dY) + "\n"
-                        if self.dX != 0:
-                            if (self.dX > 0 and self.dY >= 0):
-                                self.angleToGoal = numpy.pi/2 - numpy.arctan(self.dY / self.dX)
-                            elif (self.dX < 0 and self.dY >= 0):
-                                self.angleToGoal = -(numpy.pi/2 + numpy.arctan(self.dY / self.dX))
-                            elif (self.dX < 0 and self.dY <= 0):
-                                self.angleToGoal = -(numpy.pi/2 + numpy.arctan(self.dY / self.dX))
-                            elif (self.dX > 0 and self.dY <= 0):
-                                self.angleToGoal = numpy.pi/2  - numpy.arctan(self.dY / self.dX)
-                        elif self.dY >= 0:
-                            self.angleToGoal = 0
-                        elif self.dY < 0 :
-                            self.angleToGoal = numpy.pi
-
-                        self.angleToGoal = numpy.rad2deg(self.angleToGoal)
-
-                        print "Angle to goal is " + str(self.angleToGoal)
-                        # same as before, finding the angle that needs to be changed
-
-                        self.angleChange = self.angleToGoal - numpy.rad2deg(porterOrientation.value)
-
-                        if self.angleChange < -180:
-                            self.angleChange += 360
-                        if self.angleChange > 180:
-                            self.angleChange -= 360
-
-                        print "Angle change is " + str(self.angleChange)
-
-                        if autoPilot and not exitFlag.value:
-                            # while avoidingObstacle:
-                            #     time.sleep(0.2)
-
-                            if (abs(self.angleChange) > self.alignmentThreshold):
-                                pidEnable = False
-                                print "PID Disabled"
-
-                                with threadLock:
-                                    if self.angleChange > self.alignmentThreshold:
-                                        lastCommand = "r"
-                                        setSpeedVector = [self.turningSpeed, -self.turningSpeed]
-                                        speedVector = [self.turningSpeed, -self.turningSpeed]
-                                        dataReady = True
-                                    elif self.angleChange < self.alignmentThreshold:
-                                        lastCommand = "l"
-                                        setSpeedVector = [-self.turningSpeed, self.turningSpeed]
-                                        speedVector = [-self.turningSpeed, self.turningSpeed]
-                                        dataReady = True
-
-                                while (abs(self.angleChange) > self.alignmentThreshold) and autoPilot and not exitFlag.value:  # Add boundaries
-                                    # keep checking the angle
-                                    self.angleChange = self.angleToGoal - numpy.rad2deg(porterOrientation.value)
-                                    print "angle change = " + str(self.angleChange)
-                                    print "Orientation = " +  str(numpy.rad2deg(porterOrientation.value))
-                                    if self.angleChange < -180:
-                                        self.angleChange += 360
-                                    if self.angleChange > 180:
-                                        self.angleChange -= 360
-                                    time.sleep(0.01)
-
-                                # stop turning
-                                with threadLock:
-                                    lastCommand = "x"
-                                    setSpeedVector = [0, 0]
-                                    speedVector = [0, 0]
-                                    dataReady = True
-
-                                pidEnable = True
-                                print "PID Enabled"
-                            else:
-                            #if True:
-                                pidEnable = True
-                                print "PID Enabled"
-
-                            # wait till its aligned
-
-
-                        speechQueue.put("Aligned to the target destination")
-                        logging.info("Aligned to the target destination")
-                        time.sleep(0.2)
-
-                        # find distance to Goal
-                        distanceToGoal = numpy.sqrt(numpy.square(self.dX) + numpy.square(self.dY))
-                        print "distance to Goal is " + str(distanceToGoal)
-                        # move to destination
-                        speechQueue.put("Moving to the target")
-                        logging.info("Moving to Target")
-
-                        with threadLock:
-                            lastCommand = "f"
-                            setSpeedVector = [self.autoSpeed, self.autoSpeed]
-                            speedVector = [self.autoSpeed, self.autoSpeed]
-                            dataReady = True
-
-                        initLoc = copy.deepcopy(porterLocation_Global)
-                        self.distTravelled = 0
-
-                        while (self.distTravelled < self.distQuantise) and (distanceToGoal > self.distThreshold) and autoPilot and not exitFlag.value: #change this to allow for looping the whole block from else till at goal.
-                            self.dX = targetDestination[0] - porterLocation_Global[0]
-                            self.dY = targetDestination[1] - porterLocation_Global[1]
-                            distanceToGoal = numpy.sqrt(numpy.square(self.dX) + numpy.square(self.dY))
-                            #print "Porter Location is " + str(porterLocation_Global)
-                            self.dX = porterLocation_Global[0] - initLoc[0]
-                            self.dY = porterLocation_Global[1] - initLoc[1]
-                            self.distTravelled = numpy.sqrt(numpy.square(self.dX) + numpy.square(self.dY))
-                            #print "distance Travelled is " + str(self.distTravelled)
-                            time.sleep(0.1)
-
-                        self.dX = targetDestination[0] - porterLocation_Global[0]
-                        self.dY = targetDestination[1] - porterLocation_Global[1]
-
-                        logging.info("Iteration complete... Recalculating...")
-
-                    with threadLock:
-                        lastCommand = "x"
-                        setSpeedVector = [0, 0]
-                        speedVector = [0, 0]
-                        dataReady = True
-
-                    speechQueue.put("Successfully arrived at the target")
-                    logging.info("Successfully arrived at the target")
-
-                else:
-                    speechQueue.put("No Nodes available. Stopping Autopilot")
-                    logging.info("No Nodes available. Stopping Autopilot")
-
-                if nodeQueue.empty():
-                    autoPilot = False  # turn off autopilot at the end of the maneuver
-                    pidEnable = False
-
-            else: #if in autopilot mode...
-                porterLocation_Global = porterLocation_Local # for now assume local position is the same as global
-                    # otherwise put robot into exploration more till it finds a QR code, then position. FOR LATER
-
-                # find the required angle change to align to global grid
-                if autoPilot and not exitFlag.value:
-                    logging.info("Looking for north")
-                    speechQueue.put("Looking for north") #vocalise
-                    time.sleep(1) #sleep for presentation purposes
-
-                # Orienting to X-axis...
-                self.angleChange = 90 - numpy.rad2deg(porterOrientation.value) #find required angle change
-                    # right if +ve left if -ve
-                if self.angleChange > 180: # if >180 turn left instead of right
-                    self.angleChange -= 360
-
-                if autoPilot and not exitFlag.value:
-                    with threadLock: #with exclusive global variable access...
-                        if self.angleChange > self.alignmentThreshold: #if need to turn right
-                            lastCommand = "r" #set the command to be right (for obstacle avoidance purposes)
-                            speedVector = [self.autoSpeed, -self.autoSpeed] #set the required speeds
-                            dataReady = True #this signals the motor control thread that there is data to be sent
-                        elif self.angleChange < self.alignmentThreshold: #if need to turn left
-                            lastCommand = "l"
-                            speedVector = [-self.autoSpeed, self.autoSpeed]
-                            dataReady = True
-
-                # wait till its aligned
-                while (abs(self.angleChange) > self.alignmentThreshold) and autoPilot and not exitFlag.value:  #while not aligned
-                    # keep calculating the angle change required
-                    self.angleChange = 90 - numpy.rad2deg(porterOrientation.value)  # right if +ve left if -ve
-                    if self.angleChange > 180:
-                        self.angleChange -= 360  # if >180 turn left instead of right
-                    time.sleep(0.01) #sleep a bit so that the CPU isnt overloaded
-
-                # stop turning
-                with threadLock:
-                    lastCommand = "x"
-                    speedVector = [0, 0]
-                    dataReady = True
-
-                # aligned to x axis... YAY!
-                if autoPilot and not exitFlag.value:
-                    speechQueue.put("Aligned to X axis")
-                    logging.info("Aligned to X axis")
-                    time.sleep(1)
-
-                #find the angle of the goal from north
-                self.dX = targetDestination[0] - porterLocation_Global[0]
-                self.dY = targetDestination[1] - porterLocation_Global[1]
-
-                if self.dX != 0:
-                    self.angleToGoal = numpy.arctan(self.dY / self.dX)
-                else:
-                    self.angleToGoal = numpy.pi / 2
-
-                self.angleToGoal = numpy.rad2deg(self.angleToGoal)
-
-                # convert angle to 0,2pi
-                if self.dX >= 0:  # positive x
-                    if self.dY >= 0:
-                        self.angleToGoal = numpy.rad2deg(porterOrientation.value) - self.angleToGoal
-                    if self.dY < 0:  # negative y
-                        self.angleToGoal = numpy.rad2deg(porterOrientation.value) - self.angleToGoal
-
-                elif self.dX < 0:  # negative x
-                    if self.dY >= 0:  # positive y
-                        self.angleToGoal = numpy.rad2deg(porterOrientation.value) - (180 + self.angleToGoal)
-                    if self.dY < 0:  # negative y
-                        self.angleToGoal = numpy.rad2deg(porterOrientation.value) - (180 + self.angleToGoal)
-
-                # at this point angleToGoal is defined relative to north
-                # if this works remove redundant IF statements. Currently used only for debugging.
-
-                #same as before, finding the angle that needs to be changed
-                self.angleChange = self.angleToGoal - numpy.rad2deg(porterOrientation.value)
-                if self.angleChange < -180:
-                    self.angleChange += 360
-
-                if autoPilot and not exitFlag.value:
-                    with threadLock:
-                        if self.angleChange > self.alignmentThreshold:
-                            lastCommand = "r"
-                            speedVector = [self.autoSpeed, -self.autoSpeed]
-                            dataReady = True
-                        elif self.angleChange < self.alignmentThreshold:
-                            lastCommand = "l"
-                            speedVector = [-self.autoSpeed, self.autoSpeed]
-                            dataReady = True
-
-                if autoPilot and not exitFlag.value:
-                    speechQueue.put("Looking for the target destination")
-                    logging.info("Looking for the target destination")
-                    time.sleep(1)
-
-                # wait till its aligned
-                while (abs(self.angleChange) > self.alignmentThreshold) and autoPilot and not exitFlag.value:  # Add boundaries
-                    # keep checking the angle
-                    self.angleChange = self.angleToGoal - numpy.rad2deg(porterOrientation.value)
-                    if self.angleChange < -180:
-                        self.angleChange += 360
-                    time.sleep(0.01)
-
-                # stop turning
-                with threadLock:
-                    lastCommand = "x"
-                    speedVector = [0, 0]
-                    dataReady = True
-                    # aligned to x axis
-                if autoPilot and not exitFlag.value:
-                    speechQueue.put("Aligned to the target destination")
-                    logging.info("Aligned to the target destination")
-                    time.sleep(1)
-
-                # find distance to Goal
-                distanceToGoal = numpy.sqrt(numpy.square(self.dX) + numpy.square(self.dY))
-                # move to destination
-                if autoPilot and not exitFlag.value:
-                    speechQueue.put("Moving to the target")
-                    logging.info("Moving to Target")
-
-                #COMPLETE THIS BIT
-                # with threadLock:
-                #     lastCommand = "f"
-                #     speedVector = [self.autoSpeed, self.autoSpeed]
-                #     dataReady = True
-
-                # while (distanceToGoal > 30) and autoPilot and not exitFlag.value: #change this to allow for looping the whole block from else till at goal.
-                #     self.dX = targetDestination[0] - porterLocation_Global[0]
-                #     self.dY = targetDestination[1] - porterLocation_Global[1]
-                #     distanceToGoal = numpy.sqrt(numpy.square(self.dX) + numpy.square(self.dY))
-
-                with threadLock:
-                    lastCommand = "x"
-                    speedVector = [0, 0]
-                    dataReady = True
-
-                if autoPilot and not exitFlag.value:
-                    speechQueue.put("Successfully arrived at the target")
-                    logging.info("Successfully arrived at the target")
-                    autoPilot = False #turn off autopilot at the end of the maneuver
-
-        with threadLock:
-            lastCommand = "x"
-            speedVector = [0, 0]
-            dataReady = True
-
-        autoPilot = False
-        pidEnable = False
-
-    def turn(self,angleChange):
-        global lastCommand
-        global speedVector
-        global dataReady
-
-        initOrientation = numpy.rad2deg(porterOrientation.value)
-
-        if autoPilot and not exitFlag.value and not obstruction:
-            with threadLock:
-                if angleChange > self.alignmentThreshold:
-                    lastCommand = "r"
-                    speedVector = [self.autoSpeed, -self.autoSpeed]
-                    dataReady = True
-                elif angleChange < self.alignmentThreshold:
-                    lastCommand = "l"
-                    speedVector = [-self.autoSpeed, self.autoSpeed]
-                    dataReady = True
-
-        while (abs(initOrientation - numpy.rad2deg(porterOrientation.value)) < (abs(angleChange) + self.alignmentThreshold)) and autoPilot and not exitFlag.value and not obstruction:  # while not aligned
-            time.sleep(0.01)  # sleep a bit so that the CPU isnt overloaded
-
-        # stop turning
-        with threadLock:
-            lastCommand = "x"
-            speedVector = [0, 0]
-            dataReady = True
-
-    def moveStraight(self,dist,direction): #direction can be "f" or "b"
-        global lastCommand
-        global speedVector
-        global dataReady
-
-        with threadLock:
-            if direction == "f":
-                lastCommand = "f"
-                speedVector = [self.autoSpeed, self.autoSpeed]
-                dataReady = True
-            elif direction == "b":
-                lastCommand = "b"
-                speedVector = [-self.autoSpeed, -self.autoSpeed]
-                dataReady = True
-
-        initLoc = porterLocation_Global
-        self.distTravelled = 0
-
-        while (self.distTravelled < dist) and autoPilot and not exitFlag.value and not obstruction:  # change this to allow for looping the whole block from else till at goal.
-            self.dX = porterLocation_Global[0] - initLoc[0]
-            self.dY = porterLocation_Global[1] - initLoc[1]
-            self.distTravelled = numpy.sqrt(numpy.square(self.dX) + numpy.square(self.dY))
-
-        with threadLock:
-            lastCommand = "x"
-            speedVector = [0, 0]
-            dataReady = True
-
-    ###TO BE IMPLEMENTED
-    ##AutoPilot motion to be quantised to distQuantise
-
-    def checkquad(self):
-        distScore = []  # relative to the current orientation f,b,l,r
-        envScore = []
-        distScore = self.checkdist(distScore)
-        envScore = self.envCheck()
-        return self.calcHeuristic(distScore, envScore)
-
-    def checkdist(self, distScore):
-
-        directions = [numpy.rad2deg(porterOrientation.value), 180 - numpy.rad2deg(porterOrientation.value),
-                      90 - numpy.rad2deg(porterOrientation.value), 90 + numpy.rad2deg(porterOrientation.value)]
-
-        for direction in directions:
-            tempXpos = porterLocation_Global[0] + self.distQuantise * numpy.cos(90 - direction)
-            tempYpos = porterLocation_Global[1] + self.distQuantise * numpy.sin(90 - direction)
-
-            tempDX = targetDestination[0] - tempXpos
-            tempDY = targetDestination[1] - tempYpos
-
-            tempDist = numpy.sqrt(numpy.square(tempDX) + numpy.square(tempDY))
-            distScore.append(tempDist)
-
-        print("dist score is " + str(distScore) + "min dist score is " + str(min(distScore)) + " at " +
-              str(distScore.index(min(distScore))))
-
-        return distScore
-
-    def envCheck(self):
-        #self.envScore = []
-
-        envScore = [-200/USAvgDistances[0] + 10,
-                    -5000 / USAvgDistances[5] + 10,
-                    -500 / USAvgDistances[8] + 10,
-                    -500 / USAvgDistances[11] + 10]
-        #Exponential mapping of distance
-
-        print("environment score is " + str(envScore) + " max env score is " + str(max(envScore)) + " at " +
-              str(envScore.index(max(envScore))))
-
-        return envScore
-
-    def calcHeuristic(self,distScore, envScore):
 
         score = []
 
@@ -1080,74 +309,92 @@ class debugThread(MultiThreadBase):
                 self.waitForClient()
             if self.debugClient:
                 try:
-                    logging.debug("Sending info to Logger")
-                    # Start Flag
-                    self.clientConnection.send("#") #0
-                    # Time
-                    self.clientConnection.send(time.ctime() + ',')
-                    # Ultrasonic data
-                    self.clientConnection.send(str(USAvgDistances[1]) + ",") #1
-                    self.clientConnection.send(str(USAvgDistances[2]) + ",")
-                    self.clientConnection.send(str(USAvgDistances[3]) + ",")
-                    self.clientConnection.send(str(USAvgDistances[8]) + ",")
-                    self.clientConnection.send(str(USAvgDistances[11]) + ",")
-                    self.clientConnection.send(str(USAvgDistances[5]) + ",") #6
-                    # motor speeds
-                    # demanded motor speeds
-                    self.clientConnection.send(str(speedVector[0]) + ",") #7
-                    self.clientConnection.send(str(speedVector[1]) + ",")
-                    #actual speeds
-                    self.clientConnection.send(str(wheelSpeeds[0]) + ",") #9
-                    self.clientConnection.send(str(wheelSpeeds[1]) + ",")
-                    #POSITIONS
-                    #target
-                    self.clientConnection.send(str(targetDestination[0]) + ",") #11
-                    self.clientConnection.send(str(targetDestination[1]) + ",")
-                    #Porter_global
-                    self.clientConnection.send(str(porterLocation_Global[0]) + ",") #13
-                    self.clientConnection.send(str(porterLocation_Global[1]) + ",")
-                    #Porter_local
-                    self.clientConnection.send(str(porterLocation_Local[0]) + ",") #15
-                    self.clientConnection.send(str(porterLocation_Local[1]) + ",")
-                    #porterOrientation
-                    self.clientConnection.send(str(porterOrientation.value) + ",") #17
-                    # AHRS # FOR VALIDATION ONLY
-                    # yaw
-                    self.clientConnection.send(str(orientationIMU.value) + ",") #18
+                    debuginfo = {
+                        'Type':'DebugData',
+                        'US1': str(USAvgDistances[0]) ,
+                        'US2': str(USAvgDistances[1]) ,
+                        'US3': str(USAvgDistances[2]) ,
+                        'US4': str(USAvgDistances[3]) ,
+                        'US5': str(USAvgDistances[4]) ,
+                        'US6': str(USAvgDistances[5]) ,
+                        'US7': str(USAvgDistances[6]) ,
+                        'US8': str(USAvgDistances[7]) ,                       
+                        'US9': str(USAvgDistances[8]) ,
+                        'US10': str(USAvgDistances[9]) ,
+                        'US11': str(USAvgDistances[10]) ,
+                        'US12': str(USAvgDistances[11]) ,
+                    }
+                    datatosend = json.dumps(debuginfo)
+                    self.clientConnection.send(datatosend)
+
+                    # logging.debug("Sending info to Logger")
+                    # # Start Flag
+                    # self.clientConnection.send("#") #0
+                    # # Time
+                    # self.clientConnection.send(time.ctime() + ',')
+                    # # Ultrasonic data
+                    # self.clientConnection.send(str(USAvgDistances[1]) + ",") #1
+                    # self.clientConnection.send(str(USAvgDistances[2]) + ",")
+                    # self.clientConnection.send(str(USAvgDistances[3]) + ",")
+                    # self.clientConnection.send(str(USAvgDistances[8]) + ",")
+                    # self.clientConnection.send(str(USAvgDistances[11]) + ",")
+                    # self.clientConnection.send(str(USAvgDistances[5]) + ",") #6
+                    # # motor speeds
+                    # # demanded motor speeds
+                    # self.clientConnection.send(str(speedVector[0]) + ",") #7
+                    # self.clientConnection.send(str(speedVector[1]) + ",")
+                    # #actual speeds
+                    # self.clientConnection.send(str(wheelSpeeds[0]) + ",") #9
+                    # self.clientConnection.send(str(wheelSpeeds[1]) + ",")
+                    # #POSITIONS
+                    # #target
+                    # self.clientConnection.send(str(targetDestination[0]) + ",") #11
+                    # self.clientConnection.send(str(targetDestination[1]) + ",")
+                    # #Porter_global
+                    # self.clientConnection.send(str(porterLocation_Global[0]) + ",") #13
+                    # self.clientConnection.send(str(porterLocation_Global[1]) + ",")
+                    # #Porter_local
+                    # self.clientConnection.send(str(porterLocation_Local[0]) + ",") #15
+                    # self.clientConnection.send(str(porterLocation_Local[1]) + ",")
+                    # #porterOrientation
+                    # self.clientConnection.send(str(porterOrientation.value) + ",") #17
+                    # # AHRS # FOR VALIDATION ONLY
+                    # # yaw
+                    # self.clientConnection.send(str(orientationIMU.value) + ",") #18
 
 
-                    # thread life status
-                    self.clientConnection.send(str(threadLock.locked()) + ",") #19
-                    # current lock
+                    # # thread life status
+                    # self.clientConnection.send(str(threadLock.locked()) + ",") #19
+                    # # current lock
 
-                    # safety staus
-                    self.clientConnection.send(str(safetyOn) + ",") #20
-                    # obstruction status
-                    self.clientConnection.send(str(obstruction) + ",") #21
-                    # data status
-                    self.clientConnection.send(str(dataReady)+",") #22
+                    # # safety staus
+                    # self.clientConnection.send(str(safetyOn) + ",") #20
+                    # # obstruction status
+                    # self.clientConnection.send(str(obstruction) + ",") #21
+                    # # data status
+                    # self.clientConnection.send(str(dataReady)+",") #22
 
-                    self.clientConnection.send(str(orientationWheels.value) + ",")  # 23
+                    # self.clientConnection.send(str(orientationWheels.value) + ",")  # 23
 
-                    #US data 2
-                    self.clientConnection.send(str(USAvgDistances[0]) + ",")  # 24
-                    self.clientConnection.send(str(USAvgDistances[7]) + ",")
-                    self.clientConnection.send(str(USAvgDistances[10]) + ",")
-                    self.clientConnection.send(str(USAvgDistances[9]) + ",")
-                    self.clientConnection.send(str(USAvgDistances[12]) + ",")
-                    self.clientConnection.send(str(USAvgDistances[4]) + ",")
-                    self.clientConnection.send(str(USAvgDistances[6]) + ",")  # 30
+                    # #US data 2
+                    # self.clientConnection.send(str(USAvgDistances[0]) + ",")  # 24
+                    # self.clientConnection.send(str(USAvgDistances[7]) + ",")
+                    # self.clientConnection.send(str(USAvgDistances[10]) + ",")
+                    # self.clientConnection.send(str(USAvgDistances[9]) + ",")
+                    # self.clientConnection.send(str(USAvgDistances[12]) + ",")
+                    # self.clientConnection.send(str(USAvgDistances[4]) + ",")
+                    # self.clientConnection.send(str(USAvgDistances[6]) + ",")  # 30
 
-                    self.clientConnection.send(str(h_scores[0]) + "," )  # 31
-                    self.clientConnection.send(str(h_scores[1]) + "," )
-                    self.clientConnection.send(str(h_scores[2]) + "," )
-                    self.clientConnection.send(str(h_scores[3]) + ",")  # 34
+                    # self.clientConnection.send(str(h_scores[0]) + "," )  # 31
+                    # self.clientConnection.send(str(h_scores[1]) + "," )
+                    # self.clientConnection.send(str(h_scores[2]) + "," )
+                    # self.clientConnection.send(str(h_scores[3]) + ",")  # 34
 
-                    self.clientConnection.send(str(vpValid.value) + ",") #35
-                    self.clientConnection.send(str(vanish.value) + ",")
-                    self.clientConnection.send(str(expectedFPS.value)) #37
+                    # self.clientConnection.send(str(vpValid.value) + ",") #35
+                    # self.clientConnection.send(str(vanish.value) + ",")
+                    # self.clientConnection.send(str(expectedFPS.value)) #37
 
-                    self.clientConnection.send("\n")
+                    # self.clientConnection.send("\n")
                     # self.logOverNetwork()
                     time.sleep(1)
 
@@ -1242,7 +489,6 @@ class motorDataThread(MultiThreadBase):
         self.pulses = ["",""]
         self.obs = False
         self.smoothBrake = True
-
 
     def run(self):
         global speedVector
@@ -1417,23 +663,6 @@ class motorDataThread(MultiThreadBase):
             logging.error("Sending to Motor failed - %s", str(e))
             # self.actionState = 4
 
-    def read_serial_data(self):
-        motorInput = MotorConn.readline()
-
-        logging.debug("motor says %s", motorInput)
-        if motorInput == "3\r\n":  # recieved
-            self.actionState = 3
-            logging.info("Command successfully received by motor...")
-        elif motorInput == "2\r\n":
-            logging.debug("Motor actuating command...")
-            self.actionState = 2
-        elif motorInput == "1\r\n":
-            logging.debug("Motor actuation finished... ready to accept new data :)")
-            self.actionState = 1
-        elif motorInput == "5\r\n":
-            logging.error("ERROR TRYING TO EXECUTE COMMAND :( ...")
-            self.actionState = 5
-
 class usDataThread(MultiThreadBase):
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
@@ -1489,9 +718,7 @@ class usDataThread(MultiThreadBase):
 
     def run(self):
         global speedVector
-
         logging.info("Starting")
-
         try:
             USConn1.flushInput()
             if UShosts == 2:
@@ -1509,7 +736,6 @@ class usDataThread(MultiThreadBase):
 
         while not exitFlag.value:
             try:
-                #self.getUSvector()
                 self.mAverage(11)
                 self.getMaxSpeeds(USAvgDistances)
                 self.errorCount = 0
@@ -1552,33 +778,6 @@ class usDataThread(MultiThreadBase):
                 time.sleep(0.01)
 
         logging.info("Exiting")
-
-    def getUSvector(self):
-        logging.debug("inside getUSVector")
-
-        try:
-            logging.debug("Trying to get US data 1")
-            #USConn1.flushInput()
-            self.inputBuf = USConn1.readline()
-            self.inputBuf.rstrip("\n")
-            self.rawUSdata_1 = self.inputBuf.split(",")
-            print ("rw1 ", self.rawUSdata_1)
-            if UShosts == 2:
-                logging.debug("Trying to get US data 2")
-                #USConn2.flushInput()
-                self.inputBuf = USConn2.readline()
-                self.inputBuf.rstrip("\n")
-                self.rawUSdata_2 = self.inputBuf.split(",")
-                print ("rw2 ", self.rawUSdata_2)
-
-            print " "
-
-        except Exception as e:
-            self.errorCount += 1
-            logging.error("error getting us vector - %s", str(e))
-
-    def medianFilter(self):
-        pass
 
     def mAverage(self, n):
         global USAvgDistances
@@ -1670,211 +869,7 @@ class usDataThread(MultiThreadBase):
             self.errorCount += 1
             logging.error("error in US interrupt function - %s", str(e))
 
-class ttsThread(MultiThreadBase): #text to speech thread
-    def run(self):
-
-        #initialise speech engine
-        engine = pyttsx.init()
-        rate = engine.getProperty('rate')
-        engine.setProperty('rate', rate - 50)
-
-        while not exitFlag.value:
-            #talk while there are things to be said
-            if not speechQueue.empty():
-                engine.say(speechQueue.get())
-                engine.runAndWait()
-
-            time.sleep(1)
-
-        engine.say("Shutting down")
-        engine.runAndWait()
-
-def porterSpeech(speechQueue,exitFlag):
-    # initialise speech engine
-    engine = pyttsx.init()
-    rate = engine.getProperty('rate')
-    engine.setProperty('rate', rate - 50)
-
-    while not exitFlag.value:
-        # talk while there are things to be said
-        if not speechQueue.empty():
-            engine.say(speechQueue.get())
-            engine.runAndWait()
-            #speechQueue.task_done()
-        else:
-            time.sleep(0.5)
-
-        #time.sleep(0.1)
-
-    engine.say("Shutting down")
-    engine.runAndWait()
-
-# def ():  # QR codes and other camera related stuff if doing optical SLAM use a different thread
-#     pass
-
-class PIDThreadClass(MultiThreadBase):
-    def __init__(self, threadID, name):
-        threading.Thread.__init__(self)
-        self.threadID = threadID
-        self.name = name
-        self.vp_PID_Tuning = (0.04, 0.0, 0)
-        self.qr_PID_Tuning = (0.04, 0.0, 0)
-        self.obs_PID_Tuning = (0.01, 0.01, 0)
-        self.side_PID_Tuning = (0.02, 0.0, 0)
-        self.vanishSum = 0
-        self.qrSum = 0
-
-        self.usError_front_Sum = 0
-        self.usError_front= 0
-        self.usError_front_last= 0
-        self.usError_sideL_Sum = 0
-        self.usError_sideR_Sum = 0
-        self.usError_side= 0
-        self.usError_sideL_last= 0
-        self.usError_sideR_last= 0
-
-
-    def run(self):
-        global setSpeedVector
-        global speedVector
-        global pidEnable
-        global vpValid
-        global vanish
-        global qrDict
-
-        if not exitFlag.value:
-            threading.Timer(0.2, self.run).start()
-
-            if pidEnable:
-                self.usError_front = USAvgDistances[3] - USAvgDistances[2]
-
-                # if USAvgDistances[8] < USThresholds[1] or USAvgDistances[11] < USThresholds[1]:
-                #     logging.info("side adjustment... ")
-                #
-                #     if True: #for left
-                #         logging.info("adjusting for left")
-                #         self.usError_side = USAvgDistances[8] - USThresholds[1] -10
-                #         self.usError_sideL_Sum += self.usError_side
-                #         #self.usError_sideR_Sum = 0
-                #
-                #         offset = (self.side_PID_Tuning[0] * self.usError_side) + (self.side_PID_Tuning[1] * self.usError_sideL_Sum)\
-                #                  + (self.side_PID_Tuning[2]*(self.usError_side-self.usError_sideL_last))
-                #         offset = (offset * ((setSpeedVector[0] + setSpeedVector[1]) / 2)) / 1
-                #
-                #         if offset >= 0:
-                #             lastCommand = "l"
-                #             speedVector = [int(setSpeedVector[0]-offset), int(setSpeedVector[1])]
-                #         else:
-                #             lastCommand = "r"
-                #             speedVector = [int(setSpeedVector[0]), int(setSpeedVector[1]+offset)]
-                #
-                #         self.usError_sideL_last = self.usError_side
-
-                    # if USAvgDistances[11] < USThresholds[1]: #for left
-                    #     logging.info("adjusting for right")
-                    #     self.usError_side = USThresholds[1] - USAvgDistances[11]
-                    #     #self.usError_sideR_Sum += self.usError_side
-                    #     #self.usError_sideL_Sum = 0
-                    #
-                    #     offset = (self.side_PID_Tuning[0] * self.usError_side) + (self.side_PID_Tuning[1] * self.usError_sideR_Sum) \
-                    #              + (self.side_PID_Tuning[2] * (self.usError_side - self.usError_sideR_last))
-                    #     offset = (offset * ((setSpeedVector[0] + setSpeedVector[1]) / 2)) / 1
-                    #
-                    #     lastCommand = "l"
-                    #     speedVector = [int(setSpeedVector[0] - offset), int(setSpeedVector[1])]
-                    #
-                    #     self.usError_sideR_last = self.usError_side
-
-# elif abs(self.usError_front) > 30:
-                #     self.usError_front_Sum += self.usError_front
-                #     print "us Error = " + str(self.usError_front)
-                #     avoidingObstacle = True
-                #     offset = (self.obs_PID_Tuning[0] * self.usError_front) + (self.obs_PID_Tuning[1] * self.usError_front_Sum)
-                #     offset = (offset * ((setSpeedVector[0] + setSpeedVector[1]) / 2)) / 1
-                #
-                #     if offset >= 0:
-                #         lastCommand = "r"
-                #         speedVector = [int(setSpeedVector[0]), int(setSpeedVector[1] - offset)]
-                #     else:
-                #         lastCommand = "l"
-                #         speedVector = [int(setSpeedVector[0] + offset), int(setSpeedVector[1])]
-
-
-                # qrDict['visible'] = False
-                # qrDict['string'] = data[0]
-                # qrDict['location'] = [0, 0]
-                # qrDict['distance'] = D
-                # qrDict['centre'] = [x_centre, y_centre]
-                #
-                #
-                # if qrDict['visible']:
-                #     #print qrDict
-                #     print ("qr Code dictionary = ", qrDict)
-                #     self.vanishSum = 0
-                #     logging.info("QR Code adjustment")
-                #     avoidingObstacle = False
-                #     self.qrSum += qrDict['centre'][0]
-                #     offset = (self.qr_PID_Tuning[0] * qrDict['centre'][0]) + (self.qr_PID_Tuning[1] * self.qrSum)
-                #
-                #     offset = (offset * ((setSpeedVector[0] + setSpeedVector[1]) / 2)) / 10
-                #
-                #     if offset >= 0:
-                #         lastCommand = "r"
-                #         speedVector = [int(setSpeedVector[0]), int(setSpeedVector[1] - offset)]
-                #     else:
-                #         lastCommand = "l"
-                #         speedVector = [int(setSpeedVector[0] + offset), int(setSpeedVector[1])]
-
-                if vpValid.value:
-
-                    print ("vp Code dictionary = ", vpDict)
-                    self.qrSum = 0
-                    # if QRdetected.value:
-                    #     vanish.value = qrDict['xLoc']
-
-                    #logging.info("VP Valid")
-                    logging.info("VP adjustment")
-                    avoidingObstacle = False
-                    self.vanishSum += vanish.value
-                    offset = (self.vp_PID_Tuning[0] * vanish.value) + (self.vp_PID_Tuning[1] * self.vanishSum)
-
-                    offset = (offset * ((setSpeedVector[0] + setSpeedVector[1])/2)) / 10
-
-                    if offset >= 0:
-                        lastCommand = "r"
-                        speedVector = [int(setSpeedVector[0]), int(setSpeedVector[1] - offset)]
-                    else:
-                        lastCommand = "l"
-                        speedVector = [int(setSpeedVector[0] + offset), int(setSpeedVector[1])]
-                else:
-                    logging.info("VP INVALID")
-                    self.vanishSum = 0
-                    speedVector = setSpeedVector
-                    lastCommand = "f"
-                    avoidingObstacle = False
-
-                with threadLock:
-                    dataReady = True
-
-
-
-        #print datetime.datetime.now(), adjustedSpeed
-
-# class CameraThreadClass(MultiThreadBase):
-#     def __init__(self, threadID, name):
-#         threading.Thread.__init__(self)
-#         self.threadID = threadID
-#         self.name = name
-#         self.pulseData = ["",""] #pulses counted by the motor controller
-#         self.vanishx = [0, 0, 0, 0, 0]
-#         self.vanishy = [0, 0, 0, 0, 0]
-#         self.vanishxVar = []
-#         self.vanishyVar = []
-#         self.profiling = True
-#
-#     def run(self):
-#         global cam
-#         self.vpFromCAM()
+###---Function Definitions
 
 def qrCalibrate(qrProcessor):
     # Instruct user
@@ -2234,9 +1229,6 @@ def varianceFilter(vpCoord, n, varx, vary):
 
     return varx, vary
 
-
-###---Function Definitions
-
 def cmdToSpeeds(inputCommand): #convert commands to speed vectors for manual control
     mSpeed = 0
     validateBuffer = (0, 0)
@@ -2342,56 +1334,10 @@ if __name__ == '__main__':
     qrDict['orientation'] = 0
     qrDict['centre'] = [0,0]
 
-
-
     logging.info("Starting system...")
     sysRunning = True
-
-    # #Start Speech Process
-    # logging.info("Starting speech Process...")
-    # speechProcess = multiprocessing.Process(target=porterSpeech,name="Speech Process",args=(speechQueue,exitFlag,))
-    # speechProcess.start()
-    # processes.append(speechProcess)
-
-    logging.info("Starting speech Thread...")
-    speechThread = ttsThread(1, "Speech Thread")
-    speechThread.start()
-    threads.append(speechThread)
-    logging.info('Speech Thread Running - %s', str(speechThread))
-    #time.sleep(1)
-
-    # #logging.info("Starting speech Thread...")
-    # camThread = CameraThreadClass(2, "cam Thread")
-    # camThread.start()
-    # threads.append(camThread )
-
-    speechQueue.put("initialising")
-    #time.sleep(2)
-    #speechQueue.put("trying to run Tracker")
-
-    #Start IMU data Process
-    logging.info("Starting Porter Tracker")
-    trackerProcess = multiprocessing.Process(name="IMU Process",target=porterTracker, args=(exitFlag,imuEnable, porterLocation_Global, porterOrientation, wheelSpeeds, pulsesQueue,speechQueue,))
-    trackerProcess.start()
-    processes.append(trackerProcess)
-    logging.info('Tracker Process Running - %s', str(trackerProcess))
-    speechQueue.put("Tracker Running")
-    #time.sleep(1)
-
-
-    #Start Autopilot thread
-    logging.info("Starting Autopilot Thread")
-    autoPilotThread = autoPilotThread(2, "Auto Pilot Thread")
-    autoPilotThread.start()
-    threads.append(autoPilotThread)
-    logging.info('Autopilot Thread Running - %s', str(autoPilotThread))
-    speechQueue.put("Autopilot Waiting")
-    #time.sleep(1)
-
-
-    # try to run Debug server if the user wants it
-    #dataInput = raw_input("Start Debug server... ? (y/n)")
-    if Debug_Enable: #dataInput == "y":
+ 
+    if Debug_Enable:
         try:
             logging.info("Trying to Run Debug Server")
             debugChannel = debugThread(3, "Debug Thread")
@@ -2401,14 +1347,12 @@ if __name__ == '__main__':
             logging.info("Running Debug Server")
             #time.sleep(1)
 
-            # speechQueue.put("Debug Server Running")
         except Exception as e:
             logging.error("%s", str(e))
 
     # setup serial connection to motor controller
     logging.info("Trying to connect to serial devices")
-    #dataInput = raw_input("Connect to motor Controller... ? (y/n)")
-    if Motor_Enable: #dataInput == "y": #if user wants to connect to the motor controller...
+    if Motor_Enable: 
         dataInput = "" #Reset the variable
         logging.info("Trying to connect to motor controller")
         try: #try to connect
@@ -2428,8 +1372,7 @@ if __name__ == '__main__':
             logging.error("%s", str(e))
 
     # Setup serial conn to US controller
-    #dataInput = raw_input("Connect Ultrasonic Controller... ? (y/n)")
-    if US_Enable: #dataInput == "y":
+    if US_Enable: 
         dataInput = ""
         logging.info("Trying to connect to Ultrasonic controller")
         try:
@@ -2461,15 +1404,6 @@ if __name__ == '__main__':
         logging.info("Camera Process Running - %s", str(cameraProcess))
         speechQueue.put("Camera Process Running")
 
-    #Start PID thread
-    logging.info("Starting PID Thread")
-    PIDThread = PIDThreadClass(6, "PID Pilot Thread")
-    PIDThread.start()
-    threads.append(PIDThread)
-    logging.info("PID Thread Running - %s", str(PIDThread))
-
-    # speechQueue.put("Setup Complete")
-
     # chose input method
     dataInput = "n" #raw_input("Local Comms...? (y/n)")
     if dataInput == "n":
@@ -2478,9 +1412,8 @@ if __name__ == '__main__':
         # set the server address and port
         logging.info("Setting up sockets...")
         try:
-            HOST = ""  # socket.gethostbyname(socket.gethostname()) #socket.gethostname()
+            HOST = ""  
             PORT = 5002
-
             # create a socket to establish a server
             logging.info("Binding the socket...")
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

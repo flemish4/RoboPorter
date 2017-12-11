@@ -19,7 +19,15 @@ $(document).ready(function(){
 
     s.onopen = function(e) {}
     s.onclose = function(e) { }
-    s.onmessage = function(e) {}
+    s.onmessage = function(e) {
+        data = JSON.parse(e.data);
+        $("#debugdata").html("") ;
+        $.each(data, function(i,j){
+            $("#debugdata").append("<br>"+i+":"+j)
+        })
+
+
+    }
         
     $('div[id^="div-"]').hide();
     $("#div-home").show();
