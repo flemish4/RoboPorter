@@ -1085,7 +1085,6 @@ class mappingThread(simThreadBase):
                                     6 : [-1,0],
                                     7 : [-1,-1],
                                   }
-        print wallSafetyGridRadius
         # if lidarReady :
             # with threadLock :
                 # lidarRun = "a"
@@ -1112,8 +1111,8 @@ class mappingThread(simThreadBase):
             for loc in (openLocs + closedLocs[:-1]) : # for every point except the last one completed - so porter isn't blocked in
                 # Add points surrounding the point
                 for a in range(0,360,1) :
-                    x = loc[0] + scanSeparation*math.sin(math.radians(a))
-                    y = loc[1] + scanSeparation*math.cos(math.radians(a))
+                    x = loc[0] + math.sin(math.radians(a))#scanSeparation*math.sin(math.radians(a))
+                    y = loc[1] + math.cos(math.radians(a))#scanSeparation*math.cos(math.radians(a))
                     mapMapStore.add((x,y))
                     
             # Create mapping map object
@@ -1126,7 +1125,6 @@ class mappingThread(simThreadBase):
             curAngle   = None
             x0 = int(round(porterLocation[0]) + realPorterSize[0]/2)
             y0 = int(round(porterLocation[1]) + realPorterSize[1]/2)
-            print "porterCentre: " + str((x0,y0))
             # Find ranges of angles that do not collide with walls
             for a in range(0,360,1) :
                 if mapMap.checkLine(x0, y0, scanSeparation + realPorterSize[0]/2, a) :
@@ -1173,7 +1171,6 @@ class mappingThread(simThreadBase):
                     ranges.remove(maxRange)
                     ranges.append(newRange)
                             
-            print ranges
             for aRange in ranges :
                 span    = aRange[1] - aRange[0]
                 if span < scanMinPorterAngle : # if too small for porter to fit
@@ -1190,11 +1187,9 @@ class mappingThread(simThreadBase):
                 split = span/(n+1)
                 for i in range(1,n+incWall) :
                     a = aRange[0] + split*i
-                    print a
                     x = int(round(x0 + scanSeparation*math.cos(math.radians(a))))
                     y = int(round(y0 + scanSeparation*math.sin(math.radians(a))))
                     openLocs.append((x,y))
-            print openLocs
             dataMap = set(openLocs) | set(closedLocs) | dataMap
             # Check for completed scan
             # BREAK CONDITION
@@ -1206,14 +1201,15 @@ class mappingThread(simThreadBase):
             curLoc = openLocs.pop(-1) # Get the newest point
             # Move to that location
             # MAJOR CHEAT FOR TESTING ONLY REVISIT THIS
-            porterLocation      = curLoc
-            realPorterLocation  = [n/2 for n in curLoc]
+            porterLocation      = [curLoc[0] - realPorterSize[0]/2,curLoc[1] - realPorterSize[1]/2]
+            realPorterLocation  = [n/2 for n in porterLocation]
             # Add to completed locs
             closedLocs.append(curLoc)
             # Rescan 
             self.getLidar360()
             # Add lidar data ICP
             # Store lidar data
+            # ALSO MAJOR CHEAT THIS SHOULD USE point cloud stuff REVISIT
             with threadLock :
                 lidarMapStore = lidarMapStore | lidarMap   
         
