@@ -28,5 +28,7 @@ step,time,dist
 
 
 step - the number of steps - measured clockwise and is out of 3081.48 due to the gear ratio and microstepping
+
 time - the time taken to get the sample in microseconds - useful for compensation due to motion
+
 dist - the distance measured in cm
