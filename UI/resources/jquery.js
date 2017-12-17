@@ -1,4 +1,17 @@
 $(document).ready(function(){
+
+    $.ajax({
+        type:'POST',
+        url:'php/check.php',
+
+    }).done(function(msg){
+        if(msg != "loggedin"){ 
+            window.location = "login/"} ;
+    })
+    $("#noconnection").hide();
+    $("#noconnection-modal").modal("show");
+
+
     var timearray = [] ; 
     var s = new WebSocket("ws://192.168.1.2:5555");
     var canvas1 = document.getElementById('MapCanvas1');
@@ -17,7 +30,19 @@ $(document).ready(function(){
     var wh_ratio ; 
     var new_height ; 
 
-    s.onopen = function(e) {}
+    setTimeout(() => { // Manages the connection timeout modal. After 22 seconds it fades in an alert saying no connection is available
+        $("#connecting").fadeOut(1000, function(){
+            $('#noconnection').fadeIn(1000) ;
+            $('#pagereloadconn').prop('disabled', function(i, v) { return !v;}); // Toggles the availability of the button
+        });   
+    }, 21000);
+
+    $(".pagereload").click(function(){
+        location.reload();
+    });
+
+
+    s.onopen = function(e) { $("#noconnection-modal").modal("hide");}
     s.onclose = function(e) { }
     s.onmessage = function(e) {
         data = JSON.parse(e.data);
@@ -32,15 +57,7 @@ $(document).ready(function(){
     $('div[id^="div-"]').hide();
     $("#div-home").show();
 
-    //Check is existing Session Exists but calling check.php
-    $.ajax({
-        type:'POST',
-        url:'php/check.php',
 
-    }).done(function(msg){
-        if(msg != "loggedin"){ 
-            window.location = "login/"} ;
-    })
 
 
     $('#left-btn').click(function(){
@@ -72,27 +89,6 @@ $(document).ready(function(){
         var right = $("#right-motor-amount").val()
         s.send("m"+left+","+right)
     });
-
-
-    //when the login button is clicked login.php is called using AJAX
-    
-    // When the Sign out Button is clicked the logout.php script is called
-    // $('#signout').click(function(){
-    //     $.ajax(
-    //         {
-    //             type:'POST' ,
-    //             url:'php/logout.php'
-    //         }).done(function(){
-    //             $("#loginfailed").hide() ;
-    //             $('#username').val('');
-    //             $('#password').val('');
-    //             $(".content").fadeOut(1000,function(){
-    //                 $(".login").fadeIn(1000)
-    //             }) 
-
-    //         })
-
-    // });
 
     $("#navbar-toggle-id").click(function(){
         $('#navbarNav').toggle("collapse");
@@ -172,13 +168,6 @@ $(document).ready(function(){
     }) ; 
 
 
-    // $("#link-map").click(function(){
-    //     $('div[id^="div-"]').hide();
-    //     $('a[id^="link-"]').removeClass("active");
-    //     $("#div-map").show();
-    //     $(this).addClass("active")
-    // }) ;
-
     $("#link-debug").click(function(){
         $('div[id^="div-"]').hide();
         $('a[id^="link-"]').removeClass("active");
@@ -194,5 +183,10 @@ $(document).ready(function(){
         $(this).addClass("active");
         $('#navbarNav').toggle("collapse");
     }) ;
+
+    $("#link-settings").click(function(){
+        $("#settings-modal").modal("show") ;
+        $('#navbarNav').toggle("collapse");
+    });
 
 });

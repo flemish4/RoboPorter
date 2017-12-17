@@ -2,14 +2,17 @@
 <html lang="en">
 <head>
 	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-	<link rel="stylesheet" href="resources/css/bootstrap.min.css"  crossorigin="anonymous">
-	<script type="text/javascript" src="resources/jquery-3.2.1.min.js"></script> <script src="resources/popper.js" crossorigin="anonymous"></script>
+	
+	<script type="text/javascript" src="resources/jquery-3.2.1.min.js"></script> 
+	<script src="resources/popper.js" crossorigin="anonymous"></script>
 	<script src="resources/js/bootstrap.min.js" crossorigin="anonymous"></script>
 	<script type="text/javascript" src="resources/jquery.js"></script>
-
+	
+	<link rel="stylesheet" href="resources/css/bootstrap.min.css"  crossorigin="anonymous">
 	<link href="resources/menu.css" rel="stylesheet" type="text/css">
 	<link href="resources/login.css" rel="stylesheet" type="text/css">
 	<link href="resources/main.css" rel="stylesheet" type="text/css">
+	
 	<title>RoboPorter</title>
 
 	<style>
@@ -32,14 +35,115 @@
 					<!-- <a class="nav-item nav-link" href="#" id="link-map">Mapping</a> -->
 					<a class="nav-item nav-link" href="#" id="link-debug">Debug</a>
 					<a class="nav-item nav-link" href="#" id="link-status">Status</a>
+					<a class="nav-item nav-link" href="#" id="link-settings">Settings</a>
 					<a class="nav-item nav-link ml-auto" href="php/logout.php">Sign Out</a>
 				</div>
 			</div>
 		</nav>
-	
+
+		<!-- On Screen Modals Below -->
+		<!-- Connection Modal -->
+		<div class="modal fade" id="noconnection-modal" data-backdrop="static">
+			<div class="modal-dialog">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h4 class="modal-title">Connecting to Roboporter</h4>
+					</div>	
+					<div class="modal-body">
+						<div id="connecting" class="alert alert-secondary">Connecting....</div>
+						<div id="noconnection" class="alert alert-danger">No Connection Available</div>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+						<button id="pagereloadconn" class="btn btn-success pagereload"  disabled>Reload Page</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Nav Screen Modal -->
+		<div class="modal fade" id="newmap-div" data-backdrop="static">
+			<div class="modal-dialog">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h4 class="modal-title">Make a New Map</h4>
+					</div>
+						
+					<div class="modal-body">
+						<p>Placeholder Content</p>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-primary" id="map-next-btn">Next</button>
+						<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Error Modal -->
+		<div class="modal fade" id="noconnection-modal" data-backdrop="static">
+			<div class="modal-dialog">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h4 class="modal-title">Error</h4>
+					</div>
+						
+					<div class="modal-body">
+						<div id="connecting" class="alert alert-info">An error connecting to the roboporter has occured</div>
+					</div>
+					<div class="modal-footer">
+						<button class="btn btn-success pagereload">Reload Page</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="modal fade" id="settings-modal" data-backdrop="static">
+			<div class="modal-dialog modal-lg">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h4 class="modal-title">Settings</h4>
+					</div>
+					<div class="modal-body">
+						<div class="container-fluid">
+							<div class="row">
+								<ul class="nav nav-pills">
+									<li><a class="nav-link active" id="home-settings-tab" data-toggle="tab" href="#home-settings" role="tab">Home</a></li>
+									<li><a class="nav-link" id="user-settings-tab" data-toggle="tab" href="#user-settings" role="tab">User</a></li>
+									<li><a class="nav-link" id="other-settings-tab" data-toggle="tab" href="#other-settings" role="tab">Other</a></li>
+								</ul>
+							</div>
+							<div class="row">
+								<div class="tab-content" id="settings-content" style="margin:3%;">
+									<div class="tab-pane fade show active" id="home-settings" role="tabpanel">
+										<h6>General Settings</h6>
+									</div>
+									<div class="tab-pane fade" id="user-settings" role="tabpanel" >
+										<h6>User Settings</h6>
+									</div>
+									<div class="tab-pane fade" id="other-settings" role="tabpanel">
+										<h6>Other Settings</h6>
+									</div>
+								</div>
+							</div>
+							
+						</div>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		
+		<!-- Content Divs Below -->
+
+		<!-- Home Screen Div -->
 		<div id="div-home">
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Home</h2></div></div>
 		</div>
+		<!-- Control Screen Div -->
 		<div id="div-control">
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Control</h2></div></div>
 			<div class="row no-gutters">
@@ -88,23 +192,6 @@
 			</div>
 		</div>
 		<div id="div-nav">
-			<div class="modal fade" id="newmap-div" data-backdrop="static">
-				<div class="modal-dialog">
-					<div class="modal-content">
-						<div class="modal-header">
-							<h4 class="modal-title">Make a New Map</h4>
-						</div>
-							
-						<div class="modal-body">
-							<p>Placeholder Content</p>
-						</div>
-						<div class="modal-footer">
-							<button type="button" class="btn btn-primary" id="map-next-btn">Next</button>
-							<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-						</div>
-					</div>
-				</div>
-			</div>
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Navigation</h2></div></div>
 			<div class="row justify-content-center no-gutters">
 				<div class="col-12 col-md-8" id="mapdiv" style=" width:100%;">
