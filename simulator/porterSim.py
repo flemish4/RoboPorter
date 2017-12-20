@@ -31,6 +31,7 @@ global lidarMap
 global lidarReady
 global porterImuOrientation
 global realPorterSize
+global realPorterRadius
 global dataMap
 manControl       = False    
 dataMap             = set()
@@ -50,7 +51,8 @@ USThreashholds      = {"front":30,"back":30,"side":20}
 stoppingDistance    = 20
 porterOrientation   = 0
 porterImuOrientation = porterOrientation
-realPorterSize     = (73,70)
+realPorterSize      = (73,70)
+realPorterRadius    = math.sqrt(realPorterSize[0]**2+realPorterSize[1]**2)
 
 # RealPorter global variables
 global realObstruction
@@ -401,14 +403,14 @@ class porterSim() :
     
         return realObstruction
     
-    def getRange(self,x,y) :
+    def getRange(self,x,y) : # Library export
         if x > y :
             numRange = reversed(range(int(y), int(x)+1))
         else :
             numRange = range(int(x), int(y)+1)
         return numRange
     
-    def rotate(self, origin, point, angle):
+    def rotate(self, origin, point, angle): # Library export
         """
         Rotate a point counterclockwise by a given angle around a given origin.
 
@@ -422,7 +424,7 @@ class porterSim() :
         return int(round(qx)), int(round(qy))
 
     
-    def constrainAngle360(self, angle, max, min) :
+    def constrainAngle360(self, angle, max, min) : # Library export
         while angle >= max :
             angle -= 360
         while angle < min :
@@ -435,6 +437,7 @@ class porterSim() :
         # Also adds a coordinate to lidarMap if a point is detected (which it will be < 40m)
         global realPorterLocation
         global realPorterOrientation
+        global realPorterSize
         global lidarMap
         global lidarAngles
         # Generate a list of points on line going from centre of porter out at angle given
@@ -459,18 +462,18 @@ class porterSim() :
         pygame.draw.line(self.views["realmap"]["surface"],self.black,(x0,y0),point)
               
         # Calculate location relative to porter (not realPorter)
-        startPos = (porterLocation[0] + self.pixelPorterSize[0]/2, porterLocation[1] + self.pixelPorterSize[1]/2)
-        r = math.sqrt((point[0]-x0)**2+(point[1]-y0)**2)
+        startPos = (porterLocation[0] + realPorterSize[0]/2, porterLocation[1] + realPorterSize[1]/2)
+        r = math.sqrt((point[0]-x0)**2+(point[1]-y0)**2)*self.scale
         porterAbsAngle = self.constrainAngle360(porterOrientation -90 + angle, 360, 0)
         endPos = (int(round(startPos[0] + r*math.cos(math.radians(porterAbsAngle)))), int(round(startPos[1] + r*math.sin(math.radians(porterAbsAngle)))))
         
-        if r <(4000/self.scale) :  # If within 40m which it definitely will be...
+        if r <4000 :  # If within 40m which it definitely will be...
             with threadLock :
-                lidarAngles[angle] = r * self.scale
-                lidarMap.add((endPos[0]*self.scale,endPos[1]*self.scale))
+                lidarAngles[angle] = r
+                lidarMap.add((endPos[0],endPos[1]))
             # Draw lidar line and hit point on portermap
-            pygame.draw.circle(self.views["portermap"]["surface"],self.black,endPos,5)
-            pygame.draw.line(self.views["portermap"]["surface"], self.black, startPos, endPos)
+            pygame.draw.circle(self.views["portermap"]["surface"],self.black,[n/self.scale for n in endPos],5)
+            pygame.draw.line(self.views["portermap"]["surface"], self.black, [n/self.scale for n in startPos], [n/self.scale for n in endPos])
         
             
     def checkLidar(self) :
@@ -521,7 +524,7 @@ class porterSim() :
         global dataMap
         with threadLock :
             for point in dataMap :
-                pygame.draw.circle(self.views["portermap"]["surface"], (255,0,0), (point[0]/self.scale,point[1]/self.scale), 10)
+                pygame.draw.circle(self.views["portermap"]["surface"], (255,0,0), (point[0]/self.scale,point[1]/self.scale), 1)
     
     
     def placePorter(self, e) : # UI for placing porter when starting sim
@@ -552,8 +555,8 @@ class porterSim() :
                         and e.pos[1] < (self.views["realmap"]["absPos"][1] + self.views["realmap"]["absSize"][1]) :
                         # Calculate new porter position
                         with threadLock :
-                            porterLocation              = (e.pos[0]+self.views["realmap"]["absPos"][0]-(self.pixelPorterSize[0]/2), e.pos[1]- self.views["realmap"]["absPos"][1]-(self.pixelPorterSize[1]/2))
-                            realPorterLocation          = (e.pos[0]+ self.views["realmap"]["absPos"][0]-(self.pixelPorterSize[0]/2),e.pos[1]- self.views["realmap"]["absPos"][1]-(self.pixelPorterSize[1]/2))
+                            realPorterLocation          = (e.pos[0]+self.views["realmap"]["absPos"][0]-(self.pixelPorterSize[0]/2), e.pos[1]- self.views["realmap"]["absPos"][1]-(self.pixelPorterSize[1]/2))
+                            porterLocation              = (realPorterLocation[0]*self.scale, realPorterLocation[1]*self.scale)
                         # Create new porter
                         self.porterReal["surface"]  = self.createPorter(self.views["realmap"]["surface"], self.views["realmap"]["rect"], realPorterLocation[0], realPorterLocation[1], porterOrientation)
                         self.porter["surface"]      = self.createPorter(self.views["portermap"]["surface"], self.views["portermap"]["rect"], porterLocation[0], porterLocation[1], porterOrientation)
@@ -625,10 +628,10 @@ class porterSim() :
         
         if not realCollision :
             if (speedVector != [0,0]) or manControl :
-                realWheelSpeeds = (speedVector[0]*(1 +(self.wheelSpeedError*(0.5-random.random()))), speedVector[1]*(1 + (self.wheelSpeedError*(0.5-random.random()))))
+                realWheelSpeeds = (speedVector[0]*(1 +(self.wheelSpeedError*(0.5-random.random())))/self.scale, speedVector[1]*(1 + (self.wheelSpeedError*(0.5-random.random())))/self.scale)
                 
-                leftDelta  = self.simFrameTime * realWheelSpeeds[0] / self.scale
-                rightDelta = self.simFrameTime * realWheelSpeeds[1] / self.scale
+                leftDelta  = self.simFrameTime * realWheelSpeeds[0]
+                rightDelta = self.simFrameTime * realWheelSpeeds[1]
                 orientation = math.radians(realPorterOrientation - 90)
                 x,y = realPorterLocation
                 o   = realPorterOrientation
@@ -649,7 +652,7 @@ class porterSim() :
                 with threadLock :
                     realPorterLocation = (new_x,new_y)
                     realPorterOrientation = math.degrees(new_heading) + 90
-                    wheelSpeeds = (realWheelSpeeds[0]*(1 +(self.encoderError*(0.5-random.random()))), realWheelSpeeds[1]*(1 + (self.encoderError*(0.5-random.random()))))
+                    wheelSpeeds = (realWheelSpeeds[0]*(1 +(self.encoderError*(0.5-random.random())))*self.scale, realWheelSpeeds[1]*(1 + (self.encoderError*(0.5-random.random())))*self.scale)
                     realPorterOrientation = self.constrainAngle360(realPorterOrientation, 180, -180)
                     
                 #collision detection
@@ -709,7 +712,7 @@ class porterSim() :
                 
             if self.porterAdded :
                 self.drawPorter(self.views["realmap"]["surface"], self.views["realmap"]["rect"], realPorterLocation[0],realPorterLocation[1], realPorterOrientation, self.porterReal["surface"])
-                self.drawPorter(self.views["portermap"]["surface"], self.views["portermap"]["rect"], porterLocation[0],porterLocation[1], porterOrientation, self.porter["surface"])
+                self.drawPorter(self.views["portermap"]["surface"], self.views["portermap"]["rect"], porterLocation[0]/self.scale,porterLocation[1]/self.scale, porterOrientation, self.porter["surface"])
             
             if self.simRunning : 
                 self.simClock.tick(self.simFrameRate)
@@ -797,8 +800,8 @@ class porterSim() :
         
         if not realCollision :
             if wheelSpeeds != [0,0] :                
-                leftDelta  = self.simFrameTime * wheelSpeeds[0] / self.scale
-                rightDelta = self.simFrameTime * wheelSpeeds[1] / self.scale
+                leftDelta  = self.simFrameTime * wheelSpeeds[0]
+                rightDelta = self.simFrameTime * wheelSpeeds[1]
                 orientation = math.radians(porterOrientation - 90)
                 x,y = porterLocation
 
@@ -868,9 +871,10 @@ class pathMapClass() :
             for point in lidarMapStore :
                 xPoint = self.roundBase(point[0],self.mapGridResolution)
                 yPoint = self.roundBase(point[1],self.mapGridResolution)
-                for x in self.getRange(xPoint - self.wallSafetyGridRadius , xPoint + self.wallSafetyGridRadius) :
-                    for y in self.getRange(yPoint - self.wallSafetyGridRadius , yPoint + self.wallSafetyGridRadius) :
-                        self.wallMap.add((x,y))
+                for x in self.getRange(point[0] - self.wallSafetyGridRadius , point[0] + self.wallSafetyGridRadius) :
+                    for y in self.getRange(point[1] - self.wallSafetyGridRadius , point[1] + self.wallSafetyGridRadius) :
+                        
+                        self.wallMap.add((self.roundBase(x,self.mapGridResolution),self.roundBase(y,self.mapGridResolution)))
 
         
     def printVars(self, vars, title="") :
@@ -897,7 +901,14 @@ class pathMapClass() :
         else :
             numRange = range(int(x), int(y)+1)
         return numRange
-                    
+    
+    def constrainAngle360(self, angle, max, min) :
+        while angle >= max :
+            angle -= 360
+        while angle < min :
+            angle += 360
+        return angle
+        
     def getEdges(self, id, dest) :
         edges = {}
         x = id[0]
@@ -907,7 +918,9 @@ class pathMapClass() :
         nx = x + self.angleOffsetLookup[a][0]
         ny = y + self.angleOffsetLookup[a][1]
         dist = ( dest[0] - nx )**2 + ( dest[1] - ny )**2
-        edges[(nx, ny, self.constrainInt(a+4,8,0))] = { "weight" : dist }
+        # Check that cell in current directiom is not wall
+        if not ((nx,ny) in self.wallMap) :
+            edges[(nx, ny, self.constrainInt(a+4,8,0))] = { "weight" : dist }
         # Add links to same node at different angles
         dist = ( x - dest[0] )**2 + ( y - dest[1] )**2
         for aLink in range(0,8) :
@@ -919,6 +932,41 @@ class pathMapClass() :
                 edges[(x,y,aLink)] = { "weight" : dist + self.cornerPenaltyWeight + abs(aLink-a)*self.cornerAngleWeight }
 
         return edges
+        
+    def isWall(self, coord) :
+        if coord in self.wallMap :
+            return True
+        else :
+            return False
+        
+    # Similar to lidar code
+    # Check every cell along line given starting point, distance and angle
+    # Return true if there is no collsion or false if collision is detected
+    def checkLine(self, x0, y0, dist, angle) :
+        # Generate a list of points on line going from centre of porter out at angle given
+        linePoints = list()
+        # Absolute angle
+        a = self.constrainAngle360(angle, 360,0)
+        # End points of line 
+        xMax = x0 + int(round(dist*math.cos(math.radians(a))))
+        yMax = y0 + int(round(dist*math.sin(math.radians(a))))
+        # List of points along line
+        linePoints = list(bresenham(x0,y0,xMax, yMax))
+        linePoints = [(self.roundBase(point[0],self.mapGridResolution),self.roundBase(point[1],self.mapGridResolution)) for point in linePoints]
+        linePoints = set(linePoints)
+
+        # Find collision location
+        for point in linePoints :
+            if self.isWall(point) :
+                # If there os a collision then the line is not valid
+                return False
+                
+        # After scanning all points the line must be valid
+        return True
+        
+    def getDataMap(self) :
+        return self.wallMap
+
 
                     
 class simThreadBase(MultiThreadBase) :
@@ -962,6 +1010,24 @@ class simThreadBase(MultiThreadBase) :
             
         print oStr
         
+    def getLidar360(self) :
+        global lidarReady
+        global threadLock
+        global lidarRun
+        global lidarReady
+        global exitFlag
+        
+        while (not lidarReady) and (not exitFlag):
+            time.sleep(0.1)
+
+        with threadLock :
+            lidarRun = "a"
+            lidarReady = False
+                
+        while (not lidarReady) and (not exitFlag):
+            time.sleep(0.1)
+
+        
                 
                 
 class mappingThread(simThreadBase):
@@ -974,6 +1040,9 @@ class mappingThread(simThreadBase):
         global maxSpeeds
         global porterLocation #vector holding local location [x,y] in cm
         global porterOrientation #angle from north (between -180,180) in degrees
+        global realPorterLocation # CHEATING ONLY
+        global realPorterOrientation # CHEATING ONLY
+        global realPorterSize
         global lastCommand
         global speedVector
         global dataReady
@@ -981,9 +1050,6 @@ class mappingThread(simThreadBase):
         global exitFlag
         global USThreashholds
         global stoppingDistance
-        global realObstruction
-        global realPorterLocation
-        global realPorterOrientation
         global lidarReady
         global lidarMap
         global lidarAngles
@@ -991,6 +1057,7 @@ class mappingThread(simThreadBase):
         global pathMap
         global realPorterSize
         global dataMap
+        global realPorterRadius
         # Things you may want to do
         #with threadLock :
         #    speedVector = [50,100]
@@ -1006,6 +1073,9 @@ class mappingThread(simThreadBase):
         stdWeight               = 1
         cornerPenaltyWeight     = 1
         cornerAngleWeight       = 1
+        scanSeparation          = 100 # cm between scan locations
+        scanAngleLimit          = 53 # degrees before there should be two points
+        scanMinPorterAngle      = math.degrees(2*math.atan(realPorterRadius/(2*scanSeparation))) - 10
         angleOffsetLookup       = { 0 : [0,-1],
                                     1 : [1,1],
                                     2 : [1,0],
@@ -1015,111 +1085,135 @@ class mappingThread(simThreadBase):
                                     6 : [-1,0],
                                     7 : [-1,-1],
                                   }
-        print wallSafetyGridRadius
-        if lidarReady :
-            with threadLock :
-                lidarRun = "a"
-                lidarReady = False
+        # if lidarReady :
+            # with threadLock :
+                # lidarRun = "a"
+                # lidarReady = False
                 
-        while (not lidarReady) and (not exitFlag):
-            time.sleep(0.1)
+        # while (not lidarReady) and (not exitFlag):
+            # time.sleep(0.1)
         
+
+            
+        self.getLidar360()
         # Store lidar data
         with threadLock :
-            lidarMapStore = lidarMap
-   
-        # Create pathMap
-        pathMap = pathMapClass(lidarMapStore)
-
+            lidarMapStore = lidarMap       
+        # Find exploration locations
+        openLocs    = []
+        closedLocs  = []
         
-        
-        
-        
-        
-        # FAILED ATTEMPT - no reliable order in lidarMapStore when combined so can't rely on it
-        # # Find nearest point
-        # closestPoint    = []
-        # pointsDone      = []
-        # oldPoint        = None
-        # foundPoint      = False
-        # for point in lidarMapStore :
-            # dataMap = set()
-            # dataMap.add(point)
-            # print "point: " + str(point)
-            # if oldPoint == None :
-                # oldPoint = point
-                # continue
-            # dy = (float(oldPoint[1])-point[1])
-            # dx = (float(oldPoint[0])-point[0])
-            # if dx == 0 :
-                # oldPointAngle = math.pi/2
-            # else :
-                # oldPointAngle = math.atan(dy/dx)
-            # print "oldPointAngle: " + str(oldPointAngle)
-            # for compPoint in lidarMapStore :
-                # print "compPoint: " + str(compPoint)
-                # # Don't compare with self
-                # if point == compPoint :
-                    # print "not with self"
-                    # continue
-                # # Don't compare with points in line with previous point
-                # dy = (float(compPoint[1])-point[1])
-                # dx = (float(compPoint[0])-point[0])
-                # if dx == 0 :
-                    # print "dx == 0"
-                    # compPointAngle = math.pi/2
-                # else :
-                    # compPointAngle = math.atan(dy/dx)
-                    # print "compPointAngle: " + str(compPointAngle)
-                # if (compPointAngle > (oldPointAngle - oldAngleThresh)) and (compPointAngle < (oldPointAngle + oldAngleThresh)) :
-                    # print "Angle too similar - skipping"
-                    # continue
-                # # Find distance between the two points
-                # dist = (compPoint[0] - point[0])**2 + (compPoint[1] - point[1])**2
-                # # If first iteration, set any point to be closest
-                # if len(closestPoint) == 0 :
-                    # print "First run setting closestPoint and minDist"
-                    # closestPoint = compPoint
-                    # minDist = dist
-                # else :
-                    # print "If new dist is smaller then change it"
-                    # # If this point is closer then set it as new closest
-                    # if dist < minDist :
-                        # minDist = dist 
-                        # closestPoint = compPoint
-                        
-            # oldPoint = point
-            # # Now check if the minDist is within the threshold
-            # if minDist > pointDistThresh :
-                # # This point does not have a valid neighbor, use this
-                # foundPoint = True
-                # break
-            # else :
-                # # This point has been completed successfully
-                # pointsDone.append((point))
-                
-        # if foundPoint :
-            # print "SUCCESS" 
-            # dataMap.add(closestPoint)
-            # dataMap.add(point)
-            # dataMap.add(((closestPoint[0]+point[0])/2,(closestPoint[1]+point[1])/2))
+        while not exitFlag : # Repeat until mapping completed
+            # Create pathMap and mapMap
+            pathMap = pathMapClass(lidarMapStore)
+            mapMapStore = lidarMapStore.copy() # This variable shows all locations that are wall or have already been mapped
+            # Block out areas that have been explored already ( or will be )
+            for loc in (openLocs + closedLocs[:-1]) : # for every point except the last one completed - so porter isn't blocked in
+                # Add points surrounding the point
+                for a in range(0,360,1) :
+                    x = loc[0] + math.sin(math.radians(a))#scanSeparation*math.sin(math.radians(a))
+                    y = loc[1] + math.cos(math.radians(a))#scanSeparation*math.cos(math.radians(a))
+                    mapMapStore.add((x,y))
                     
-                
-        # Loop
-        
+            # Create mapping map object
+            mapMap  = pathMapClass(mapMapStore)
+            dataMap = pathMap.getDataMap() # REVISIT : This doesn't need the safety bounds that walls do
             # Select location
+            # Look around the porter
+            ranges = []
+            startAngle = None
+            curAngle   = None
+            x0 = int(round(porterLocation[0]) + realPorterSize[0]/2)
+            y0 = int(round(porterLocation[1]) + realPorterSize[1]/2)
+            # Find ranges of angles that do not collide with walls
+            for a in range(0,360,1) :
+                if mapMap.checkLine(x0, y0, scanSeparation + realPorterSize[0]/2, a) :
+                    # If the line is valid
+                    # Check if it is a new range
+                    if startAngle == None :
+                        # Configure new range
+                        startAngle = a
+                        curAngle   = a
+                    else :
+                        # Extend current range
+                        curAngle = a 
+                else :
+                    # If the line is not valid end the current range if there is one
+                    if startAngle != None :
+                        # If a range is ending add it to ranges and clear varaibles
+                        ranges.append((startAngle, curAngle))
+                        startAngle = None
+                        curAngle   = None
+            # If the line is not valid end the current range if there is one
+            if startAngle != None :
+                # If a range is ending add it to ranges and clear varaibles
+                ranges.append((startAngle, curAngle))
+                startAngle = None
+                curAngle   = None
+            
+            # Join ranges that start 0 with ranges that end with 359
+            if len(ranges) > 1 :
+                zeroRange = None
+                maxRange  = None
+                for aRange in ranges :
+                    if aRange[0] == 0 :
+                        zeroRange = aRange
+                        break
+                    
+                if zeroRange != None :
+                    for aRange in ranges :
+                        if aRange[1] == 359 :
+                            maxRange = aRange
+                            break
+                if maxRange != None :
+                    newRange = (aRange[0], zeroRange[1] + 360)
+                    ranges.remove(zeroRange)
+                    ranges.remove(maxRange)
+                    ranges.append(newRange)
+                            
+            for aRange in ranges :
+                span    = aRange[1] - aRange[0]
+                if span < scanMinPorterAngle : # if too small for porter to fit
+                    continue
+
+                n = span / scanAngleLimit # CHECK that this is integer MOD division                    
+                if span >= 359 :
+                    incWall = 2 
+                else :
+                    incWall = 1
+                if n < 1 :
+                    n = 1
+                # Divide the range up to be covered by n points
+                split = span/(n+1)
+                for i in range(1,n+incWall) :
+                    a = aRange[0] + split*i
+                    x = int(round(x0 + scanSeparation*math.cos(math.radians(a))))
+                    y = int(round(y0 + scanSeparation*math.sin(math.radians(a))))
+                    openLocs.append((x,y))
+            dataMap = set(openLocs) | set(closedLocs) | dataMap
+            # Check for completed scan
+            # BREAK CONDITION
+            if len(openLocs) < 1 :
+                break
         
-        
+            
             # Navigate to location A* or until stopped by obstacle
-        
-        
+            curLoc = openLocs.pop(-1) # Get the newest point
+            # Move to that location
+            # MAJOR CHEAT FOR TESTING ONLY REVISIT THIS
+            porterLocation      = [curLoc[0] - realPorterSize[0]/2,curLoc[1] - realPorterSize[1]/2]
+            realPorterLocation  = [n/2 for n in porterLocation]
+            # Add to completed locs
+            closedLocs.append(curLoc)
             # Rescan 
-        
-        
+            self.getLidar360()
             # Add lidar data ICP
+            # Store lidar data
+            # ALSO MAJOR CHEAT THIS SHOULD USE point cloud stuff REVISIT
+            with threadLock :
+                lidarMapStore = lidarMapStore | lidarMap   
         
-        
-        # Until lidar data is a closed loop
+            #time.sleep(0.5)
         
         while not exitFlag :
             time.sleep(0.1)
