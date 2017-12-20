@@ -104,9 +104,9 @@ class porterSim() :
         global realPorterSize
         pygame.init()
         pygame.font.init()  
-        self.simSpeed           = 1 # Scale time 
+        self.simSpeed           = 10 # Scale time 
         self.simFrameTime       = 0.015 
-        self.simFrameRate       = 1/self.simFrameTime
+        self.simFrameRate       = 1/self.simFrameTime*self.simSpeed
         self.scale              = 2 # 1pixel = 2cm
         self.wheelSpeedError    = 0.05
         self.orientationError   = 0.5
@@ -811,11 +811,11 @@ class porterSim() :
                     new_heading = orientation;
                 else :
                     R = self.pixelPorterSize[0] * (leftDelta + rightDelta) / (2 * (rightDelta - leftDelta))
-                    wd = (rightDelta - leftDelta) / self.pixelPorterSize[0];
+                    wd = (rightDelta - leftDelta) / self.pixelPorterSize[0] ;
 
                     new_x = x + R * math.sin(wd + orientation) - R * math.sin(orientation);
                     new_y = y - R * math.cos(wd + orientation) + R * math.cos(orientation);
-                    new_heading = orientation + wd;
+                    new_heading = orientation + wd/ self.scale;
                 
                 with threadLock :
                     porterLocation = (new_x,new_y)
@@ -1064,7 +1064,8 @@ class mappingThread(simThreadBase):
         
         #done = False
         #while (not done) and (not exitFlag) :
-        dataMap                 = set()
+        with threadLock :
+            dataMap                 = set()
         pointDistThresh         = 4
         oldAngleThresh          = 0.174533
         mapGridResolution       = 10 #cm how far apart are the grid nodes
@@ -1102,29 +1103,32 @@ class mappingThread(simThreadBase):
         # Find exploration locations
         openLocs    = []
         closedLocs  = []
+        locBlockMap = set()
         
         while not exitFlag : # Repeat until mapping completed
             # Create pathMap and mapMap
             pathMap = pathMapClass(lidarMapStore)
-            mapMapStore = lidarMapStore.copy() # This variable shows all locations that are wall or have already been mapped
+            #mapMapStore = lidarMapStore.copy() # This variable shows all locations that are wall or have already been mapped
             # Block out areas that have been explored already ( or will be )
-            for loc in (openLocs + closedLocs[:-1]) : # for every point except the last one completed - so porter isn't blocked in
-                # Add points surrounding the point
-                for a in range(0,360,1) :
-                    x = loc[0] + math.sin(math.radians(a))#scanSeparation*math.sin(math.radians(a))
-                    y = loc[1] + math.cos(math.radians(a))#scanSeparation*math.cos(math.radians(a))
-                    mapMapStore.add((x,y))
+            # for loc in (openLocs + closedLocs[:-1]) : # for every point except the last one completed - so porter isn't blocked in
+                # # Add points surrounding the point
+                # for a in range(0,360,1) :
+                    # x = loc[0] + math.sin(math.radians(a))#scanSeparation*math.sin(math.radians(a))
+                    # y = loc[1] + math.cos(math.radians(a))#scanSeparation*math.cos(math.radians(a))
+                    # mapMapStore.add((x,y))
                     
             # Create mapping map object
-            mapMap  = pathMapClass(mapMapStore)
-            dataMap = pathMap.getDataMap() # REVISIT : This doesn't need the safety bounds that walls do
+            x0 = int(round(porterLocation[0]) + realPorterSize[0]/2)
+            y0 = int(round(porterLocation[1]) + realPorterSize[1]/2)
+            with threadLock :
+                dataMap = pathMap.getDataMap()  | locBlockMap # REVISIT : This doesn't need the safety bounds that walls do
+                dataMap.discard((x0,y0))
+            mapMap  = pathMapClass(dataMap)
             # Select location
             # Look around the porter
             ranges = []
             startAngle = None
             curAngle   = None
-            x0 = int(round(porterLocation[0]) + realPorterSize[0]/2)
-            y0 = int(round(porterLocation[1]) + realPorterSize[1]/2)
             # Find ranges of angles that do not collide with walls
             for a in range(0,360,1) :
                 if mapMap.checkLine(x0, y0, scanSeparation + realPorterSize[0]/2, a) :
@@ -1190,7 +1194,8 @@ class mappingThread(simThreadBase):
                     x = int(round(x0 + scanSeparation*math.cos(math.radians(a))))
                     y = int(round(y0 + scanSeparation*math.sin(math.radians(a))))
                     openLocs.append((x,y))
-            dataMap = set(openLocs) | set(closedLocs) | dataMap
+                    locBlockMap.add((x,y))
+            #dataMap = set(openLocs) | set(closedLocs) | dataMap
             # Check for completed scan
             # BREAK CONDITION
             if len(openLocs) < 1 :
@@ -1249,7 +1254,9 @@ class navigationThread(simThreadBase):
         #   speedVector = [50,100]
         #   if lidarReady :
         #       lidarRun = "a"  
-        
+        while not exitFlag :
+            time.sleep(0.1)
+        print "done"
         
 if __name__ == "__main__" :
     i_porterSim = porterSim()
