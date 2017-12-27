@@ -6,7 +6,7 @@
 	<script type="text/javascript" src="resources/jquery-3.2.1.min.js"></script> 
 	<script src="resources/popper.js" crossorigin="anonymous"></script>
 	<script src="resources/js/bootstrap.min.js" crossorigin="anonymous"></script>
-	<script type="text/javascript" src="resources/jquery.js"></script>
+	<script type="text/javascript" src="resources/main.js"></script>
 	
 	<link rel="stylesheet" href="resources/css/bootstrap.min.css"  crossorigin="anonymous">
 	<link href="resources/menu.css" rel="stylesheet" type="text/css">
@@ -55,7 +55,7 @@
 					</div>
 					<div class="modal-footer">
 						<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-						<button id="pagereloadconn" class="btn btn-success pagereload"  disabled>Reload Page</button>
+						<button id="pagereloadconn" class="btn btn-success pagereload"  disabled>Reload Page<span class="glyphicon glyphicon-refresh"></span></button>
 					</div>
 				</div>
 			</div>
@@ -97,7 +97,7 @@
 				</div>
 			</div>
 		</div>
-
+		<!-- Settings Modal -->
 		<div class="modal fade" id="settings-modal" data-backdrop="static">
 			<div class="modal-dialog modal-lg">
 				<div class="modal-content">
@@ -108,21 +108,67 @@
 						<div class="container-fluid">
 							<div class="row">
 								<ul class="nav nav-pills">
-									<li><a class="nav-link active" id="home-settings-tab" data-toggle="tab" href="#home-settings" role="tab">Home</a></li>
-									<li><a class="nav-link" id="user-settings-tab" data-toggle="tab" href="#user-settings" role="tab">User</a></li>
+									<li><a class="nav-link active" id="home-settings-tab" data-toggle="tab" href="#home-settings" role="tab">Main Settings</a></li>
+									<li><a class="nav-link" id="user-settings-tab" data-toggle="tab" href="#user-settings" role="tab">User Settings</a></li>
 									<li><a class="nav-link" id="other-settings-tab" data-toggle="tab" href="#other-settings" role="tab">Other</a></li>
 								</ul>
 							</div>
 							<div class="row">
-								<div class="tab-content" id="settings-content" style="margin:3%;">
-									<div class="tab-pane fade show active" id="home-settings" role="tabpanel">
-										<h6>General Settings</h6>
-									</div>
-									<div class="tab-pane fade" id="user-settings" role="tabpanel" >
-										<h6>User Settings</h6>
-									</div>
-									<div class="tab-pane fade" id="other-settings" role="tabpanel">
-										<h6>Other Settings</h6>
+								<div class="col-12">
+									<div class="tab-content" id="settings-content" style="margin:2%;">
+
+										<!-- General Settings -->
+										<div class="tab-pane fade show active" id="home-settings" role="tabpanel"style="margin-top:1vh;">
+											<h5>General Settings</h5>
+										</div>
+
+										<!-- User Settings -->
+										<div class="tab-pane fade" id="user-settings" role="tabpanel" style="padding-top:1vh;">
+											<div class="row">
+												<div class="col-6">
+													<div class="card" id="new_user_card">
+														<div class="card-body">
+															<form id="new_user" action="#">
+																<div class="form-group">
+																	<h5 class="card-title">Create New User</h5>
+																	<h6 class="card-subtitle ">Create a new Roboporter User Here</h6>
+																	<!-- <label for="existingpass" style="padding-top:0.5vh;" class="">Confirm Password</label> -->
+																	<input type="password" class="form-control" placeholder="Confirm Current Password" style="margin-top:1vh;" id="current_password_input" name="current_password_input">
+																	<!-- <label for="newusername" style="padding-top:0.5vh;" class="">New Username</label> -->
+																	<input type="text" class="form-control" placeholder="Enter New Username" style="margin-top:1vh;" id="new_user_input" name="new_user_input">
+																	<!-- <label for="new password" class="">Password</label> -->
+																	<input type="password" class="form-control" placeholder="Enter Password For New User" style="margin-top:1vh;" id="new_password_input" name="new_password_input">
+																	<input type="submit" value="Create New User" class="btn btn-primary" style="margin-top:1vh;">
+																	<div class="alert alert-danger" id="new_user_warning" style="margin-top:2vh;"></div>
+																	<div class="alert alert-success" id="new_user_success" style="margin-top:2vh;">Success!!</div>
+																	
+																</div>
+															</form>
+														</div>
+													</div>
+												</div>
+												<div class="col-6">
+													<div class="card" id="new_user_card">
+														<div class="card-body">
+															<form id="new_user">
+																<div class="form-group">
+																	<h5 class="card-title">Change Password</h5>
+																	<h6 class="card-subtitle">Change Current Password</h6>
+																	<input type="password" class="form-control" placeholder="Confirm Current Password" style="margin-top:1vh;">
+																	<input type="password" class="form-control" placeholder="Enter New Password" style="margin-top:1vh;">
+																	<input type="submit" value="Create New User" class="btn btn-primary" style="margin-top:1vh;">
+																</div>
+															</form>
+														</div>
+													</div>
+												</div>
+											</div>
+										</div>
+
+
+										<div class="tab-pane fade" id="other-settings" role="tabpanel" style="padding-top:1vh;">
+											<h5>Other Settings</h5>
+										</div>
 									</div>
 								</div>
 							</div>
@@ -191,6 +237,7 @@
 				</div>
 			</div>
 		</div>
+		<!-- Navigation and mapping Div -->
 		<div id="div-nav">
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Navigation</h2></div></div>
 			<div class="row justify-content-center no-gutters">
@@ -226,10 +273,12 @@
 				
 			</div>
 		</div>
+		<!-- Debug Div -->
 		<div id="div-debug">
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Debug</h2></div></div>	
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center" id="debugdata"></div></div>	
 		</div>
+		<!-- Status Div -->
 		<div id="div-status">
 				<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Status</h2></div></div>	
 		</div>

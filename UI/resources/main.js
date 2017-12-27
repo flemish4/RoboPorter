@@ -29,6 +29,7 @@ $(document).ready(function(){
     var div_width ;
     var wh_ratio ; 
     var new_height ; 
+    
 
     setTimeout(() => { // Manages the connection timeout modal. After 22 seconds it fades in an alert saying no connection is available
         $("#connecting").fadeOut(1000, function(){
@@ -56,9 +57,58 @@ $(document).ready(function(){
         
     $('div[id^="div-"]').hide();
     $("#div-home").show();
+    $("#new_user_warning").hide();
+    $("#new_user_success").hide();
 
+    // When the new user form is submited. Run this function:
+    $("#new_user").submit(function(e){
+        e.preventDefault(); // Prevents any default form running from happening
+        if(!$("#current_password_input").val()){
+            $("#new_user_warning").fadeOut();  
+            $("#new_user_warning").html("Please complete all the form fields") ;
+            $("#new_user_warning").fadeIn();
+            
+        }else if(!$("#new_user_input").val()){
+            $("#new_user_warning").fadeOut();
+            $("#new_user_warning").html("Please complete all the form fields") ;
+            $("#new_user_warning").fadeIn();
 
-
+        }else if(!$("#new_password_input").val()){
+            $("#new_user_warning").fadeOut();
+            $("#new_user_warning").html("Please complete all the form fields") ;
+            $("#new_user_warning").fadeIn();
+        }     
+        else{
+            $("#new_user_warning").hide();
+            var data = {
+            'password' : $("#current_password_input").val(), 
+            'newuser' : $("#new_user_input").val(),  
+            'newpass' : $("#new_password_input").val() ,
+            }
+            $.ajax({
+                type:'POST',
+                url:'php/newuser.php',
+                data: data ,
+        
+            }).done(function(msg){
+                if(msg == "success"){
+                    $("#new_user_success").hide() ;
+                    $("#new_user_success").fadeIn()
+                }
+                else if(msg == "username_in_use"){
+                    $("#new_user_success").hide()
+                    $("#new_user_warning").html("Username Already In Use") ;
+                    $("#new_user_warning").fadeIn();
+                } 
+                else if(msg =="password_incorrect"){
+                    $("#new_user_success").hide()
+                    $("#new_user_warning").html("Current Password Incorrect") ;
+                    $("#new_user_warning").fadeIn();
+                }
+                else{alert('An error occured --> '+msg)};
+            })
+        }  
+    });
 
     $('#left-btn').click(function(){
         s.send("l")
