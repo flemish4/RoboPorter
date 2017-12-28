@@ -33,8 +33,10 @@ global porterImuOrientation
 global realPorterSize
 global realPorterRadius
 global dataMap
-manControl       = False    
+global realDataMap
+manControl          = False    
 dataMap             = set()
+realDataMap         = set()
 exitFlag            = False #multiprocessing Exit flag
 pathMap             = {}
 wheelSpeeds         = [0,0]    
@@ -527,6 +529,12 @@ class porterSim() :
             for point in dataMap :
                 pygame.draw.circle(self.views["portermap"]["surface"], (255,0,0), (point[0]/self.scale,point[1]/self.scale), 1)
     
+    def drawRealDataMap(self) :
+        global realDataMap
+        with threadLock :
+            for point in realDataMap :
+                pygame.draw.circle(self.views["realmap"]["surface"], (0,0,255), (point[0],point[1]), 2)
+    
     
     def placePorter(self, e) : # UI for placing porter when starting sim
         global realPorterLocation
@@ -627,6 +635,7 @@ class porterSim() :
         global movePorter
         global manControl
         global realPorterWheelOffsetY
+        global realDataMap
         
         if not realCollision :
             if (speedVector != [0,0]) or manControl :
@@ -635,8 +644,10 @@ class porterSim() :
                 leftDelta  = self.simFrameTime * realWheelSpeeds[0]
                 rightDelta = self.simFrameTime * realWheelSpeeds[1]
                 orientation = math.radians(realPorterOrientation - 90)
-                x   = realPorterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)
-                y   = realPorterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)
+                x   = realPorterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)/self.scale
+                y   = realPorterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)/self.scale
+                with threadLock :
+                    realDataMap.add((int(x),int(y)))
                 o = realPorterOrientation # save state incase collision
                 if (math.fabs(leftDelta - rightDelta) < 1.0e-6) : # basically going straight
                     new_x = x + leftDelta * math.cos(orientation);
@@ -653,7 +664,8 @@ class porterSim() :
 
                 with threadLock :
                     realPorterOrientation = math.degrees(new_heading) + 90
-                    realPorterLocation = (new_x + realPorterWheelOffsetY*math.cos(realPorterOrientation),new_y + realPorterWheelOffsetY*math.sin(realPorterOrientation))
+                    realPorterLocation = (new_x + realPorterWheelOffsetY*math.cos(orientation)/self.scale,new_y + realPorterWheelOffsetY*math.sin(orientation)/self.scale)
+                    #realPorterLocation = (new_x,new_y)
                     wheelSpeeds = (realWheelSpeeds[0]*(1 +(self.encoderError*(0.5-random.random())))*self.scale, realWheelSpeeds[1]*(1 + (self.encoderError*(0.5-random.random())))*self.scale)
                     realPorterOrientation = self.constrainAngle360(realPorterOrientation, 180, -180)
                     
@@ -681,6 +693,10 @@ class porterSim() :
         global lidarReady
         global lidarMap
         global lidarAngles
+        global dataMap
+        global realDataMap
+        global wheelSpeeds
+        global speedVector
         global exitFlag
         global threadLock
         global pathMap
@@ -697,7 +713,11 @@ class porterSim() :
                     elif self.runMode == "runNavSim" : 
                         simThread = navigationThread(1, "navigationThread",self.simFrameTime, self.scale, self.pixelPorterSize)
                         simThread.start()
-            
+                        
+            if self.porterAdded :
+                self.drawPorter(self.views["realmap"]["surface"], self.views["realmap"]["rect"], realPorterLocation[0]-(self.pixelPorterSize[0]/2),realPorterLocation[1]-(self.pixelPorterSize[1]/2), realPorterOrientation, self.porterReal["surface"])
+                self.drawPorter(self.views["portermap"]["surface"], self.views["portermap"]["rect"], (porterLocation[0])/self.scale-(self.pixelPorterSize[0]/2),(porterLocation[1])/self.scale-(self.pixelPorterSize[1]/2), porterOrientation, self.porter["surface"])
+
             if self.simRunning : 
                 #print "running"
                 if threading.activeCount() == 1 :
@@ -708,13 +728,11 @@ class porterSim() :
                     self.movePorter(e)
                     self.realMovePorter()
                     self.calculatePorterPosition()
-                    self.drawDataMap()
                     self.checkLidar()
                     self.drawLidarGrid()
+                    self.drawDataMap()
+                    self.drawRealDataMap()
                 
-            if self.porterAdded :
-                self.drawPorter(self.views["realmap"]["surface"], self.views["realmap"]["rect"], realPorterLocation[0]-(self.pixelPorterSize[0]/2),realPorterLocation[1]-(self.pixelPorterSize[1]/2), realPorterOrientation, self.porterReal["surface"])
-                self.drawPorter(self.views["portermap"]["surface"], self.views["portermap"]["rect"], (porterLocation[0])/self.scale-(self.pixelPorterSize[0]/2),(porterLocation[1])/self.scale-(self.pixelPorterSize[1]/2), porterOrientation, self.porter["surface"])
             
             if self.simRunning : 
                 self.simClock.tick(self.simFrameRate)
@@ -730,8 +748,12 @@ class porterSim() :
                 exitFlag = False
                 lidarReady = True
                 lidarMap = set()
+                dataMap  = set()
+                realDataMap = set()
                 pathMap  = {}
                 lidarAngles = {}
+                wheelSpeeds = [0,0]
+                speedVector = [0,0]
                     
         
     def stop(self) :
@@ -800,13 +822,19 @@ class porterSim() :
         global porterOrientation
         global porterImuOrientation
         global wheelSpeeds
+        global threadLock
+        global dataMap
         
         if not realCollision :
             if wheelSpeeds != [0,0] :                
                 leftDelta  = self.simFrameTime * wheelSpeeds[0]
                 rightDelta = self.simFrameTime * wheelSpeeds[1]
                 orientation = math.radians(porterOrientation - 90)
-                x,y = porterLocation
+                orientation = math.radians(realPorterOrientation - 90)
+                x   = porterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)
+                y   = porterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)
+                with threadLock :
+                    dataMap.add((int(x),int(y)))
 
                 if (math.fabs(leftDelta - rightDelta) < 1.0e-6) : # basically going straight
                     new_x = x + leftDelta * math.cos(orientation);
@@ -821,7 +849,7 @@ class porterSim() :
                     new_heading = orientation + wd/ self.scale;
                 
                 with threadLock :
-                    porterLocation = (new_x,new_y)
+                    porterLocation = (new_x + realPorterWheelOffsetY*math.cos(orientation),new_y + realPorterWheelOffsetY*math.sin(orientation))
                     porterOrientation = (math.degrees(new_heading) + 90)*0.5 + porterImuOrientation*0.5
                     porterOrientation = self.constrainAngle360(porterOrientation, 180, -180)
 
@@ -1251,7 +1279,15 @@ class navigationThread(simThreadBase):
         global lidarMap
         global lidarAngles
         global lidarRun
+        global dataMap
+        global realDataMap
         
+        with threadLock :
+            dataMap = set()
+            realDataMap = set()
+            speedVector = [0,0]
+            wheelSpeeds = [0,0]
+
         # Things you may want to do
         # with threadLock :
         #   speedVector = [50,100]
