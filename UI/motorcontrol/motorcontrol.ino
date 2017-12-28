@@ -1,5 +1,7 @@
 #include <Servo.h>
 
+//Code written by 2016-2017 group. Slightly modified for 2017-2018 group as new encoders were used. 
+
 // Pin assignments
 const byte leftSensorPin_I  = 2;
 const byte rightSensorPin_I = 3;
