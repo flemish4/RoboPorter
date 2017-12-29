@@ -34,6 +34,9 @@ global realPorterSize
 global realPorterRadius
 global dataMap
 global realDataMap
+global wheelError
+
+wheelError          = 0
 manControl          = False    
 dataMap             = set()
 realDataMap         = set()
@@ -621,7 +624,22 @@ class porterSim() :
                     speedVector[0]=0
                     speedVector[1]=0
                     
-                manControl = True
+                manControl = True    
+
+                
+    def adjustError (self,e) :
+        global wheelError
+        global threadLock
+        if e.type == pygame.KEYDOWN:
+            with threadLock :
+                if e.key == pygame.K_UP:
+                    wheelError+=1
+                elif e.key == pygame.K_DOWN:
+                    wheelError-=1
+                elif e.key == pygame.K_e:
+                    wheelError=0
+        
+            print(wheelError)
                 
     def realMovePorter(self) :
         # May not need all of these
@@ -632,14 +650,13 @@ class porterSim() :
         global wheelSpeeds
         global exitFlag
         global threadLock
-        global movePorter
         global manControl
         global realPorterWheelOffsetY
         global realDataMap
         
         if not realCollision :
             if (speedVector != [0,0]) or manControl :
-                realWheelSpeeds = (speedVector[0]*(1 +(self.wheelSpeedError*(0.5-random.random())))/self.scale, speedVector[1]*(1 + (self.wheelSpeedError*(0.5-random.random())))/self.scale)
+                realWheelSpeeds = (wheelError + speedVector[0]*(1 +(self.wheelSpeedError*(0.5-random.random())))/self.scale, speedVector[1]*(1 + (self.wheelSpeedError*(0.5-random.random())))/self.scale)
                 
                 leftDelta  = self.simFrameTime * realWheelSpeeds[0]
                 rightDelta = self.simFrameTime * realWheelSpeeds[1]
@@ -683,7 +700,8 @@ class porterSim() :
             else :
                 with threadLock :
                     wheelsSpeeds = [0,0]
-
+                    realWheelSpeeds = [0,0]
+                    
 
 
                     
@@ -726,6 +744,7 @@ class porterSim() :
                     exitFlag = True
                 else :
                     self.movePorter(e)
+                    self.adjustError(e)
                     self.realMovePorter()
                     self.calculatePorterPosition()
                     self.checkLidar()
@@ -999,6 +1018,102 @@ class pathMapClass() :
         return self.wallMap
 
 
+# https://github.com/ivmech/ivPID/blob/master/PID.py
+class PID:
+    """PID Controller
+    """
+
+    def __init__(self, P=0.2, I=0.0, D=0.0):
+
+        self.Kp = P
+        self.Ki = I
+        self.Kd = D
+
+        self.sample_time = 0.00
+        self.current_time = time.time()
+        self.last_time = self.current_time
+
+        self.clear()
+
+    def clear(self):
+        """Clears PID computations and coefficients"""
+        self.SetPoint = 0.0
+
+        self.PTerm = 0.0
+        self.ITerm = 0.0
+        self.DTerm = 0.0
+        self.last_error = 0.0
+
+        # Windup Guard
+        self.int_error = 0.0
+        self.windup_guard = 20.0
+
+        self.output = 0.0
+
+    def update(self, feedback_value):
+        """Calculates PID value for given reference feedback
+        .. math::
+            u(t) = K_p e(t) + K_i \int_{0}^{t} e(t)dt + K_d {de}/{dt}
+        .. figure:: images/pid_1.png
+           :align:   center
+           Test PID with Kp=1.2, Ki=1, Kd=0.001 (test_pid.py)
+        """
+        error = self.SetPoint - feedback_value
+
+        self.current_time = time.time()
+        delta_time = self.current_time - self.last_time
+        delta_error = error - self.last_error
+
+        if (delta_time >= self.sample_time):
+            self.PTerm = self.Kp * error
+            self.ITerm += error * delta_time
+
+            if (self.ITerm < -self.windup_guard):
+                self.ITerm = -self.windup_guard
+            elif (self.ITerm > self.windup_guard):
+                self.ITerm = self.windup_guard
+
+            self.DTerm = 0.0
+            if delta_time > 0:
+                self.DTerm = delta_error / delta_time
+
+            # Remember last time and last error for next calculation
+            self.last_time = self.current_time
+            self.last_error = error
+
+            self.output = self.PTerm + (self.Ki * self.ITerm) + (self.Kd * self.DTerm)
+            return self.output
+
+    def setKp(self, proportional_gain):
+        """Determines how aggressively the PID reacts to the current error with setting Proportional Gain"""
+        self.Kp = proportional_gain
+
+    def setKi(self, integral_gain):
+        """Determines how aggressively the PID reacts to the current error with setting Integral Gain"""
+        self.Ki = integral_gain
+
+    def setKd(self, derivative_gain):
+        """Determines how aggressively the PID reacts to the current error with setting Derivative Gain"""
+        self.Kd = derivative_gain
+
+    def setWindup(self, windup):
+        """Integral windup, also known as integrator windup or reset windup,
+        refers to the situation in a PID feedback controller where
+        a large change in setpoint occurs (say a positive change)
+        and the integral terms accumulates a significant error
+        during the rise (windup), thus overshooting and continuing
+        to increase as this accumulated error is unwound
+        (offset by errors in the other direction).
+        The specific problem is the excess overshooting.
+        """
+        self.windup_guard = windup
+
+    def setSampleTime(self, sample_time):
+        """PID that should be updated at a regular interval.
+        Based on a pre-determined sampe time, the PID decides if it should compute or return immediately.
+        """
+        self.sample_time = sample_time
+
                     
 class simThreadBase(MultiThreadBase) :
     
@@ -1058,9 +1173,61 @@ class simThreadBase(MultiThreadBase) :
         while (not lidarReady) and (not exitFlag):
             time.sleep(0.1)
 
+    def getMaxSpeeds(self) :
+        return [50,50]
+        # REVISIT : STUB
         
-                
-                
+        
+    def moveStraight(self, distance) :
+        global porterLocation
+        global porterOrientation
+        global speedVector
+        global exitFlag
+        global threadLock
+        
+        origLocation = porterLocation
+        desOrientation = porterOrientation
+        desLocation = [porterLocation[0] - distance * math.cos(math.radians(desOrientation)),
+                             porterLocation[1] - distance * math.sin(math.radians(desOrientation))]
+                             
+        dirX = 1 if desLocation[0] > origLocation[0] else -1
+        dirY = 1 if desLocation[1] > origLocation[1] else -1
+        
+        # acceleration ?
+        # max speed ?
+        # final speed?
+        
+        # speed will be the max speed as defined by safe limits and acceleration limits
+        # this speed is not critical so will have no control loop
+        # orientation is critical as any error will severely affect navigation
+        # A PID loop will be used to adjust the speedVector to keep the orientation consistent
+        orientationPID = PID(0.5, 0.5, 0)
+        orientationPID.SetPoint=desOrientation
+        orientationPID.setSampleTime(0.01)
+        # maintain porterOrientation whilst moving
+        atDest = False 
+        atObstacle = False
+        orientationAdjust = 0
+        prevOrientationAdjust = 9999999
+        while (not atDest) and (not atObstacle) and (not exitFlag):
+            time.sleep(0.01)
+            maxSpeeds = self.getMaxSpeeds()
+            orientationAdjust = orientationPID.update(porterOrientation)
+            if (orientationAdjust != None) and (abs(orientationAdjust - prevOrientationAdjust)>0.0001) :
+                with threadLock :
+                    speedVector = [0.9*(1-orientationAdjust)*maxSpeeds[0],0.9*(1+orientationAdjust)*maxSpeeds[1]]
+                    print(porterOrientation)
+                    
+            # until at destination                
+            if (porterLocation[0]*dirX>desLocation[0]) or (porterLocation[1]*dirY>desLocation[1]) :
+                atDest = True
+
+        with threadLock :
+            speedVector = [0,0]
+        return atDest
+        
+        
+        
 class mappingThread(simThreadBase):
 
     def run(self):   
@@ -1288,6 +1455,8 @@ class navigationThread(simThreadBase):
             speedVector = [0,0]
             wheelSpeeds = [0,0]
 
+            
+        self.moveStraight(1)
         # Things you may want to do
         # with threadLock :
         #   speedVector = [50,100]
