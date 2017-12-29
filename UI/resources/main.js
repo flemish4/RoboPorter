@@ -10,7 +10,8 @@ $(document).ready(function(){
     })
     $("#noconnection").hide();
     $("#noconnection-modal").modal("show");
-
+    $("#change_password_warning").hide() ;
+    $("#change_password_success").hide() ;
 
     var timearray = [] ; 
     var s = new WebSocket("ws://192.168.1.2:5555");
@@ -30,7 +31,6 @@ $(document).ready(function(){
     var wh_ratio ; 
     var new_height ; 
     
-
     setTimeout(() => { // Manages the connection timeout modal. After 22 seconds it fades in an alert saying no connection is available
         $("#connecting").fadeOut(1000, function(){
             $('#noconnection').fadeIn(1000) ;
@@ -51,8 +51,6 @@ $(document).ready(function(){
         $.each(data, function(i,j){
             $("#debugdata").append("<br>"+i+":"+j)
         })
-
-
     }
         
     $('div[id^="div-"]').hide();
@@ -62,7 +60,7 @@ $(document).ready(function(){
 
     // When the new user form is submited. Run this function:
     $("#new_user").submit(function(e){
-        e.preventDefault(); // Prevents any default form running from happening
+        e.preventDefault(); // Prevents any default form functions from happening
         if(!$("#current_password_input").val()){
             $("#new_user_warning").fadeOut();  
             $("#new_user_warning").html("Please complete all the form fields") ;
@@ -109,6 +107,50 @@ $(document).ready(function(){
             })
         }  
     });
+
+    $("#change_pass").submit(function(e){
+        $("#change_password_success").hide() ;
+        e.preventDefault(); // Prevents any default form functions from happening
+        if(!$("#current_password_change").val()){
+            $("#change_password_warning").fadeOut();  
+            $("#change_password_warning").html("Please complete all the form fields") ;
+            $("#change_password_warning").fadeIn();
+            
+        }else if(!$("#new_password_change").val()){
+            $("#change_password_warning").fadeOut();
+            $("#change_password_warning").html("Please complete all the form fields") ;
+            $("#change_password_warning").fadeIn();
+        }else if($("#new_password_change").val() != $("#new_password_change2").val()){
+            $("#change_password_warning").fadeOut();
+            $("#change_password_warning").html("Passwords Do Not Match") ;
+            $("#change_password_warning").fadeIn();
+
+        }     
+        else{
+            var data = {
+                'password' : $("#current_password_change").val(),   
+                'newpass' : $("#new_password_change").val() ,
+                }
+            $.ajax({
+                type:'POST',
+                url:'php/changepass.php',
+                data: data ,
+        
+            }).done(function(msg){
+                if(msg == "success"){
+                    $("#change_password_warning").hide() ;
+                    $("#change_password_success").fadeIn()
+                }
+                else if(msg =="password_incorrect"){
+                    $("#change_password_warning").hide()
+                    
+                    $("#change_password_warning").html("Current Password Incorrect") ;
+                    $("#change_password_warning").fadeIn();
+                }
+                else{alert('An error occured --> '+msg)};
+            }) ;
+        }
+    }) ;
 
     $('#left-btn').click(function(){
         s.send("l")
@@ -184,8 +226,7 @@ $(document).ready(function(){
                 };
                 imageObj.src = 'php/map_generation.php';
             }) ;
-        
-
+      
     $("#mapdiv").click(function(e){
         context2.clearRect(0,0,div_width,new_height) ;
         var offset = $(this).parent().offset() ;
@@ -216,7 +257,6 @@ $(document).ready(function(){
             alert("Please click a location on the Map")
         }
     }) ; 
-
 
     $("#link-debug").click(function(){
         $('div[id^="div-"]').hide();

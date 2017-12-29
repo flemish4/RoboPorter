@@ -150,13 +150,16 @@
 												<div class="col-6">
 													<div class="card" id="new_user_card">
 														<div class="card-body">
-															<form id="new_user">
+															<form id="change_pass" action="#">
 																<div class="form-group">
 																	<h5 class="card-title">Change Password</h5>
 																	<h6 class="card-subtitle">Change Current Password</h6>
-																	<input type="password" class="form-control" placeholder="Confirm Current Password" style="margin-top:1vh;">
-																	<input type="password" class="form-control" placeholder="Enter New Password" style="margin-top:1vh;">
-																	<input type="submit" value="Create New User" class="btn btn-primary" style="margin-top:1vh;">
+																	<input type="password" class="form-control" placeholder="Confirm Current Password" style="margin-top:1vh;" id="current_password_change">
+																	<input type="password" class="form-control" placeholder="Enter New Password" style="margin-top:1vh;" id="new_password_change">
+																	<input type="password" class="form-control" placeholder="Re-Enter New Password" style="margin-top:1vh;" id="new_password_change2">
+																	<input type="submit" value="Change Password" class="btn btn-primary" style="margin-top:1vh;">
+																	<div class="alert alert-danger" id="change_password_warning" style="margin-top:2vh;"></div>
+																	<div class="alert alert-success" id="change_password_success" style="margin-top:2vh;">Success!!</div>
 																</div>
 															</form>
 														</div>

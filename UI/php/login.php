@@ -10,7 +10,7 @@ $connection = mysqli_connect($database_host,$dbuser,$dbpassword,$database) ;
 $username = $_POST['username'] ; 
 $password = $_POST['password'] ; 
 
-$query = "SELECT ID FROM users WHERE Username = '$username' AND Password = '$password'" ; 
+$query = "SELECT * FROM users WHERE Username = '$username'" ; 
 
 $information = mysqli_query($connection, $query) or die(mysqli_error($connection));
 
@@ -18,7 +18,7 @@ $row = mysqli_fetch_array($information,MYSQLI_ASSOC);
 
 $numrows = mysqli_num_rows($information);
 
-if($numrows == 1){
+if($numrows == 1 && password_verify($password,$row["Password"])){
     echo "loggedin";
     $_SESSION["loggedin"] = $username;
 }
