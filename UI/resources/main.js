@@ -1,13 +1,5 @@
 $(document).ready(function(){
 
-    $.ajax({
-        type:'POST',
-        url:'php/check.php',
-
-    }).done(function(msg){
-        if(msg != "loggedin"){ 
-            window.location = "login/"} ;
-    })
     $("#noconnection").hide();
     $("#noconnection-modal").modal("show");
     $("#change_password_warning").hide() ;
@@ -192,7 +184,9 @@ $(document).ready(function(){
         $('a[id^="link-"]').removeClass("active");
         $("#div-home").show();
         $(this).addClass("active");
-        $('#navbarNav').toggle("collapse");
+        if($(window).width() < 991){ // if window width less than 991, ie the menu is shrank, collapse the menu item
+            $('#navbarNav').toggle("collapse");
+        }
     }) ;
 
     $("#link-control").click(function(){
@@ -200,7 +194,9 @@ $(document).ready(function(){
         $('a[id^="link-"]').removeClass("active");
         $("#div-control").show();
         $(this).addClass("active");
-        $('#navbarNav').toggle("collapse");
+        if($(window).width() < 991){
+            $('#navbarNav').toggle("collapse");
+        }
     }) ;
 
     $("#link-nav").click(function(){
@@ -208,7 +204,9 @@ $(document).ready(function(){
                 $('a[id^="link-"]').removeClass("active");
                 $("#div-nav").show();
                 $(this).addClass("active");
-                $('#navbarNav').toggle("collapse");
+                if($(window).width() < 991){
+                    $('#navbarNav').toggle("collapse");
+                }
                 imageObj.onload = function() {
                     div_width = $('#mapdiv').width() ; 
                     canvas1.width = div_width ; 
@@ -263,7 +261,9 @@ $(document).ready(function(){
         $('a[id^="link-"]').removeClass("active");
         $("#div-debug").show();
         $(this).addClass("active");
-        $('#navbarNav').toggle("collapse");
+        if($(window).width() < 991){
+            $('#navbarNav').toggle("collapse");
+        }
     }) ;
 
     $("#link-status").click(function(){
@@ -271,12 +271,17 @@ $(document).ready(function(){
         $('a[id^="link-"]').removeClass("active");
         $("#div-status").show();
         $(this).addClass("active");
-        $('#navbarNav').toggle("collapse");
+        if($(window).width() < 991){
+            $('#navbarNav').toggle("collapse");
+        }
     }) ;
 
     $("#link-settings").click(function(){
         $("#settings-modal").modal("show") ;
-        $('#navbarNav').toggle("collapse");
+        if($(window).width() < 991){
+            $('#navbarNav').toggle("collapse");
+        }
+        
     });
 
 });

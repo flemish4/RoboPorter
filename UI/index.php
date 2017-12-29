@@ -1,3 +1,10 @@
+<?php
+session_start() ; 
+if(!isset($_SESSION['loggedin'])){
+	header("Location: login/");
+};
+?>
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -22,22 +29,26 @@
 
 	<body>
 	<div class="container">
+		<!-- Navbar -->
 		<nav class="navbar navbar-expand-md navbar-dark bg-dark" style="width:100% ;">
-			<a class="navbar-brand" href="#">Roboporter</a>
+			<a class="navbar-brand abs" href="#">Roboporter</a>
 			<button class="navbar-toggler" type="button"  id="navbar-toggle-id">
 				<span class="navbar-toggler-icon"></span>
 			</button>
 			<div class="collapse navbar-collapse" id="navbarNav">
-				<div class="navbar-nav">
-					<a class="nav-item nav-link active" href="#" id="link-home">Home<span class="sr-only">(current)</span></a>
-					<a class="nav-item nav-link" href="#" id="link-control">Control</a>
-					<a class="nav-item nav-link" href="#" id="link-nav">Navigation</a>
+				<ul class="nav navbar-nav navbar-left">
+					<li><a class="nav-item nav-link active" href="#" id="link-home">Home<span class="sr-only">(current)</span></a></li>
+					<li><a class="nav-item nav-link" href="#" id="link-control">Control</a></li>
+					<li><a class="nav-item nav-link" href="#" id="link-nav">Navigation</a></li>
 					<!-- <a class="nav-item nav-link" href="#" id="link-map">Mapping</a> -->
-					<a class="nav-item nav-link" href="#" id="link-debug">Debug</a>
-					<a class="nav-item nav-link" href="#" id="link-status">Status</a>
-					<a class="nav-item nav-link" href="#" id="link-settings">Settings</a>
-					<a class="nav-item nav-link ml-auto" href="php/logout.php">Sign Out</a>
-				</div>
+					<li><a class="nav-item nav-link" href="#" id="link-debug">Debug</a></li>
+					<li><a class="nav-item nav-link" href="#" id="link-status">Status</a></li>
+					<li><a class="nav-item nav-link" href="#" id="link-settings">Settings</a></li>
+				</ul>
+				<ul class="nav navbar-nav ml-auto">
+					<?php echo '<li><a class="nav-item nav-link" href="#">Hello '.ucfirst($_SESSION['loggedin']).'</a></li>' ?>
+					<li><a class="nav-item nav-link" href="php/logout.php">Sign Out</a></li>
+				</ul>
 			</div>
 		</nav>
 
@@ -97,6 +108,7 @@
 				</div>
 			</div>
 		</div>
+
 		<!-- Settings Modal -->
 		<div class="modal fade" id="settings-modal" data-backdrop="static">
 			<div class="modal-dialog modal-lg">
@@ -185,13 +197,13 @@
 			</div>
 		</div>
 
-		
-		<!-- Content Divs Below -->
 
+		<!-- Content Divs Below -->
 		<!-- Home Screen Div -->
 		<div id="div-home">
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Home</h2></div></div>
 		</div>
+
 		<!-- Control Screen Div -->
 		<div id="div-control">
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Control</h2></div></div>
@@ -240,6 +252,7 @@
 				</div>
 			</div>
 		</div>
+		
 		<!-- Navigation and mapping Div -->
 		<div id="div-nav">
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Navigation</h2></div></div>
@@ -276,16 +289,17 @@
 				
 			</div>
 		</div>
+
 		<!-- Debug Div -->
 		<div id="div-debug">
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Debug</h2></div></div>	
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center" id="debugdata"></div></div>	
 		</div>
+
 		<!-- Status Div -->
 		<div id="div-status">
-				<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Status</h2></div></div>	
+			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Status</h2></div></div>	
 		</div>
-
 	</div>
 	</body>
 </html>
