@@ -940,6 +940,13 @@ class pathMapClass() :
             i -= max
         while i < min :
             i += max
+            
+        # REVISIT : solution above is dumb but I'm not changing to below until I can test it
+        # if i >= max :
+            # return max -1
+        # if i < min :
+            # return min
+            
         return i    
         
     def roundBase(self, x, base):
@@ -953,9 +960,12 @@ class pathMapClass() :
         return numRange
     
     def constrainAngle360(self, angle, max, min) :
+        print("Angle: " + str(angle))
         while angle >= max :
+            print("reducing")
             angle -= 360
         while angle < min :
+            print("increasing")
             angle += 360
         return angle
         
@@ -1177,6 +1187,7 @@ class simThreadBase(MultiThreadBase) :
         while (not lidarReady) and (not exitFlag):
             time.sleep(0.1)
 
+    # REVISIT : this will need modification and mods elsewhere as this is not how it usually works
     def getMaxSpeeds(self) :
         return [50,50]
         # REVISIT : STUB
@@ -1214,10 +1225,6 @@ class simThreadBase(MultiThreadBase) :
             if (orientationAdjust != None) and (abs(orientationAdjust - prevOrientationAdjust)>0.0001) :
                 with threadLock :
                     speedVector = [0.9*(1-orientationAdjust)*maxSpeeds[0],0.9*(1+orientationAdjust)*maxSpeeds[1]]
-            #print("Orig loc: " + str(origLocation) + ", Des  loc: " + str(desLocation))
-            #print("XY: " + str(porterLocation))
-            #print("dX:" + str(abs(desLocation[0]-porterLocation[0])))
-            #print("dY:" + str(abs(desLocation[1]-porterLocation[1])))
             distSq = (porterLocation[0]-origLocation[0])**2 + (porterLocation[1]-origLocation[1])**2
 
             # until at destination                
@@ -1227,7 +1234,68 @@ class simThreadBase(MultiThreadBase) :
         # final speed is the previous speed this must be dealt with later
         return atDest
         
+    # Positive angles will turn the robot clockwise and vice versa
+    # Type controls the point which remains still during the turn
+    def moveTurn(self, angle, type) :
+        global threadLock
+        global porterOrientation
+        global speedVector
         
+        origOrientation = porterOrientation
+        maxSpeeds = self.getMaxSpeeds()
+        sign = 1 if angle > 0 else -1
+        
+        if angle > 0 :        
+            # Calculate final porterOrientation
+            desOrientation = self.constrainAngle360(porterOrientation+angle,origOrientation+720,origOrientation)
+        else :
+            # Calculate final porterOrientation
+            desOrientation = self.constrainAngle360(porterOrientation+angle,origOrientation+1,origOrientation-720)
+
+        if type == "onWheel" :
+            if angle > 0 :        
+                # Turning clockwise therefore right wheel is still
+                with threadLock : 
+                    speedVector = [0, maxSpeeds[1]]
+            else :
+                # Turning anti clockwise therefore left wheel is still
+                with threadLock : 
+                    speedVector = [maxSpeeds[0],0]
+            
+        
+        if type == "onCentre" :
+            # Even speed from each wheel but opposite
+            with threadLock : 
+                speedVector = [maxSpeeds[0]*sign*-1,maxSpeeds[1]*sign]
+        
+        #if type == "onRadius" :
+        #    pass
+        
+        # Wait for angle to have been turned
+        totalTurn = 0
+        prevOrientation = origOrientation
+        done = False
+        while (not exitFlag) and (not done) :
+            rot = porterOrientation - prevOrientation
+            prevOrientation = porterOrientation
+            if angle > 0 :
+                # Must be turning clockwise
+                if rot < 0 :
+                    rot +=360
+                totalTurn += rot
+                if totalTurn >= angle :
+                    done = True
+            else :
+                # Must be turning anticlockwise
+                if rot > 0 :
+                    rot -=360
+                totalTurn += rot
+                if totalTurn <= angle :
+                    done = True
+                    
+            time.sleep(0.005)
+            
+        return done
         
 class mappingThread(simThreadBase):
 
@@ -1457,7 +1525,14 @@ class navigationThread(simThreadBase):
             wheelSpeeds = [0,0]
 
             
-        self.moveStraight(500)
+        #self.moveStraight(1)
+        self.moveTurn(97, "onCentre")
+        self.moveStraight(50)
+        self.moveTurn(-30, "onCentre")
+        self.moveStraight(10)
+        self.moveTurn(180, "onCentre")
+        self.moveStraight(100)
+        
         # Things you may want to do
         with threadLock :
           speedVector = [0,0]
