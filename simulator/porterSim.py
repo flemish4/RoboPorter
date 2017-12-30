@@ -633,9 +633,9 @@ class porterSim() :
         if e.type == pygame.KEYDOWN:
             with threadLock :
                 if e.key == pygame.K_UP:
-                    wheelError+=1
+                    wheelError+=5
                 elif e.key == pygame.K_DOWN:
-                    wheelError-=1
+                    wheelError-=5
                 elif e.key == pygame.K_e:
                     wheelError=0
         
@@ -699,7 +699,7 @@ class porterSim() :
                 manControl = False
             else :
                 with threadLock :
-                    wheelsSpeeds = [0,0]
+                    wheelSpeeds = [0,0]
                     realWheelSpeeds = [0,0]
                     
 
@@ -1059,6 +1059,10 @@ class PID:
            Test PID with Kp=1.2, Ki=1, Kd=0.001 (test_pid.py)
         """
         error = self.SetPoint - feedback_value
+        if error < 180 :
+            error = error
+        else :
+            error = error - 360
 
         self.current_time = time.time()
         delta_time = self.current_time - self.last_time
@@ -1177,7 +1181,8 @@ class simThreadBase(MultiThreadBase) :
         return [50,50]
         # REVISIT : STUB
         
-        
+    # Maintains the orientation using a PID loop and moves a distance in that direction
+    # REVISIT : Could add adjustment to heading if off course
     def moveStraight(self, distance) :
         global porterLocation
         global porterOrientation
@@ -1187,22 +1192,14 @@ class simThreadBase(MultiThreadBase) :
         
         origLocation = porterLocation
         desOrientation = porterOrientation
-        desLocation = [porterLocation[0] - distance * math.cos(math.radians(desOrientation)),
-                             porterLocation[1] - distance * math.sin(math.radians(desOrientation))]
-                             
-        dirX = 1 if desLocation[0] > origLocation[0] else -1
-        dirY = 1 if desLocation[1] > origLocation[1] else -1
-        
-        # acceleration ?
-        # max speed ?
-        # final speed?
-        
-        # speed will be the max speed as defined by safe limits and acceleration limits
-        # this speed is not critical so will have no control loop
+        desLocation = [porterLocation[0] - distance * math.cos(math.radians(desOrientation+90)),
+                             porterLocation[1] - distance * math.sin(math.radians(desOrientation+90))]
+
         # orientation is critical as any error will severely affect navigation
         # A PID loop will be used to adjust the speedVector to keep the orientation consistent
-        orientationPID = PID(0.5, 0.5, 0)
-        orientationPID.SetPoint=desOrientation
+        # Stop when within Xcm of final destination OR when travelled distance
+        orientationPID = PID(0.01, 0.01, 0)
+        orientationPID.SetPoint=0
         orientationPID.setSampleTime(0.01)
         # maintain porterOrientation whilst moving
         atDest = False 
@@ -1212,18 +1209,22 @@ class simThreadBase(MultiThreadBase) :
         while (not atDest) and (not atObstacle) and (not exitFlag):
             time.sleep(0.01)
             maxSpeeds = self.getMaxSpeeds()
-            orientationAdjust = orientationPID.update(porterOrientation)
+            print(porterOrientation-desOrientation)
+            orientationAdjust = orientationPID.update(porterOrientation-desOrientation)
             if (orientationAdjust != None) and (abs(orientationAdjust - prevOrientationAdjust)>0.0001) :
                 with threadLock :
                     speedVector = [0.9*(1-orientationAdjust)*maxSpeeds[0],0.9*(1+orientationAdjust)*maxSpeeds[1]]
-                    print(porterOrientation)
-                    
-            # until at destination                
-            if (porterLocation[0]*dirX>desLocation[0]) or (porterLocation[1]*dirY>desLocation[1]) :
-                atDest = True
+            #print("Orig loc: " + str(origLocation) + ", Des  loc: " + str(desLocation))
+            #print("XY: " + str(porterLocation))
+            #print("dX:" + str(abs(desLocation[0]-porterLocation[0])))
+            #print("dY:" + str(abs(desLocation[1]-porterLocation[1])))
+            distSq = (porterLocation[0]-origLocation[0])**2 + (porterLocation[1]-origLocation[1])**2
 
-        with threadLock :
-            speedVector = [0,0]
+            # until at destination                
+            if ((abs(desLocation[0]-porterLocation[0])<5) and (abs(desLocation[1]-porterLocation[1])<5)) or (distSq >= distance**2) :
+                atDest = True
+                
+        # final speed is the previous speed this must be dealt with later
         return atDest
         
         
@@ -1456,10 +1457,10 @@ class navigationThread(simThreadBase):
             wheelSpeeds = [0,0]
 
             
-        self.moveStraight(1)
+        self.moveStraight(500)
         # Things you may want to do
-        # with threadLock :
-        #   speedVector = [50,100]
+        with threadLock :
+          speedVector = [0,0]
         #   if lidarReady :
         #       lidarRun = "a"  
         while not exitFlag :
