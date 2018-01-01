@@ -528,12 +528,14 @@ class porterSim() :
     
     def drawDataMap(self) :
         global dataMap
+        global threadLock
         with threadLock :
             for point in dataMap :
                 pygame.draw.circle(self.views["portermap"]["surface"], (255,0,0), (point[0]/self.scale,point[1]/self.scale), 1)
     
     def drawRealDataMap(self) :
         global realDataMap
+        global threadLock
         with threadLock :
             for point in realDataMap :
                 pygame.draw.circle(self.views["realmap"]["surface"], (0,0,255), (point[0],point[1]), 2)
@@ -884,7 +886,8 @@ class pathMapClass() :
         self.stdWeight               = 1
         self.cornerPenaltyWeight     = 1
         self.cornerAngleWeight       = 1
-        self.angleOffsetLookup       =  {   0 : [0,-1],
+        self.angleOffsetLookup       =  {   
+                                            0 : [0,-1],
                                             1 : [1,1],
                                             2 : [1,0],
                                             3 : [1,1],
@@ -893,6 +896,16 @@ class pathMapClass() :
                                             6 : [-1,0],
                                             7 : [-1,-1],
                                         }
+        self.angleWeight       =    {         
+                                        0 : 0,
+                                        1 : 1,
+                                        2 : 2,
+                                        3 : 3,
+                                        4 : 4,
+                                        5 : 3,
+                                        6 : 2,
+                                        7 : 1,
+                                    }
                                         
         # Find map limits
         self.pathMapLimits = {   "xMin" : 0,
@@ -968,28 +981,40 @@ class pathMapClass() :
             print("increasing")
             angle += 360
         return angle
-        
-    def getEdges(self, id, dest) :
+    
+    
+    def getNeighbors(self, id, dest) :
         edges = {}
         x = id[0]
         y = id[1]
         a = id[2]
         # Add link to next node
-        nx = x + self.angleOffsetLookup[a][0]
-        ny = y + self.angleOffsetLookup[a][1]
-        dist = ( dest[0] - nx )**2 + ( dest[1] - ny )**2
+        # Calc the new cell location
+        nx = x + self.angleOffsetLookup[a][0]*self.mapGridResolution
+        ny = y + self.angleOffsetLookup[a][1]*self.mapGridResolution
+        # Calc distance to goal
+        dist = math.sqrt(( dest[0] - nx )**2 + ( dest[1] - ny )**2)
+        # Calc distance between the two cells (weight)
+        weight = math.sqrt(( x - nx )**2 + ( y - ny )**2)
         # Check that cell in current directiom is not wall
         if not ((nx,ny) in self.wallMap) :
-            edges[(nx, ny, self.constrainInt(a+4,8,0))] = { "weight" : dist }
+            # REVISIT : why did I make it turn 180 when moving forwards.....?
+            # edges[(nx, ny, self.constrainInt(a+4,8,0))] = { "weight"     : weight,
+                                                            # "distToGoal" : dist}            
+            edges[(nx, ny, a)] = {  "weight"     : weight,
+                                    "distToGoal" : dist}
         # Add links to same node at different angles
-        dist = ( x - dest[0] )**2 + ( y - dest[1] )**2
+        # Distance from this square to the destination
+        dist = math.sqrt(( x - dest[0] )**2 + ( y - dest[1] )**2)
         for aLink in range(0,8) :
             if aLink != a :
-                self.printVars({"weight" : dist + self.cornerPenaltyWeight + abs(aLink-a)*self.cornerAngleWeight,
-                                "dist"   : dist,
-                                "cornerP": self.cornerPenaltyWeight,
-                                "t3"     : abs(aLink-a)*self.cornerAngleWeight}, "edgeTest")
-                edges[(x,y,aLink)] = { "weight" : dist + self.cornerPenaltyWeight + abs(aLink-a)*self.cornerAngleWeight }
+                #self.printVars({"weight"        : self.cornerPenaltyWeight + abs(aLink-a)*self.cornerAngleWeight,
+                #                "distToGoal"    : dist,
+                #                "cornerP"       : self.cornerPenaltyWeight,
+                #                "t3"            : abs(aLink-a)*self.cornerAngleWeight}, "edgeTest")
+                
+                edges[(x,y,aLink)] = { "weight" : self.cornerPenaltyWeight + self.angleWeight[abs(aLink-a)]*self.cornerAngleWeight,
+                                       "distToGoal" : dist, }
 
         return edges
         
@@ -1189,7 +1214,7 @@ class simThreadBase(MultiThreadBase) :
 
     # REVISIT : this will need modification and mods elsewhere as this is not how it usually works
     def getMaxSpeeds(self) :
-        return [50,50]
+        return [100,100]
         # REVISIT : STUB
         
     # Maintains the orientation using a PID loop and moves a distance in that direction
@@ -1209,7 +1234,7 @@ class simThreadBase(MultiThreadBase) :
         # orientation is critical as any error will severely affect navigation
         # A PID loop will be used to adjust the speedVector to keep the orientation consistent
         # Stop when within Xcm of final destination OR when travelled distance
-        orientationPID = PID(0.01, 0.01, 0)
+        orientationPID = PID(0.05, 0.05, 0)
         orientationPID.SetPoint=0
         orientationPID.setSampleTime(0.01)
         # maintain porterOrientation whilst moving
@@ -1220,11 +1245,12 @@ class simThreadBase(MultiThreadBase) :
         while (not atDest) and (not atObstacle) and (not exitFlag):
             time.sleep(0.01)
             maxSpeeds = self.getMaxSpeeds()
+            speed = min(maxSpeeds)
             print(porterOrientation-desOrientation)
             orientationAdjust = orientationPID.update(porterOrientation-desOrientation)
             if (orientationAdjust != None) and (abs(orientationAdjust - prevOrientationAdjust)>0.0001) :
                 with threadLock :
-                    speedVector = [0.9*(1-orientationAdjust)*maxSpeeds[0],0.9*(1+orientationAdjust)*maxSpeeds[1]]
+                    speedVector = [0.9*(1-orientationAdjust)*speed,0.9*(1+orientationAdjust)*speed]
             distSq = (porterLocation[0]-origLocation[0])**2 + (porterLocation[1]-origLocation[1])**2
 
             # until at destination                
@@ -1297,6 +1323,113 @@ class simThreadBase(MultiThreadBase) :
             
         return done
         
+    
+    # Modified from pseudocode on https://en.wikipedia.org/wiki/A*_search_algorithm#Pseudocode
+    def aStar(self, start, goal, map) :
+        global exitFlag
+        global dataMap
+        global threadLock
+        print("start: " + str(start) + ", goal: " + str(goal))
+        
+        with threadLock :
+            dataMap = set()
+        
+        # The set of nodes already evaluated
+        closedSet = set()
+
+        # The set of currently discovered nodes that are not evaluated yet.
+        # Initially, only the start node is known.
+        openSet = set()
+        openSet.add(start)
+
+        # For each node, which node it can most efficiently be reached from.
+        # If a node can be reached from many nodes, cameFrom will eventually contain the
+        # most efficient previous step.
+        cameFrom = {}
+
+        # For each node, the cost of getting from the start node to that node.
+        #map with default value of Infinity
+        gScore = {}
+        
+        # The cost of going from start to start is zero.
+        gScore[start] = 0
+
+        # For each node, the total cost of getting from the start node to the goal
+        # by passing by that node. That value is partly known, partly heuristic.
+        #map with default value of Infinity
+        fScore = {}
+        
+        # For the first node, that value is completely heuristic.
+        # REVISIT : Is this actually used??
+        fScore[start] = math.sqrt(( start[0] - goal[0] )**2 + ( start[1] - goal[1] )**2) # distance to dest #heuristic_cost_estimate(start, goal)
+
+        while (len(openSet) != 0) and (not exitFlag) :
+            # current = the node in openSet having the lowest fScore[] value
+            current = None
+            for node in openSet :
+                f = fScore[node]
+                print("openSet n: " + str(node) + ", f: " + str(f))
+                if current == None :
+                    current = node 
+                    print("new")
+                elif f < fScore[current] :
+                    current = node
+                    print("updated")
+                                
+            print("Current node: " + str(current))
+            dx = current[0] - goal[0]
+            dy = current[1] - goal[1]
+            if (dx < 10) and (dy <10) :
+                return self.reconstruct_path(cameFrom, current)
+
+            openSet.discard(current)
+            closedSet.add(current)
+            with threadLock :
+                dataMap = set()
+                for node in closedSet :
+                    dataMap.add((node[0],node[1]))
+                
+            for neighbor, data in map.getNeighbors(current, goal).iteritems() :
+                print("Neighbor: " + str(neighbor))
+                if neighbor in closedSet :
+                    print("Ignoring")
+                    continue # Ignore the neighbor which is already evaluated.
+
+                if not (neighbor in openSet) : # Discover a new node
+                    print("Adding")
+                    openSet.add(neighbor)
+                
+                with threadLock :
+                    dataMap.add((neighbor[0],neighbor[1]))
+                    
+                # The distance from start to a neighbor
+                # the "dist_between" function may vary as per the solution requirements.
+                tentative_gScore = gScore[current] + data["weight"]
+                print("tentative_gScor: " + str(tentative_gScore))
+                if (neighbor in gScore) and (tentative_gScore >= gScore[neighbor]) :
+                    print("Not better")
+                    continue		# This is not a better path.
+                #print("Better")
+                # This path is the best until now. Record it!
+                cameFrom[neighbor] = current
+                gScore[neighbor] = tentative_gScore
+                fScore[neighbor] = gScore[neighbor] + data["distToGoal"] 
+                print("cameFrom: " + str(neighbor) + ", to: " + str(current))
+                print("gScore: " + str(tentative_gScore))
+                print("fScore: " + str(fScore[neighbor]))
+
+        return False
+
+    
+    def reconstruct_path(self,cameFrom, current) :
+        total_path = [current]
+        while current in cameFrom.keys() :
+            current = cameFrom[current]
+            total_path.append(current)
+        return total_path
+    
+    
+    
 class mappingThread(simThreadBase):
 
     def run(self):   
@@ -1526,12 +1659,24 @@ class navigationThread(simThreadBase):
 
             
         #self.moveStraight(1)
-        self.moveTurn(97, "onCentre")
-        self.moveStraight(50)
-        self.moveTurn(-30, "onCentre")
-        self.moveStraight(10)
-        self.moveTurn(180, "onCentre")
-        self.moveStraight(100)
+        # self.moveTurn(97, "onCentre")
+        # self.moveStraight(200)
+        # self.moveTurn(-30, "onCentre")
+        # self.moveStraight(100)
+        # self.moveTurn(180, "onCentre")
+        # self.moveStraight(400)
+        
+        self.getLidar360()
+        # Store lidar data
+        with threadLock :
+            lidarMapStore = lidarMap  
+            
+        # Create pathMap
+        pathMap = pathMapClass(lidarMapStore)
+
+        path = self.aStar((porterLocation[0],porterLocation[1],0), [600,600], pathMap)
+        print(path)
+        
         
         # Things you may want to do
         with threadLock :
