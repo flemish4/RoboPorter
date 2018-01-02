@@ -886,16 +886,15 @@ class pathMapClass() :
         self.stdWeight               = 1
         self.cornerPenaltyWeight     = 1
         self.cornerAngleWeight       = 1
-        self.angleOffsetLookup       =  {   
-                                            0 : [0,-1],
-                                            1 : [1,1],
-                                            2 : [1,0],
-                                            3 : [1,1],
-                                            4 : [0,1],
-                                            5 : [-1,1],
-                                            6 : [-1,0],
-                                            7 : [-1,-1],
-                                        }
+        self.angleOffsetLookup       = { 0 : [0,-1,0],
+                                    1 : [1,1,45],
+                                    2 : [1,0,90],
+                                    3 : [1,1,135],
+                                    4 : [0,1,180],
+                                    5 : [-1,1,225],
+                                    6 : [-1,0,270],
+                                    7 : [-1,-1,315],
+                                  }
         self.angleWeight       =    {         
                                         0 : 0,
                                         1 : 1,
@@ -973,7 +972,6 @@ class pathMapClass() :
         return numRange
     
     def constrainAngle360(self, angle, max, min) :
-        print("Angle: " + str(angle))
         while angle >= max :
             print("reducing")
             angle -= 360
@@ -990,14 +988,16 @@ class pathMapClass() :
         a = id[2]
         # Add link to next node
         # Calc the new cell location
-        nx = x + self.angleOffsetLookup[a][0]*self.mapGridResolution
-        ny = y + self.angleOffsetLookup[a][1]*self.mapGridResolution
+        nx = x + self.angleOffsetLookup[a][0]*self.mapGridResolution*2
+        ny = y + self.angleOffsetLookup[a][1]*self.mapGridResolution*2
         # Calc distance to goal
         dist = math.sqrt(( dest[0] - nx )**2 + ( dest[1] - ny )**2)
         # Calc distance between the two cells (weight)
         weight = math.sqrt(( x - nx )**2 + ( y - ny )**2)
         # Check that cell in current directiom is not wall
-        if not ((nx,ny) in self.wallMap) :
+        #if not ((nx,ny) in self.wallMap) :
+                                     # This angle is equal to a*45
+        if self.checkLine(x, y, dist, self.angleOffsetLookup[a][2]) :
             # REVISIT : why did I make it turn 180 when moving forwards.....?
             # edges[(nx, ny, self.constrainInt(a+4,8,0))] = { "weight"     : weight,
                                                             # "distToGoal" : dist}            
@@ -1013,7 +1013,7 @@ class pathMapClass() :
                 #                "cornerP"       : self.cornerPenaltyWeight,
                 #                "t3"            : abs(aLink-a)*self.cornerAngleWeight}, "edgeTest")
                 
-                edges[(x,y,aLink)] = { "weight" : self.cornerPenaltyWeight + self.angleWeight[abs(aLink-a)]*self.cornerAngleWeight,
+                edges[(x,y,aLink)] = { "weight" : self.cornerPenaltyWeight, # + self.angleWeight[abs(aLink-a)]*self.cornerAngleWeight,
                                        "distToGoal" : dist, }
 
         return edges
@@ -1377,10 +1377,13 @@ class simThreadBase(MultiThreadBase) :
                     print("updated")
                                 
             print("Current node: " + str(current))
-            dx = current[0] - goal[0]
-            dy = current[1] - goal[1]
-            if (dx < 10) and (dy <10) :
-                return self.reconstruct_path(cameFrom, current)
+            dx = abs(current[0] - goal[0])
+            dy = abs(current[1] - goal[1])
+            if (dx < 20) and (dy <20) :
+                path = self.reconstruct_path(cameFrom, current)
+                with threadLock :
+                    dataMap = path
+                return path
 
             openSet.discard(current)
             closedSet.add(current)
@@ -1391,6 +1394,7 @@ class simThreadBase(MultiThreadBase) :
                 
             for neighbor, data in map.getNeighbors(current, goal).iteritems() :
                 print("Neighbor: " + str(neighbor))
+                print("closedSet: " + str(closedSet))
                 if neighbor in closedSet :
                     print("Ignoring")
                     continue # Ignore the neighbor which is already evaluated.
@@ -1409,7 +1413,7 @@ class simThreadBase(MultiThreadBase) :
                 if (neighbor in gScore) and (tentative_gScore >= gScore[neighbor]) :
                     print("Not better")
                     continue		# This is not a better path.
-                #print("Better")
+                print("Better")
                 # This path is the best until now. Record it!
                 cameFrom[neighbor] = current
                 gScore[neighbor] = tentative_gScore
@@ -1477,14 +1481,14 @@ class mappingThread(simThreadBase):
         scanSeparation          = 100 # cm between scan locations
         scanAngleLimit          = 53 # degrees before there should be two points
         scanMinPorterAngle      = math.degrees(2*math.atan(realPorterRadius/(2*scanSeparation))) - 10
-        angleOffsetLookup       = { 0 : [0,-1],
-                                    1 : [1,1],
-                                    2 : [1,0],
-                                    3 : [1,1],
-                                    4 : [0,1],
-                                    5 : [-1,1],
-                                    6 : [-1,0],
-                                    7 : [-1,-1],
+        angleOffsetLookup       = { 0 : [0,-1,0],
+                                    1 : [1,1,45],
+                                    2 : [1,0,90],
+                                    3 : [1,1,135],
+                                    4 : [0,1,180],
+                                    5 : [-1,1,225],
+                                    6 : [-1,0,270],
+                                    7 : [-1,-1,315],
                                   }
         # if lidarReady :
             # with threadLock :
