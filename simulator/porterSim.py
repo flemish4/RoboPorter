@@ -1,6 +1,7 @@
 import sys, pygame
 import time
-import numpy
+import cv2
+import numpy as np
 import pickle
 import glob
 import math
@@ -928,7 +929,7 @@ class pathMapClass() :
         self.pathMapLimits["yMin"] = self.pathMapLimits["yMin"] - realPorterSize[1]*2
         self.pathMapLimits["yMax"] = self.pathMapLimits["yMax"] + realPorterSize[1]*2
                     
-                    
+                    # REVISIT : offset by realPorterSize*2 ??
         with threadLock :
             for point in lidarMapStore :
                 xPoint = self.roundBase(point[0],self.mapGridResolution)
@@ -1171,6 +1172,13 @@ class simThreadBase(MultiThreadBase) :
             angle += 360
         return angle
         
+    def constrainAngle180(self, angle, max, min) :
+        while angle >= max :
+            angle -= 180
+        while angle < min :
+            angle += 180
+        return angle
+        
     def constrainInt(self, i, max, min) :
         while i >= max :
             i -= max
@@ -1216,6 +1224,10 @@ class simThreadBase(MultiThreadBase) :
     def getMaxSpeeds(self) :
         return [100,100]
         # REVISIT : STUB
+        
+    # Returns length of line given in format [x0, y0, x1, y1]
+    def getLength(line) :
+        return math.sqrt((line[2]-line[0])**2+(line[3]-line[1])**2)
         
     # Maintains the orientation using a PID loop and moves a distance in that direction
     # REVISIT : Could add adjustment to heading if off course
@@ -1470,160 +1482,253 @@ class mappingThread(simThreadBase):
         #while (not done) and (not exitFlag) :
         with threadLock :
             dataMap                 = set()
-        pointDistThresh         = 4
-        oldAngleThresh          = 0.174533
-        mapGridResolution       = 10 #cm how far apart are the grid nodes
-        wallSafetyDistance      = realPorterSize[0] / 2
-        wallSafetyGridRadius    = math.ceil(wallSafetyDistance / mapGridResolution)
-        stdWeight               = 1
-        cornerPenaltyWeight     = 1
-        cornerAngleWeight       = 1
-        scanSeparation          = 100 # cm between scan locations
-        scanAngleLimit          = 53 # degrees before there should be two points
-        scanMinPorterAngle      = math.degrees(2*math.atan(realPorterRadius/(2*scanSeparation))) - 10
-        angleOffsetLookup       = { 0 : [0,-1,0],
-                                    1 : [1,1,45],
-                                    2 : [1,0,90],
-                                    3 : [1,1,135],
-                                    4 : [0,1,180],
-                                    5 : [-1,1,225],
-                                    6 : [-1,0,270],
-                                    7 : [-1,-1,315],
-                                  }
-        # if lidarReady :
-            # with threadLock :
-                # lidarRun = "a"
-                # lidarReady = False
-                
-        # while (not lidarReady) and (not exitFlag):
-            # time.sleep(0.1)
         
-
-            
+        # Get lidar data -> lidarMap
         self.getLidar360()
+        
         # Store lidar data
         with threadLock :
             lidarMapStore = lidarMap       
-        # Find exploration locations
-        openLocs    = []
-        closedLocs  = []
-        locBlockMap = set()
-        
-        while not exitFlag : # Repeat until mapping completed
-            # Create pathMap and mapMap
-            pathMap = pathMapClass(lidarMapStore)
-            #mapMapStore = lidarMapStore.copy() # This variable shows all locations that are wall or have already been mapped
-            # Block out areas that have been explored already ( or will be )
-            # for loc in (openLocs + closedLocs[:-1]) : # for every point except the last one completed - so porter isn't blocked in
-                # # Add points surrounding the point
-                # for a in range(0,360,1) :
-                    # x = loc[0] + math.sin(math.radians(a))#scanSeparation*math.sin(math.radians(a))
-                    # y = loc[1] + math.cos(math.radians(a))#scanSeparation*math.cos(math.radians(a))
-                    # mapMapStore.add((x,y))
-                    
-            # Create mapping map object
-            x0 = int(round(porterLocation[0]))
-            y0 = int(round(porterLocation[1]))
-            with threadLock :
-                dataMap = pathMap.getDataMap()  | locBlockMap # REVISIT : This doesn't need the safety bounds that walls do
-                dataMap.discard((x0,y0))
-            mapMap  = pathMapClass(dataMap)
-            # Select location
-            # Look around the porter
-            ranges = []
-            startAngle = None
-            curAngle   = None
-            # Find ranges of angles that do not collide with walls
-            for a in range(0,360,1) :
-                if mapMap.checkLine(x0, y0, scanSeparation + realPorterSize[0]/2, a) :
-                    # If the line is valid
-                    # Check if it is a new range
-                    if startAngle == None :
-                        # Configure new range
-                        startAngle = a
-                        curAngle   = a
-                    else :
-                        # Extend current range
-                        curAngle = a 
-                else :
-                    # If the line is not valid end the current range if there is one
-                    if startAngle != None :
-                        # If a range is ending add it to ranges and clear varaibles
-                        ranges.append((startAngle, curAngle))
-                        startAngle = None
-                        curAngle   = None
-            # If the line is not valid end the current range if there is one
-            if startAngle != None :
-                # If a range is ending add it to ranges and clear varaibles
-                ranges.append((startAngle, curAngle))
-                startAngle = None
-                curAngle   = None
             
-            # Join ranges that start 0 with ranges that end with 359
-            if len(ranges) > 1 :
-                zeroRange = None
-                maxRange  = None
-                for aRange in ranges :
-                    if aRange[0] == 0 :
-                        zeroRange = aRange
-                        break
+        # Find map limits
+        self.pathMapLimits = {   "xMin" : 0,
+                            "xMax" : 0,
+                            "yMin" : 0,
+                            "yMax" : 0,
+                        }
+        with threadLock :
+            for point in lidarMapStore :
+                if point[0] < self.pathMapLimits["xMin"] :
+                    self.pathMapLimits["xMin"] = point[0]
+                if point[0] > self.pathMapLimits["xMax"] :
+                    self.pathMapLimits["xMax"] = point[0]
+                if point[1] < self.pathMapLimits["yMin"] :
+                    self.pathMapLimits["yMin"] = point[1]
+                if point[1] > self.pathMapLimits["yMax"] :
+                    self.pathMapLimits["yMax"] = point[1]
                     
-                if zeroRange != None :
-                    for aRange in ranges :
-                        if aRange[1] == 359 :
-                            maxRange = aRange
-                            break
-                if maxRange != None :
-                    newRange = (aRange[0], zeroRange[1] + 360)
-                    ranges.remove(zeroRange)
-                    ranges.remove(maxRange)
-                    ranges.append(newRange)
-                            
-            for aRange in ranges :
-                span    = aRange[1] - aRange[0]
-                if span < scanMinPorterAngle : # if too small for porter to fit
-                    continue
+        self.pathMapLimits["xMin"] = self.pathMapLimits["xMin"] - realPorterSize[0]*2
+        self.pathMapLimits["xMax"] = self.pathMapLimits["xMax"] + realPorterSize[0]*2
+        self.pathMapLimits["yMin"] = self.pathMapLimits["yMin"] - realPorterSize[1]*2
+        self.pathMapLimits["yMax"] = self.pathMapLimits["yMax"] + realPorterSize[1]*2
+        height = self.pathMapLimits["xMax"] - self.pathMapLimits["xMin"]
+        width = self.pathMapLimits["yMax"] - self.pathMapLimits["yMin"]
+        map = np.zeros((height,width,1), dtype = "uint8")
+        
+        for sample in lidarMap :
+            map.itemset((sample[0] + realPorterSize[0], sample[1] + realPorterSize[1], 0), 255)
+           
+        kernel = np.ones((3,3),np.uint8)
+        map = cv2.dilate(map,kernel,iterations = realPorterSize[0]/2)
+        map = cv2.erode(map,kernel, iterations = realPorterSize[0]*4/8)       
+        cv2.namedWindow("output", cv2.WINDOW_NORMAL)    
+        cv2.imshow('output',map)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()  
+        clearMap = np.zeros(map.shape, np.uint8)
+        #map = cv2.morphologyEx(map, cv2.MORPH_CLOSE, kernel, iterations=realPorterSize[0]/2)
 
-                n = span / scanAngleLimit # CHECK that this is integer MOD division                    
-                if span >= 359 :
-                    incWall = 2 
-                else :
-                    incWall = 1
-                if n < 1 :
-                    n = 1
-                # Divide the range up to be covered by n points
-                split = span/(n+1)
-                for i in range(1,n+incWall) :
-                    a = aRange[0] + split*i
-                    x = int(round(x0 + scanSeparation*math.cos(math.radians(a))))
-                    y = int(round(y0 + scanSeparation*math.sin(math.radians(a))))
-                    openLocs.append((x,y))
-                    locBlockMap.add((x,y))
-            #dataMap = set(openLocs) | set(closedLocs) | dataMap
-            # Check for completed scan
-            # BREAK CONDITION
-            if len(openLocs) < 1 :
-                break
+        map = cv2.Canny(map,200,200)            
+        cv2.namedWindow("output", cv2.WINDOW_NORMAL)    
+        cv2.imshow('output',map)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()  
+        lines = cv2.HoughLinesP(map,rho=1,theta=np.pi/180, threshold=50,lines=np.array([]), minLineLength=10,maxLineGap=80 )
+        a,b,c = lines.shape
+        for i in range(a):
+            cv2.line(map, (lines[i][0][0], lines[i][0][1]), (lines[i][0][2], lines[i][0][3]), 150, 3, cv2.LINE_AA)
+       
+            
+        cv2.namedWindow("output", cv2.WINDOW_NORMAL)    
+        cv2.imshow('output',map)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()  
+ 
+        # Format wall data
+        walls = {}
+        for line in lines :
+            print("Line: " + str(line[0]))
+            walls[(line[0][0],line[0][1],line[0][2],line[0][3])] = { "angle" : self.constrainAngle180(math.atan2(line[0][3] - line[0][1], line[0][2] - line[0][0]) * 180.0 / math.pi,180,0),
+                             }
+
+        print("Walls: " + str(walls))
+        ## Remove overlapping lines
+        for wallA in walls :
+            for wallB in walls :
+                # if the walls are not ~ parallel skip 
+                if (abs(wallA["angle"] - wallB["angle"]) > 2 ) :
+                    continue
+                # Find the longer and shorter walls
+                lenA = math.sqrt((wallA[2]-wall[0])**2+(wallA[3]-wall[1])**2)
+                if 
+        ## Connect up walls where necessary
+        
+        
+        ## Find centres of corridors
+        
+        
+        
+        ## Find corridor intersections
+        
+        
+        
+        # Fix any gaps in paths
+
+        ########## OLD
+        # pointDistThresh         = 4
+        # oldAngleThresh          = 0.174533
+        # mapGridResolution       = 10 #cm how far apart are the grid nodes
+        # wallSafetyDistance      = realPorterSize[0] / 2
+        # wallSafetyGridRadius    = math.ceil(wallSafetyDistance / mapGridResolution)
+        # stdWeight               = 1
+        # cornerPenaltyWeight     = 1
+        # cornerAngleWeight       = 1
+        # scanSeparation          = 100 # cm between scan locations
+        # scanAngleLimit          = 53 # degrees before there should be two points
+        # scanMinPorterAngle      = math.degrees(2*math.atan(realPorterRadius/(2*scanSeparation))) - 10
+        # angleOffsetLookup       = { 0 : [0,-1,0],
+                                    # 1 : [1,1,45],
+                                    # 2 : [1,0,90],
+                                    # 3 : [1,1,135],
+                                    # 4 : [0,1,180],
+                                    # 5 : [-1,1,225],
+                                    # 6 : [-1,0,270],
+                                    # 7 : [-1,-1,315],
+                                  # }
+        # # if lidarReady :
+            # # with threadLock :
+                # # lidarRun = "a"
+                # # lidarReady = False
+                
+        # # while (not lidarReady) and (not exitFlag):
+            # # time.sleep(0.1)
+        
+
+            
+        # self.getLidar360()
+        # # Store lidar data
+        # with threadLock :
+            # lidarMapStore = lidarMap       
+        # # Find exploration locations
+        # openLocs    = []
+        # closedLocs  = []
+        # locBlockMap = set()
+        
+        # while not exitFlag : # Repeat until mapping completed
+            # # Create pathMap and mapMap
+            # pathMap = pathMapClass(lidarMapStore)
+            # #mapMapStore = lidarMapStore.copy() # This variable shows all locations that are wall or have already been mapped
+            # # Block out areas that have been explored already ( or will be )
+            # # for loc in (openLocs + closedLocs[:-1]) : # for every point except the last one completed - so porter isn't blocked in
+                # # # Add points surrounding the point
+                # # for a in range(0,360,1) :
+                    # # x = loc[0] + math.sin(math.radians(a))#scanSeparation*math.sin(math.radians(a))
+                    # # y = loc[1] + math.cos(math.radians(a))#scanSeparation*math.cos(math.radians(a))
+                    # # mapMapStore.add((x,y))
+                    
+            # # Create mapping map object
+            # x0 = int(round(porterLocation[0]))
+            # y0 = int(round(porterLocation[1]))
+            # with threadLock :
+                # dataMap = pathMap.getDataMap()  | locBlockMap # REVISIT : This doesn't need the safety bounds that walls do
+                # dataMap.discard((x0,y0))
+            # mapMap  = pathMapClass(dataMap)
+            # # Select location
+            # # Look around the porter
+            # ranges = []
+            # startAngle = None
+            # curAngle   = None
+            # # Find ranges of angles that do not collide with walls
+            # for a in range(0,360,1) :
+                # if mapMap.checkLine(x0, y0, scanSeparation + realPorterSize[0]/2, a) :
+                    # # If the line is valid
+                    # # Check if it is a new range
+                    # if startAngle == None :
+                        # # Configure new range
+                        # startAngle = a
+                        # curAngle   = a
+                    # else :
+                        # # Extend current range
+                        # curAngle = a 
+                # else :
+                    # # If the line is not valid end the current range if there is one
+                    # if startAngle != None :
+                        # # If a range is ending add it to ranges and clear varaibles
+                        # ranges.append((startAngle, curAngle))
+                        # startAngle = None
+                        # curAngle   = None
+            # # If the line is not valid end the current range if there is one
+            # if startAngle != None :
+                # # If a range is ending add it to ranges and clear varaibles
+                # ranges.append((startAngle, curAngle))
+                # startAngle = None
+                # curAngle   = None
+            
+            # # Join ranges that start 0 with ranges that end with 359
+            # if len(ranges) > 1 :
+                # zeroRange = None
+                # maxRange  = None
+                # for aRange in ranges :
+                    # if aRange[0] == 0 :
+                        # zeroRange = aRange
+                        # break
+                    
+                # if zeroRange != None :
+                    # for aRange in ranges :
+                        # if aRange[1] == 359 :
+                            # maxRange = aRange
+                            # break
+                # if maxRange != None :
+                    # newRange = (aRange[0], zeroRange[1] + 360)
+                    # ranges.remove(zeroRange)
+                    # ranges.remove(maxRange)
+                    # ranges.append(newRange)
+                            
+            # for aRange in ranges :
+                # span    = aRange[1] - aRange[0]
+                # if span < scanMinPorterAngle : # if too small for porter to fit
+                    # continue
+
+                # n = span / scanAngleLimit # CHECK that this is integer MOD division                    
+                # if span >= 359 :
+                    # incWall = 2 
+                # else :
+                    # incWall = 1
+                # if n < 1 :
+                    # n = 1
+                # # Divide the range up to be covered by n points
+                # split = span/(n+1)
+                # for i in range(1,n+incWall) :
+                    # a = aRange[0] + split*i
+                    # x = int(round(x0 + scanSeparation*math.cos(math.radians(a))))
+                    # y = int(round(y0 + scanSeparation*math.sin(math.radians(a))))
+                    # openLocs.append((x,y))
+                    # locBlockMap.add((x,y))
+            # #dataMap = set(openLocs) | set(closedLocs) | dataMap
+            # # Check for completed scan
+            # # BREAK CONDITION
+            # if len(openLocs) < 1 :
+                # break
         
             
-            # Navigate to location A* or until stopped by obstacle
-            curLoc = openLocs.pop(-1) # Get the newest point
-            # Move to that location
-            # MAJOR CHEAT FOR TESTING ONLY REVISIT THIS
-            porterLocation      = curLoc
-            realPorterLocation  = [n/2 for n in porterLocation]
-            # Add to completed locs
-            closedLocs.append(curLoc)
-            # Rescan 
-            self.getLidar360()
-            # Add lidar data ICP
-            # Store lidar data
-            # ALSO MAJOR CHEAT THIS SHOULD USE point cloud stuff REVISIT
-            with threadLock :
-                lidarMapStore = lidarMapStore | lidarMap   
+            # # Navigate to location A* or until stopped by obstacle
+            # curLoc = openLocs.pop(-1) # Get the newest point
+            # # Move to that location
+            # # MAJOR CHEAT FOR TESTING ONLY REVISIT THIS
+            # porterLocation      = curLoc
+            # realPorterLocation  = [n/2 for n in porterLocation]
+            # # Add to completed locs
+            # closedLocs.append(curLoc)
+            # # Rescan 
+            # self.getLidar360()
+            # # Add lidar data ICP
+            # # Store lidar data
+            # # ALSO MAJOR CHEAT THIS SHOULD USE point cloud stuff REVISIT
+            # with threadLock :
+                # lidarMapStore = lidarMapStore | lidarMap   
         
-            #time.sleep(0.5)
-        
+            # #time.sleep(0.5)
+        #### /OLD
         while not exitFlag :
             time.sleep(0.1)
         print "done"
