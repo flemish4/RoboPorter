@@ -71,6 +71,74 @@ realPorterOrientation = 0
 realObstruction         = False
 realCollision         = False
 
+def getRange(x,y) : # Library export
+    if x > y :
+        numRange = reversed(range(int(y), int(x)+1))
+    else :
+        numRange = range(int(x), int(y)+1)
+    return numRange
+
+
+# def rotate(self, origin, point, angle): # Library export
+    # """
+    # Rotate a point counterclockwise by a given angle around a given origin.
+
+    # The angle should be given in radians.
+    # """
+    # ox, oy = origin
+    # px, py = point
+
+    # qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
+    # qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
+    # return int(round(qx)), int(round(qy))
+
+
+def constrainAngle360(angle, max, min) : # Library export
+    while angle >= max :
+        angle -= 360
+    while angle < min :
+        angle += 360
+    return angle
+    
+    
+def constrainInt(i, max, min) :
+    while i >= max :
+        i -= max
+    while i < min :
+        i += max
+        
+    # REVISIT : solution above is dumb but I'm not changing to below until I can test it
+    # if i >= max :
+        # return max -1
+    # if i < min :
+        # return min
+        
+    return i
+
+    
+def constrainAngle180(angle, max, min) :
+    while angle >= max :
+        angle -= 180
+    while angle < min :
+        angle += 180
+    return angle
+    
+    
+def roundBase(x, base):
+    return int(base * round(float(x)/base))
+     
+     
+def printVars(vars, title="") :
+    oStr = title + "::: "
+    for name, data in vars.iteritems() :
+        oStr += str(name) + ": " + str(data) + ", "
+        
+    print oStr
+    
+    
+# Returns length of line given in format [x0, y0, x1, y1]
+def getLength(line) :
+    return math.sqrt((line[2]-line[0])**2+(line[3]-line[1])**2)
 
 class MultiThreadBase(threading.Thread): #Parent class for threading
     def __init__(self, threadID, name): #Class constructor
@@ -164,7 +232,7 @@ class porterSim() :
         self.screen.fill(self.black)
         self.createViews()
         self.createMenuButtons()
-        
+    
 
     def createMenuButtons(self) :
         # Create menu
@@ -409,35 +477,7 @@ class porterSim() :
         obstruction = realObstruction
     
         return realObstruction
-    
-    def getRange(self,x,y) : # Library export
-        if x > y :
-            numRange = reversed(range(int(y), int(x)+1))
-        else :
-            numRange = range(int(x), int(y)+1)
-        return numRange
-    
-    def rotate(self, origin, point, angle): # Library export
-        """
-        Rotate a point counterclockwise by a given angle around a given origin.
 
-        The angle should be given in radians.
-        """
-        ox, oy = origin
-        px, py = point
-
-        qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
-        qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
-        return int(round(qx)), int(round(qy))
-
-    
-    def constrainAngle360(self, angle, max, min) : # Library export
-        while angle >= max :
-            angle -= 360
-        while angle < min :
-            angle += 360
-        return angle
-    
     
     def getLidarSample(self, angle) : 
         # Sets lidarAngles{angle} to the distance of the nearest collision at that angle relative to the porterOrientation
@@ -453,7 +493,7 @@ class porterSim() :
         x0 = int(round(realPorterLocation[0]))
         y0 = int(round(realPorterLocation[1]))
         # Absolute angle
-        a    = self.constrainAngle360(realPorterOrientation + angle - 90, 360,0)
+        a    = constrainAngle360(realPorterOrientation + angle - 90, 360,0)
         # End points of line 
         xMax = x0 + int(round(self.longestR*math.cos(math.radians(a))))
         yMax = y0 + int(round(self.longestR*math.sin(math.radians(a))))
@@ -470,8 +510,8 @@ class porterSim() :
               
         # Calculate location relative to porter (not realPorter)
         startPos = (porterLocation[0], porterLocation[1])
-        r = math.sqrt((point[0]-x0)**2+(point[1]-y0)**2)*self.scale
-        porterAbsAngle = self.constrainAngle360(porterOrientation -90 + angle, 360, 0)
+        r = getLength([point[0],point[1],x0,y0])*self.scale # math.sqrt((point[0]-x0)**2+(point[1]-y0)**2)*self.scale
+        porterAbsAngle = constrainAngle360(porterOrientation -90 + angle, 360, 0)
         endPos = (int(round(startPos[0] + r*math.cos(math.radians(porterAbsAngle)))), int(round(startPos[1] + r*math.sin(math.radians(porterAbsAngle)))))
         
         if r <4000 :  # If within 40m which it definitely will be...
@@ -687,7 +727,7 @@ class porterSim() :
                     realPorterLocation = (new_x + realPorterWheelOffsetY*math.cos(orientation)/self.scale,new_y + realPorterWheelOffsetY*math.sin(orientation)/self.scale)
                     #realPorterLocation = (new_x,new_y)
                     wheelSpeeds = (realWheelSpeeds[0]*(1 +(self.encoderError*(0.5-random.random())))*self.scale, realWheelSpeeds[1]*(1 + (self.encoderError*(0.5-random.random())))*self.scale)
-                    realPorterOrientation = self.constrainAngle360(realPorterOrientation, 180, -180)
+                    realPorterOrientation = constrainAngle360(realPorterOrientation, 180, -180)
                     
                 #collision detection
                 if self.checkPorterObstruction() :
@@ -873,7 +913,7 @@ class porterSim() :
                 with threadLock :
                     porterLocation = (new_x + realPorterWheelOffsetY*math.cos(orientation),new_y + realPorterWheelOffsetY*math.sin(orientation))
                     porterOrientation = (math.degrees(new_heading) + 90)*0.5 + porterImuOrientation*0.5
-                    porterOrientation = self.constrainAngle360(porterOrientation, 180, -180)
+                    porterOrientation = constrainAngle360(porterOrientation, 180, -180)
 
 
 
@@ -932,55 +972,13 @@ class pathMapClass() :
                     # REVISIT : offset by realPorterSize*2 ??
         with threadLock :
             for point in lidarMapStore :
-                xPoint = self.roundBase(point[0],self.mapGridResolution)
-                yPoint = self.roundBase(point[1],self.mapGridResolution)
-                for x in self.getRange(point[0] - self.wallSafetyGridRadius , point[0] + self.wallSafetyGridRadius) :
-                    for y in self.getRange(point[1] - self.wallSafetyGridRadius , point[1] + self.wallSafetyGridRadius) :
+                xPoint = roundBase(point[0],self.mapGridResolution)
+                yPoint = roundBase(point[1],self.mapGridResolution)
+                for x in getRange(point[0] - self.wallSafetyGridRadius , point[0] + self.wallSafetyGridRadius) :
+                    for y in getRange(point[1] - self.wallSafetyGridRadius , point[1] + self.wallSafetyGridRadius) :
                         
-                        self.wallMap.add((self.roundBase(x,self.mapGridResolution),self.roundBase(y,self.mapGridResolution)))
+                        self.wallMap.add((roundBase(x,self.mapGridResolution),roundBase(y,self.mapGridResolution)))
 
-        
-    def printVars(self, vars, title="") :
-        oStr = title + "::: "
-        for name, data in vars.iteritems() :
-            oStr += str(name) + ": " + str(data) + ", "
-            
-        print oStr
-        
-        
-    def constrainInt(self, i, max, min) :
-        while i >= max :
-            i -= max
-        while i < min :
-            i += max
-            
-        # REVISIT : solution above is dumb but I'm not changing to below until I can test it
-        # if i >= max :
-            # return max -1
-        # if i < min :
-            # return min
-            
-        return i    
-        
-    def roundBase(self, x, base):
-        return int(base * round(float(x)/base))
-        
-    def getRange(self,x,y) :
-        if x > y :
-            numRange = reversed(range(int(y), int(x)+1))
-        else :
-            numRange = range(int(x), int(y)+1)
-        return numRange
-    
-    def constrainAngle360(self, angle, max, min) :
-        while angle >= max :
-            print("reducing")
-            angle -= 360
-        while angle < min :
-            print("increasing")
-            angle += 360
-        return angle
-    
     
     def getNeighbors(self, id, dest) :
         edges = {}
@@ -992,24 +990,24 @@ class pathMapClass() :
         nx = x + self.angleOffsetLookup[a][0]*self.mapGridResolution*2
         ny = y + self.angleOffsetLookup[a][1]*self.mapGridResolution*2
         # Calc distance to goal
-        dist = math.sqrt(( dest[0] - nx )**2 + ( dest[1] - ny )**2)
+        dist = getLength(dest+[nx,ny]) # math.sqrt(( dest[0] - nx )**2 + ( dest[1] - ny )**2)
         # Calc distance between the two cells (weight)
-        weight = math.sqrt(( x - nx )**2 + ( y - ny )**2)
+        weight = getLength([x,y,nx,ny]) #math.sqrt(( x - nx )**2 + ( y - ny )**2)
         # Check that cell in current directiom is not wall
         #if not ((nx,ny) in self.wallMap) :
                                      # This angle is equal to a*45
         if self.checkLine(x, y, dist, self.angleOffsetLookup[a][2]) :
             # REVISIT : why did I make it turn 180 when moving forwards.....?
-            # edges[(nx, ny, self.constrainInt(a+4,8,0))] = { "weight"     : weight,
+            # edges[(nx, ny, constrainInt(a+4,8,0))] = { "weight"     : weight,
                                                             # "distToGoal" : dist}            
             edges[(nx, ny, a)] = {  "weight"     : weight,
                                     "distToGoal" : dist}
         # Add links to same node at different angles
         # Distance from this square to the destination
-        dist = math.sqrt(( x - dest[0] )**2 + ( y - dest[1] )**2)
+        dist = getLength([x,y]+dest) # math.sqrt(( x - dest[0] )**2 + ( y - dest[1] )**2)
         for aLink in range(0,8) :
             if aLink != a :
-                #self.printVars({"weight"        : self.cornerPenaltyWeight + abs(aLink-a)*self.cornerAngleWeight,
+                #printVars({"weight"        : self.cornerPenaltyWeight + abs(aLink-a)*self.cornerAngleWeight,
                 #                "distToGoal"    : dist,
                 #                "cornerP"       : self.cornerPenaltyWeight,
                 #                "t3"            : abs(aLink-a)*self.cornerAngleWeight}, "edgeTest")
@@ -1032,13 +1030,13 @@ class pathMapClass() :
         # Generate a list of points on line going from centre of porter out at angle given
         linePoints = list()
         # Absolute angle
-        a = self.constrainAngle360(angle, 360,0)
+        a = constrainAngle360(angle, 360,0)
         # End points of line 
         xMax = x0 + int(round(dist*math.cos(math.radians(a))))
         yMax = y0 + int(round(dist*math.sin(math.radians(a))))
         # List of points along line
         linePoints = list(bresenham(x0,y0,xMax, yMax))
-        linePoints = [(self.roundBase(point[0],self.mapGridResolution),self.roundBase(point[1],self.mapGridResolution)) for point in linePoints]
+        linePoints = [(roundBase(point[0],self.mapGridResolution),roundBase(point[1],self.mapGridResolution)) for point in linePoints]
         linePoints = set(linePoints)
 
         # Find collision location
@@ -1164,44 +1162,7 @@ class simThreadBase(MultiThreadBase) :
         self.simFrameTime = simFrameTime
         self.scale = scale
         self.pixelPorterSize = pixelPorterSize
-
-    def constrainAngle360(self, angle, max, min) :
-        while angle >= max :
-            angle -= 360
-        while angle < min :
-            angle += 360
-        return angle
         
-    def constrainAngle180(self, angle, max, min) :
-        while angle >= max :
-            angle -= 180
-        while angle < min :
-            angle += 180
-        return angle
-        
-    def constrainInt(self, i, max, min) :
-        while i >= max :
-            i -= max
-        while i < min :
-            i += max
-        return i
-        
-    def roundBase(self, x, base):
-        return int(base * round(float(x)/base))
-        
-    def getRange(self,x,y) :
-        if x > y :
-            numRange = reversed(range(int(y), int(x)+1))
-        else :
-            numRange = range(int(x), int(y)+1)
-        return numRange
-        
-    def printVars(self, vars, title="") :
-        oStr = title + "::: "
-        for name, data in vars.iteritems() :
-            oStr += str(name) + ": " + str(data) + ", "
-            
-        print oStr
         
     def getLidar360(self) :
         global lidarReady
@@ -1224,10 +1185,7 @@ class simThreadBase(MultiThreadBase) :
     def getMaxSpeeds(self) :
         return [100,100]
         # REVISIT : STUB
-        
-    # Returns length of line given in format [x0, y0, x1, y1]
-    def getLength(line) :
-        return math.sqrt((line[2]-line[0])**2+(line[3]-line[1])**2)
+
         
     # Maintains the orientation using a PID loop and moves a distance in that direction
     # REVISIT : Could add adjustment to heading if off course
@@ -1285,10 +1243,10 @@ class simThreadBase(MultiThreadBase) :
         
         if angle > 0 :        
             # Calculate final porterOrientation
-            desOrientation = self.constrainAngle360(porterOrientation+angle,origOrientation+720,origOrientation)
+            desOrientation = constrainAngle360(porterOrientation+angle,origOrientation+720,origOrientation)
         else :
             # Calculate final porterOrientation
-            desOrientation = self.constrainAngle360(porterOrientation+angle,origOrientation+1,origOrientation-720)
+            desOrientation = constrainAngle360(porterOrientation+angle,origOrientation+1,origOrientation-720)
 
         if type == "onWheel" :
             if angle > 0 :        
@@ -1373,7 +1331,7 @@ class simThreadBase(MultiThreadBase) :
         
         # For the first node, that value is completely heuristic.
         # REVISIT : Is this actually used??
-        fScore[start] = math.sqrt(( start[0] - goal[0] )**2 + ( start[1] - goal[1] )**2) # distance to dest #heuristic_cost_estimate(start, goal)
+        fScore[start] = getLength(list(start)+list(goal)) #math.sqrt(( start[0] - goal[0] )**2 + ( start[1] - goal[1] )**2) # distance to dest #heuristic_cost_estimate(start, goal)
 
         while (len(openSet) != 0) and (not exitFlag) :
             # current = the node in openSet having the lowest fScore[] value
@@ -1548,7 +1506,7 @@ class mappingThread(simThreadBase):
         walls = {}
         for line in lines :
             print("Line: " + str(line[0]))
-            walls[(line[0][0],line[0][1],line[0][2],line[0][3])] = { "angle" : self.constrainAngle180(math.atan2(line[0][3] - line[0][1], line[0][2] - line[0][0]) * 180.0 / math.pi,180,0),
+            walls[(line[0][0],line[0][1],line[0][2],line[0][3])] = { "angle" : constrainAngle180(math.atan2(line[0][3] - line[0][1], line[0][2] - line[0][0]) * 180.0 / math.pi,180,0),
                              }
 
         print("Walls: " + str(walls))
@@ -1556,11 +1514,18 @@ class mappingThread(simThreadBase):
         for wallA in walls :
             for wallB in walls :
                 # if the walls are not ~ parallel skip 
-                if (abs(wallA["angle"] - wallB["angle"]) > 2 ) :
+                if (abs(walls[wallA]["angle"] - walls[wallB]["angle"]) > 2 ) :
                     continue
                 # Find the longer and shorter walls
-                lenA = math.sqrt((wallA[2]-wall[0])**2+(wallA[3]-wall[1])**2)
-                if 
+                lenA = getLength(wallA)
+                lenB = getLength(wallB)
+                if lenA >= lenB :
+                    longWall = wallA
+                    shortWall = wallB
+                else :
+                    longWall = wallB
+                    shortWall = wallA
+                # If the 
         ## Connect up walls where necessary
         
         
