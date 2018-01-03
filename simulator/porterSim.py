@@ -73,9 +73,9 @@ realCollision         = False
 
 def getRange(x,y) : # Library export
     if x > y :
-        numRange = reversed(range(int(y), int(x)+1))
+        numRange = reversed(range(int(round(y)), int(round(x)+1)))
     else :
-        numRange = range(int(x), int(y)+1)
+        numRange = range(int(round(x)), int(round(y)+1))
     return numRange
 
 
@@ -200,19 +200,19 @@ class porterSim() :
                                                 }
                             }
         for name, view in self.views.iteritems():
-            view["absSize"] = (int(view["relSize"][0]*self.winX),int(view["relSize"][1]*self.winY))
-            view["absPos"]  = (int(view["relPos"][0]*self.winX),int(view["relPos"][1]*self.winY))
+            view["absSize"] = (int(round(view["relSize"][0]*self.winX)),int(round(view["relSize"][1]*self.winY)))
+            view["absPos"]  = (int(round(view["relPos"][0]*self.winX)),int(round(view["relPos"][1]*self.winY)))
 
         self.tileRealW          = 20 # Real tile width(=height) in cm
         self.tileW              = self.tileRealW / self.scale # tile size in pixels, 2 pixels per square
-        self.nTileX             = int(math.floor(self.views["realmap"]["absSize"][0]/self.tileW)) # number of tiles in x
-        self.nTileY             = int(math.floor(self.views["realmap"]["absSize"][1]/self.tileW)) # number of tiles in y
+        self.nTileX             = int(round(math.floor(self.views["realmap"]["absSize"][0]/self.tileW))) # number of tiles in x
+        self.nTileY             = int(round(math.floor(self.views["realmap"]["absSize"][1]/self.tileW))) # number of tiles in y
         self.tilePorterSize     = (self.pixelPorterSize[0]/self.tileW,self.pixelPorterSize[1]/self.tileW)
         self.longestR           = math.sqrt((self.nTileX*self.tileW)**2+(self.nTileY*self.tileW)**2) # Length of a line that will always cover the whole map for lidar use
         self.runMode            = ""
         self.nextRunMode        = ""
         self.lidarRpm           = 1 # This is approximate as per the calculation of self.lidarNSamples
-        self.lidarNSamples      = int(math.ceil(360*self.lidarRpm*self.simFrameTime)) # This calculates the number of lidar samples to be taken each frame - it rounds up so the realRPM will be slightly higher than given 
+        self.lidarNSamples      = int(round(math.ceil(360*self.lidarRpm*self.simFrameTime))) # This calculates the number of lidar samples to be taken each frame - it rounds up so the realRPM will be slightly higher than given 
         self.porterAdded        = False # Has the porter been placed at the start of simRun
         self.simRunning         = False # Is the simulation running
         self.draw_on            = 0 # Is drawing enabled in mapBuilder
@@ -236,15 +236,15 @@ class porterSim() :
 
     def createMenuButtons(self) :
         # Create menu
-        self.menuButtons = {    "mapBuilder" :  {"button" : Button(self.screen, self.font, "mapBuilder", (100,0,0), 0, 0, 100, int(0.05*self.winY)),
+        self.menuButtons = {    "mapBuilder" :  {"button" : Button(self.screen, self.font, "mapBuilder", (100,0,0), 0, 0, 100, int(round(0.05*self.winY))),
                                                 },
-                                "selectmap"  :  {"button" : Button(self.screen, self.font, "selectmap", (0,100,0), 100, 0, 100, int(0.05*self.winY)),
+                                "selectmap"  :  {"button" : Button(self.screen, self.font, "selectmap", (0,100,0), 100, 0, 100, int(round(0.05*self.winY))),
                                                 },
-                                "runMapSim"  :  {"button" : Button(self.screen, self.font, "runMapSim", (0,0,100), 200, 0, 100, int(0.05*self.winY)),
+                                "runMapSim"  :  {"button" : Button(self.screen, self.font, "runMapSim", (0,0,100), 200, 0, 100, int(round(0.05*self.winY))),
                                                 },
-                                "runNavSim"  :  {"button" : Button(self.screen, self.font, "runNavSim", (0,100,100), 300, 0, 100, int(0.05*self.winY)),
+                                "runNavSim"  :  {"button" : Button(self.screen, self.font, "runNavSim", (0,100,100), 300, 0, 100, int(round(0.05*self.winY))),
                                                 },
-                                "stop"       :  {"button" : Button(self.screen, self.font, "stop", (255,0,0), 400, 0, 100, int(0.05*self.winY)),
+                                "stop"       :  {"button" : Button(self.screen, self.font, "stop", (255,0,0), 400, 0, 100, int(round(0.05*self.winY))),
                                                 },
                             }
           
@@ -379,7 +379,7 @@ class porterSim() :
         self.menuButtons = {}
         n = len(options)
         for i,option in enumerate(options)  :
-            self.menuButtons[option] = {"button" : Button(self.screen, self.font, option, (255*i/n,255-(255*i/n),255+(100*-i/n)), i*150, 0, 150, int(0.05*self.winY)) }
+            self.menuButtons[option] = {"button" : Button(self.screen, self.font, option, (255*i/n,255-(255*i/n),255+(100*-i/n)), i*150, 0, 150, int(round(0.05*self.winY))) }
         
         pygame.display.flip()  
         done = False
@@ -542,7 +542,7 @@ class porterSim() :
                 lidarAngles = {}
                 lidarMap    = set()
             try :
-                angle = int(lidarRun[1:])
+                angle = int(round(lidarRun[1:]))
                 self.getLidarSample(angle)
             except TypeError:
                 pass
@@ -707,7 +707,7 @@ class porterSim() :
                 x   = realPorterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)/self.scale
                 y   = realPorterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)/self.scale
                 with threadLock :
-                    realDataMap.add((int(x),int(y)))
+                    realDataMap.add((int(round(x)),int(round(y))))
                 o = realPorterOrientation # save state incase collision
                 if (math.fabs(leftDelta - rightDelta) < 1.0e-6) : # basically going straight
                     new_x = x + leftDelta * math.cos(orientation);
@@ -896,7 +896,7 @@ class porterSim() :
                 x   = porterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)
                 y   = porterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)
                 with threadLock :
-                    dataMap.add((int(x),int(y)))
+                    dataMap.add((int(round(x),int(y))))
 
                 if (math.fabs(leftDelta - rightDelta) < 1.0e-6) : # basically going straight
                     new_x = x + leftDelta * math.cos(orientation);
@@ -1473,8 +1473,9 @@ class mappingThread(simThreadBase):
         width = self.pathMapLimits["yMax"] - self.pathMapLimits["yMin"]
         map = np.zeros((height,width,1), dtype = "uint8")
         
-        for sample in lidarMap :
-            map.itemset((sample[0] + realPorterSize[0], sample[1] + realPorterSize[1], 0), 255)
+        with threadLock: 
+            for sample in lidarMap :
+                map.itemset((sample[0] + realPorterSize[0], sample[1] + realPorterSize[1], 0), 255)
            
         kernel = np.ones((3,3),np.uint8)
         map = cv2.dilate(map,kernel,iterations = realPorterSize[0]/2)
@@ -1483,7 +1484,8 @@ class mappingThread(simThreadBase):
         cv2.imshow('output',map)
         cv2.waitKey(0)
         cv2.destroyAllWindows()  
-        clearMap = np.zeros(map.shape, np.uint8)
+        clearMap1 = np.zeros(map.shape, np.uint8)
+        clearMap2 = np.zeros(map.shape, np.uint8)
         #map = cv2.morphologyEx(map, cv2.MORPH_CLOSE, kernel, iterations=realPorterSize[0]/2)
 
         map = cv2.Canny(map,200,200)            
@@ -1492,40 +1494,140 @@ class mappingThread(simThreadBase):
         cv2.waitKey(0)
         cv2.destroyAllWindows()  
         lines = cv2.HoughLinesP(map,rho=1,theta=np.pi/180, threshold=50,lines=np.array([]), minLineLength=10,maxLineGap=80 )
-        a,b,c = lines.shape
-        for i in range(a):
-            cv2.line(map, (lines[i][0][0], lines[i][0][1]), (lines[i][0][2], lines[i][0][3]), 150, 3, cv2.LINE_AA)
-       
+        # a,b,c = lines.shape
+        # for i in range(a):
+            # c1 = (lines[i][0][0], lines[i][0][1])
+            # c2 = (lines[i][0][2], lines[i][0][3])
+            # cv2.line(clearMap1, c1, c2, 150, 3, cv2.LINE_AA)
             
-        cv2.namedWindow("output", cv2.WINDOW_NORMAL)    
-        cv2.imshow('output',map)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()  
+
  
         # Format wall data
         walls = {}
         for line in lines :
-            print("Line: " + str(line[0]))
             walls[(line[0][0],line[0][1],line[0][2],line[0][3])] = { "angle" : constrainAngle180(math.atan2(line[0][3] - line[0][1], line[0][2] - line[0][0]) * 180.0 / math.pi,180,0),
                              }
 
+      
+        for wall in walls : 
+            cv2.line(clearMap1, (int(round(wall[0])),int(round(wall[1]))), (int(round(wall[2])),int(round(wall[3]))), random.randint(20,255), 1, cv2.LINE_AA)
         print("Walls: " + str(walls))
         ## Remove overlapping lines
-        for wallA in walls :
-            for wallB in walls :
-                # if the walls are not ~ parallel skip 
-                if (abs(walls[wallA]["angle"] - walls[wallB]["angle"]) > 2 ) :
-                    continue
-                # Find the longer and shorter walls
-                lenA = getLength(wallA)
-                lenB = getLength(wallB)
-                if lenA >= lenB :
-                    longWall = wallA
-                    shortWall = wallB
-                else :
-                    longWall = wallB
-                    shortWall = wallA
-                # If the 
+        newWalls = {}
+        oldWalls = set()
+        changes = False
+        while True :
+            for wallA in walls :
+                for wallB in walls :
+                    print("#######################START")
+                    print("A: " + str(wallA) + "-a: " + str(walls[wallA]["angle"]) + ", to: " + str(wallB) + "-a: " + str(walls[wallB]["angle"]))
+                    ## do not compare wall with its self
+                    if wallA == wallB :
+                        print("Skipping - same")
+                        continue
+                    ## if the walls are not ~ parallel skip
+                    dA0 = abs(walls[wallA]["angle"] - walls[wallB]["angle"])
+                    dA1 = abs(walls[wallA]["angle"] - walls[wallB]["angle"] - 180)
+                    dA2 = abs(walls[wallA]["angle"] - walls[wallB]["angle"] + 180)
+                    if ( dA0 > 2 ) and ( dA1 > 2 ) and ( dA2 > 2 ):
+                        print("Skipping - not parallel")
+                        continue
+                    ## Find the longer and shorter walls
+                    lenA = getLength(wallA)
+                    lenB = getLength(wallB)
+                    if lenA >= lenB :
+                        longWall = wallA
+                        shortWall = wallB
+                    else :
+                        longWall = wallB
+                        shortWall = wallA
+                    print("Long: " + str(longWall) + ", short: " + str(shortWall))
+                    ## if the walls are not  close enough together - skip
+                    # Calculate distance between walls
+                    a = walls[longWall]["angle"]
+                    ar = math.radians(a)
+                    if a != 90 :
+                        # Solve y=mx+c twice and sub into abs(d-c)/sqrt(m**2+1) https://en.wikipedia.org/wiki/Distance_between_two_straight_lines
+                        m = math.tan(ar)
+                        dist = (longWall[1]-shortWall[1]+m*(shortWall[0]-longWall[0]))/math.sqrt(m**2+1)
+                    else : # lines are vertical - dist is just difference in x0
+                        dist = ((longWall[0]+longWall[2])-(shortWall[0]+shortWall[2]))/2
+                    if abs(dist) > 3 : # REVISIT : this number is adjustible depending on lidar results
+                        continue # lines are not close enough to remove or merge
+
+                    ## Translate the shorter wall to overlap the longer wall perfectly
+                    shiftedShortWall = (int(round(shortWall[0]+dist*math.sin(ar))),int(round(shortWall[1]+dist*math.cos(ar))),
+                               int(round(shortWall[2]+dist*math.sin(ar))),int(round(shortWall[3]+dist*math.cos(ar))))
+                    print("dist: " + str(dist))
+                    print("angl: " + str(a))
+                    print("longWall:  " + str(longWall))
+                    print("shortWall: " + str(shortWall))
+                    print("shshtWall: " + str(shiftedShortWall))
+                    ## Find the max ends and merge the walls
+                    # If wall is not vertical - check min max X values to find longest wall
+                    # Init
+                    min = (longWall[0],longWall[1])
+                    max = (longWall[0],longWall[1])
+                    coords = [tuple(longWall[2:]),tuple(shiftedShortWall[:2]),tuple(shiftedShortWall[2:])]
+                    print("coords: " + str(coords))
+                    # If not vertical - check for x values
+                    if a != 90 :   
+                        # Check for max in min values in the other three coords
+                        for coord in coords :
+                            if coord[0] < min[0] :
+                                min = coord
+                            if coord[0] > max[0] :
+                                max = coord
+                    else :                           
+                        # Check for max in min values in the other three coords
+                        for coord in coords :
+                            if coord[1] < min[1] :
+                                min = coord
+                            if coord[1] > max[1] :
+                                max = coord
+                    
+                    # Construct new wall segment from max and min coords
+                    #print("min: " + str(min))
+                    #print("max: " + str(max))
+                    newWall = (int(round(min[0])),int(round(min[1])),int(round(max[0])),int(round(max[1])))
+                    # If the new wall is different to the longWall - remove old walls and create new
+                    if newWall != longWall :
+                        print("newWallll:" + str(newWall))
+                        newWalls[newWall] = {"angle" : a }
+                        oldWalls.add(longWall)
+                    # At this point the short wall should be removed regardless of any change to the larger wall    
+                    oldWalls.add(shortWall)
+                    break
+                        
+                
+                # If changes need to be made, break the loop, make the changes then start again
+                if len(oldWalls) > 0 :
+                    break
+                    
+            if len(oldWalls) > 0 :
+                #print("walls: " + str(walls))
+                #print("old: " + str(oldWalls))
+                #print("new: " + str(newWalls))
+                # Remove old walls and add new
+                for oldWall in oldWalls :
+                    walls.pop(oldWall)
+                walls.update(newWalls)
+                oldWalls = set()
+                newWalls = {}
+            else :
+                # No new walls - must be complete
+                break
+        
+        print("Walls: " + str(walls))
+        for wall in walls : 
+            cv2.line(clearMap2, tuple(wall[:2]), tuple(wall[2:]), 150, 3, cv2.LINE_AA)
+            
+        cv2.namedWindow("output1", cv2.WINDOW_NORMAL)    
+        cv2.imshow('output1',clearMap1)            
+        cv2.namedWindow("output2", cv2.WINDOW_NORMAL)    
+        cv2.imshow('output2',clearMap2)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()                
         ## Connect up walls where necessary
         
         
