@@ -1,9 +1,9 @@
-<?php
+<!-- <?php
 session_start() ; 
 if(!isset($_SESSION['loggedin'])){
 	header("Location: login/");
 };
-?>
+?> -->
 
 <!doctype html>
 <html lang="en">
@@ -16,42 +16,44 @@ if(!isset($_SESSION['loggedin'])){
 	<script type="text/javascript" src="resources/main.js"></script>
 	
 	<link rel="stylesheet" href="resources/css/bootstrap.min.css"  crossorigin="anonymous">
-	<link href="resources/menu.css" rel="stylesheet" type="text/css">
+	<!-- <link href="resources/menu.css" rel="stylesheet" type="text/css">
 	<link href="resources/login.css" rel="stylesheet" type="text/css">
 	<link href="resources/main.css" rel="stylesheet" type="text/css">
-	
+	 -->
 	<title>RoboPorter</title>
 
 	<style>
 		body{overflow-y:scroll;}
 	</style>
-	</head>
+</head>
 
-	<body>
+<body>
 	<div class="container">
 		<!-- Navbar -->
-		<nav class="navbar navbar-expand-md navbar-dark bg-dark" style="width:100% ;">
-			<a class="navbar-brand abs" href="#">Roboporter</a>
-			<button class="navbar-toggler" type="button"  id="navbar-toggle-id">
-				<span class="navbar-toggler-icon"></span>
-			</button>
-			<div class="collapse navbar-collapse" id="navbarNav">
-				<ul class="nav navbar-nav navbar-left">
-					<li><a class="nav-item nav-link active" href="#" id="link-home">Home<span class="sr-only">(current)</span></a></li>
-					<li><a class="nav-item nav-link" href="#" id="link-control">Control</a></li>
-					<li><a class="nav-item nav-link" href="#" id="link-nav">Navigation</a></li>
-					<!-- <a class="nav-item nav-link" href="#" id="link-map">Mapping</a> -->
-					<li><a class="nav-item nav-link" href="#" id="link-debug">Debug</a></li>
-					<li><a class="nav-item nav-link" href="#" id="link-status">Status</a></li>
-					<li><a class="nav-item nav-link" href="#" id="link-settings">Settings</a></li>
-				</ul>
-				<ul class="nav navbar-nav ml-auto">
-					<?php echo '<li><a class="nav-item nav-link" href="#">Hello '.ucfirst($_SESSION['loggedin']).'</a></li>' ?>
-					<li><a class="nav-item nav-link" href="php/logout.php">Sign Out</a></li>
-				</ul>
-			</div>
-		</nav>
-
+		<div class="row">
+			<nav class="navbar navbar-expand-md navbar-dark bg-dark" style="width:100% ;">
+				<a class="navbar-brand abs" href="#">Roboporter</a>
+				<button class="navbar-toggler" type="button"  id="navbar-toggle-id">
+					<span class="navbar-toggler-icon"></span>
+				</button>
+				<div class="collapse navbar-collapse" id="navbarNav">
+					<ul class="nav navbar-nav navbar-left">
+						<li><a class="nav-item nav-link active" href="#" id="link-home">Home<span class="sr-only">(current)</span></a></li>
+						<li><a class="nav-item nav-link" href="#" id="link-control">Control</a></li>
+						<li><a class="nav-item nav-link" href="#" id="link-nav">Navigation</a></li>
+						<!-- <a class="nav-item nav-link" href="#" id="link-map">Mapping</a> -->
+						<li><a class="nav-item nav-link" href="#" id="link-debug">Debug</a></li>
+						<li><a class="nav-item nav-link" href="#" id="link-status">Status</a></li>
+						<li><a class="nav-item nav-link" href="#" id="link-settings">Settings</a></li>
+					</ul>
+					<ul class="nav navbar-nav ml-auto">
+						<!-- <?php echo '<li><a class="nav-item nav-link" href="#">Hello '.ucfirst($_SESSION['loggedin']).'</a></li>' ?> -->
+						<li><a class="nav-item nav-link" href="php/logout.php">Sign Out</a></li>
+					</ul>
+				</div>
+			</nav>
+		</div>
+		
 		<!-- On Screen Modals Below -->
 		<!-- Connection Modal -->
 		<div class="modal fade" id="noconnection-modal" data-backdrop="static">
@@ -180,7 +182,7 @@ if(!isset($_SESSION['loggedin'])){
 											</div>
 										</div>
 
-
+										<!-- Other Settings -->
 										<div class="tab-pane fade" id="other-settings" role="tabpanel" style="padding-top:1vh;">
 											<h5>Other Settings</h5>
 										</div>
@@ -197,11 +199,30 @@ if(!isset($_SESSION['loggedin'])){
 			</div>
 		</div>
 
-
 		<!-- Content Divs Below -->
 		<!-- Home Screen Div -->
 		<div id="div-home">
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Home</h2></div></div>
+			<div class="row">
+				<div class="col-12 col-md-6" style="margin-bottom:1vh;">
+					<div class="card wd-100">
+						<div class="card-body">
+							<h5 class="card-title">
+								Status
+							</h5>
+						</div>
+					</div>
+				</div>
+				<div class="col-12 col-md-6" style="margin-bottom:1vh;">
+					<div class="card wd-100">
+						<div class="card-body">
+							<h5 class="card-title">
+								Battery
+							</h5>	
+						</div>
+					</div>
+				</div>
+			</div>
 		</div>
 
 		<!-- Control Screen Div -->
@@ -263,7 +284,6 @@ if(!isset($_SESSION['loggedin'])){
 					<canvas id="MapCanvas3" style="z-index:2; position:absolute; left:0; top:0;"></canvas>
 				
 				</div>
-			
 				<div class="col-12 col-md-4" style="padding:3%;" ;>
 					<div class="row" style="margin-top:5% ;"><button class="btn btn-success" id="go-btn" style="margin-top:5% ; width:100%;">Go to Location on Map!</button></div>
 					<div class="row" style="margin-top:5% ;"><button class="btn btn-primary" id="new-map-btn" style="margin-top:5%; width:100%;" data-toggle="modal" data-target="#newmap-div">Map New Floor</button></div>
@@ -283,16 +303,27 @@ if(!isset($_SESSION['loggedin'])){
 						<div class="col-4"><button class="btn" style=" width:100%; margin-left:5%;">GO!</button></div>
 					</div>
 					<div class="row justify-content-center"></div>
-
-
-				</div>
-				
+				</div>		
 			</div>
 		</div>
 
 		<!-- Debug Div -->
 		<div id="div-debug">
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Debug</h2></div></div>	
+			<div class="row">
+				<div class="col-12 col-md-6">
+					<div class="row justify-content-center">
+						<h4>Ultrasonic Data</h4>
+					</div>
+					<div class="row" id="DebugCanvasDiv" style="width:100%;">
+						<canvas id="DebugCanvas1" style="position:absolute; border-style:solid ;"></canvas>
+					</div>
+				</div>
+				<div class="col-12 col-md-6">
+
+				</div>
+			</div>
+
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center" id="debugdata"></div></div>	
 		</div>
 
@@ -301,5 +332,5 @@ if(!isset($_SESSION['loggedin'])){
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Status</h2></div></div>	
 		</div>
 	</div>
-	</body>
+</body>
 </html>

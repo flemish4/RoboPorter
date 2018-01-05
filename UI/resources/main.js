@@ -22,6 +22,52 @@ $(document).ready(function(){
     var div_width ;
     var wh_ratio ; 
     var new_height ; 
+
+    var debug_canvas1 = document.getElementById('DebugCanvas1'); // Get Denug Canvas ID
+    var debug_context1 = debug_canvas1.getContext('2d') ; 
+    var csize = $("#DebugCanvasDiv").width() ;   // Get width of canvas div
+    debug_canvas1.width = csize ; // set canvas width to size of div width
+    debug_canvas1.height = csize ; // set height to div width i.e. make the canvas square
+    var dscale = 0.25 ; // size of roboporter compared to width of div
+    debug_context1.fillStyle="#595959" ; //roboporter color
+    debug_context1.fillRect(((csize/2)-(dscale*csize/2)),(csize/2)-(dscale*csize/2), (csize*dscale) ,(csize*dscale)); // draw roboporter rectangle
+    debug_context1.fillStyle="#ff0000" ; //ultrasonic bar color
+    var maxbarlen = (csize - dscale*csize)/2 ; // The maximum debug bar length 
+    var dh1 = maxbarlen;// length of ultrasonic bar 1
+    var dh2 = 40 ;
+    var dh3 = 60 ;
+    var dh4 = 30 ;
+    var dh5 = 40 ;
+    var dh6 = 50 ; 
+    var dh7 = 30 ;
+    var dh8 = 40 ;
+    var dh9 = 50 ;
+    var dh10 = 60 ;
+    var dh11 = 60 ;
+    var dh12 = 60 ;
+    var dw = dscale*csize/3 ; // ultrasonic bar width
+
+    //fil rectangles for the top
+    debug_context1.fillRect((csize/2)*(1-dscale),(csize/2)*(1-dscale)-dh1,dw,dh1) ;
+    debug_context1.fillRect((csize/2)*(1-dscale)+dw,(csize/2)*(1-dscale)-dh2,dw,dh2) ;
+    debug_context1.fillRect((csize/2)*(1-dscale)+(dw*2),(csize/2)*(1-dscale)-dh3,dw,dh3) ;
+
+    //fill rectangles for the right side
+    debug_context1.fillRect((csize/2)+(dscale*csize/2),(csize/2)*(1-dscale),dh4,dw) ;
+    debug_context1.fillRect((csize/2)+(dscale*csize/2),(csize/2)*(1-dscale)+dw,dh5,dw) ;
+    debug_context1.fillRect((csize/2)+(dscale*csize/2),(csize/2)*(1-dscale)+dw*2,dh6,dw) ;
+
+    //fill rectangles for the base
+    debug_context1.fillRect((csize/2)*(1-dscale),(csize/2)*(1-dscale)+(csize*dscale),dw,dh7) ;
+    debug_context1.fillRect((csize/2)*(1-dscale)+dw,(csize/2)*(1-dscale)+(csize*dscale),dw,dh8) ;
+    debug_context1.fillRect((csize/2)*(1-dscale)+(dw*2),(csize/2)*(1-dscale)+(csize*dscale),dw,dh9) ;
+
+    //fill rectangles for the left side
+    debug_context1.fillRect((csize/2)-(dscale*csize/2)-dh10,(csize/2)*(1-dscale),dh10,dw) ;
+    debug_context1.fillRect((csize/2)-(dscale*csize/2)-dh11,(csize/2)*(1-dscale)+dw,dh11,dw) ;
+    debug_context1.fillRect((csize/2)-(dscale*csize/2)-dh12,(csize/2)*(1-dscale)+dw*2,dh12,dw) ;
+    
+
     
     setTimeout(() => { // Manages the connection timeout modal. After 22 seconds it fades in an alert saying no connection is available
         $("#connecting").fadeOut(1000, function(){
@@ -39,6 +85,8 @@ $(document).ready(function(){
     s.onclose = function(e) { }
     s.onmessage = function(e) {
         data = JSON.parse(e.data);
+        
+
         $("#debugdata").html("") ;
         $.each(data, function(i,j){
             $("#debugdata").append("<br>"+i+":"+j)
