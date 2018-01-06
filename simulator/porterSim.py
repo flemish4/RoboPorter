@@ -101,6 +101,14 @@ def constrainAngle360(angle, max, min) : # Library export
     return angle
     
     
+def constrainAngle180(angle, max, min) :
+    while angle >= max :
+        angle -= 180
+    while angle < min :
+        angle += 180
+    return angle    
+    
+    
 def constrainInt(i, max, min) :
     while i >= max :
         i -= max
@@ -115,15 +123,7 @@ def constrainInt(i, max, min) :
         
     return i
 
-    
-def constrainAngle180(angle, max, min) :
-    while angle >= max :
-        angle -= 180
-    while angle < min :
-        angle += 180
-    return angle
-    
-    
+  
 def roundBase(x, base):
     return int(base * round(float(x)/base))
      
@@ -564,8 +564,10 @@ class porterSim() :
     
     def drawLidarGrid(self) :
         global lidarMap
-        for point in lidarMap :
-            pygame.draw.circle(self.views["portermap"]["surface"], self.black, (point[0]/self.scale,point[1]/self.scale), 1)
+        global threadLock
+        with threadLock : 
+            for point in lidarMap :
+                pygame.draw.circle(self.views["portermap"]["surface"], self.black, (point[0]/self.scale,point[1]/self.scale), 1)
     
     def drawDataMap(self) :
         global dataMap
@@ -1449,10 +1451,11 @@ class mappingThread(simThreadBase):
             lidarMapStore = lidarMap       
         
         # REVISIT : Generating test data - remove this
-        for i in range(1,500) :
-            lidarMapStore.add((i,500))
-            if i > 200 :
-                lidarMapStore.add((i,500-1+int(round(i/100))))
+        with threadLock :
+            for i in range(1,500) :
+                lidarMapStore.add((i,500))
+                if i > 200 :
+                    lidarMapStore.add((i,500-1+int(round(i/100))))
             
 
         
@@ -1488,19 +1491,19 @@ class mappingThread(simThreadBase):
         kernel = np.ones((3,3),np.uint8)
         map = cv2.dilate(map,kernel,iterations = realPorterSize[0]/2)
         map = cv2.erode(map,kernel, iterations = realPorterSize[0]*4/8)       
-        cv2.namedWindow("output", cv2.WINDOW_NORMAL)    
-        cv2.imshow('output',map)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()  
+        # cv2.namedWindow("output", cv2.WINDOW_NORMAL)    
+        # cv2.imshow('output',map)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()  
         clearMap1 = np.zeros(map.shape, np.uint8)
         clearMap2 = np.zeros(map.shape, np.uint8)
         #map = cv2.morphologyEx(map, cv2.MORPH_CLOSE, kernel, iterations=realPorterSize[0]/2)
 
         map = cv2.Canny(map,200,200)            
-        cv2.namedWindow("output", cv2.WINDOW_NORMAL)    
-        cv2.imshow('output',map)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()  
+        # cv2.namedWindow("output", cv2.WINDOW_NORMAL)    
+        # cv2.imshow('output',map)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()  
         lines = cv2.HoughLinesP(map,rho=1,theta=np.pi/180, threshold=50,lines=np.array([]), minLineLength=10,maxLineGap=80 )
         # a,b,c = lines.shape
         # for i in range(a):
@@ -1561,11 +1564,11 @@ class mappingThread(simThreadBase):
                         f.write("Not perfect" + "\n")
                         f.write("LongA: " + str(a) + ", ShortA: " + str(walls[shortWall]["angle"]) + "\n")
                         # Calculate difference in angle
-                        dA = math.radians(a - walls[shortWall]["angle"])
+                        dA = math.radians(constrainAngle180(a - walls[shortWall]["angle"],180,0))
                         # Calculate centre point (average)
                         shortWallCentre = ((shortWall[0]+shortWall[2])/2,(shortWall[1]+shortWall[3])/2)
                         f.write("Centre: " + str(shortWallCentre) + "\n")
-                        shiftedShortWall = rotate(shortWallCentre, shortWall[:2], dA/2) + rotate(shortWallCentre, shortWall[2:], dA/2) #origin, point, angle
+                        shiftedShortWall = rotate(shortWallCentre, shortWall[:2], dA) + rotate(shortWallCentre, shortWall[2:], dA) #origin, point, angle
                         f.write("shiftedShortWall: " + str(shiftedShortWall) + "\n")
                     else :
                         shiftedShortWall = shortWall
@@ -1609,12 +1612,14 @@ class mappingThread(simThreadBase):
                         longMin = longWall[0+yOffset]
                         
                     f.write("longMin: " + str(longMin) + ", longMax: " + str(longMax) + "\n")
-                    overlapTolerance = 5 # REVISIT : this is configurable
+                    overlapTolerance = 50 # REVISIT : this is configurable - should not be greater than the minimum feature desired
                     overlapTest = 0
-                    for coordOffset in [0,1] :
+                    for coordOffset in [0,2] :
                         # If that coordinate is between the two endpoints of longWall (or within tolerance)
+                        f.write("pos: " + str(coordOffset+yOffset) + ", shortVal: " + str(shiftedShortWall[coordOffset+yOffset]) + ", wTol: " + str(shiftedShortWall[coordOffset+yOffset]+overlapTolerance) + "\n")
                         if shiftedShortWall[coordOffset+yOffset]+overlapTolerance>longMin \
                             and shiftedShortWall[coordOffset+yOffset]-overlapTolerance<longMax :
+                            f.write("Overlap test true" + "\n")
                             overlapTest += 1
                             
                     # Different types of overlap need different operations
