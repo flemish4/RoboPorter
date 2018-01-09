@@ -1,7 +1,4 @@
- So i just added movement to the sim in "RunMapSim" using WASD controls, but movement is extremel irratic. A and D control the steering left and right properly but W and S do not yet control accelleration properly.
- 
- The algorithm functions are currently called as part of a loop. They should really be executed concurrently. I am working on this........
-  
+
   - Desc      : A simulator tool writen in python using pygame. Designed to allow testing of navigation and mapping algorithms.
   - Guide  :
     - Ensure python 2.7 is installed
