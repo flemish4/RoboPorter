@@ -43,7 +43,7 @@ if(!isset($_SESSION['loggedin'])){
 						<li><a class="nav-item nav-link" href="#" id="link-nav">Navigation</a></li>
 						<!-- <a class="nav-item nav-link" href="#" id="link-map">Mapping</a> -->
 						<li><a class="nav-item nav-link" href="#" id="link-debug">Debug</a></li>
-						<li><a class="nav-item nav-link" href="#" id="link-status">Status</a></li>
+						<!-- <li><a class="nav-item nav-link" href="#" id="link-status">Status</a></li> -->
 						<li><a class="nav-item nav-link" href="#" id="link-settings">Settings</a></li>
 					</ul>
 					<ul class="nav navbar-nav ml-auto">
@@ -214,11 +214,16 @@ if(!isset($_SESSION['loggedin'])){
 					</div>
 				</div>
 				<div class="col-12 col-md-6" style="margin-bottom:1vh;">
-					<div class="card wd-100">
+					<div class="card">
 						<div class="card-body">
 							<h5 class="card-title">
 								Battery
 							</h5>	
+							<div class="progress" style="height:50px">
+								<div class="progress-bar bg-success" style="width:70%;">
+									70% Capacity Remaining
+								</div>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -328,9 +333,9 @@ if(!isset($_SESSION['loggedin'])){
 		</div>
 
 		<!-- Status Div -->
-		<div id="div-status">
+		<!-- <div id="div-status">
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Status</h2></div></div>	
-		</div>
+		</div> -->
 	</div>
 </body>
 </html>
