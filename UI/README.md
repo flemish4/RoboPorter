@@ -18,11 +18,11 @@ The front end is a web interface built using the Bootstrap framework. To get it 
 ## Implemented
 * Control Page
 * Mapping info and clickable map 
+* Added ability to change a user password and create a new user
+* Added a graphical output for the ultrasonic sensors
 
 ## Work to follow
 * Finish mapping UI
 * Finish home screen
 * Finish settings
-* Finish account details
-* Secure password storage 
 * Add status and debug infomation
