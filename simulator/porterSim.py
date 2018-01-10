@@ -1407,6 +1407,171 @@ class simThreadBase(MultiThreadBase) :
     
     
 class mappingThread(simThreadBase):
+    def simplifyLines (self, lines) :
+        # LOG
+        f = open("mapping.log", "w")
+
+        f.write("Lines: " + str(lines) + "\n")
+        ## Remove overlapping lines
+        newLines = {}
+        oldLines = set()
+        changes = False
+        while True :
+            for lineA in lines :
+                for lineB in lines :
+                    f.write("#######################START" + "\n")
+                    f.write("A: " + str(lineA) + "-a: " + str(lines[lineA]["angle"]) + ", to: " + str(lineB) + "-a: " + str(lines[lineB]["angle"]) + "\n")
+                    ## do not compare line with its self
+                    if lineA == lineB :
+                        f.write("Skipping - same" + "\n")
+                        continue
+                    ## if the lines are not ~ parallel skip
+                    dA0 = abs(lines[lineA]["angle"] - lines[lineB]["angle"])
+                    dA1 = abs(lines[lineA]["angle"] - lines[lineB]["angle"] - 180)
+                    dA2 = abs(lines[lineA]["angle"] - lines[lineB]["angle"] + 180)
+                    if ( dA0 > 2 ) and ( dA1 > 2 ) and ( dA2 > 2 ):
+                        f.write("Skipping - not parallel" + "\n")
+                        continue
+                    ## Find the longer and shorter lines
+                    lenA = getLength(lineA)
+                    lenB = getLength(lineB)
+                    if lenA >= lenB :
+                        longLine = lineA
+                        shortLine = lineB
+                    else :
+                        longLine = lineB
+                        shortLine = lineA
+                        
+                    a = lines[longLine]["angle"]
+                    ar = math.radians(a)
+                    f.write("Long: " + str(longLine) + ", short: " + str(shortLine) + "\n")
+                    ## Rotate the shorter line so that is is perfectly parallel 
+                    # Only do operation if they are are not already perfectly parallel
+                    if lines[shortLine]["angle"] != a :
+                        f.write("Not perfect" + "\n")
+                        f.write("LongA: " + str(a) + ", ShortA: " + str(lines[shortLine]["angle"]) + "\n")
+                        # Calculate difference in angle
+                        dA = math.radians(constrainAngle180(a - lines[shortLine]["angle"],180,0))
+                        # Calculate centre point (average)
+                        shortLineCentre = ((shortLine[0]+shortLine[2])/2,(shortLine[1]+shortLine[3])/2)
+                        f.write("Centre: " + str(shortLineCentre) + "\n")
+                        shiftedShortLine = rotate(shortLineCentre, shortLine[:2], dA) + rotate(shortLineCentre, shortLine[2:], dA) #origin, point, angle
+                        f.write("shiftedShortLine: " + str(shiftedShortLine) + "\n")
+                    else :
+                        shiftedShortLine = shortLine
+                    ## if the lines are not  close enough together - skip
+                    # Calculate distance between lines
+                    if a != 90 :
+                        # Solve y=mx+c twice and sub into abs(d-c)/sqrt(m**2+1) https://en.wikipedia.org/wiki/Distance_between_two_straight_lines
+                        m = math.tan(ar)
+                        dist = (longLine[1]-shiftedShortLine[1]+m*(shiftedShortLine[0]-longLine[0]))/math.sqrt(m**2+1)
+                    else : # lines are vertical - dist is just difference in x0
+                        dist = ((longLine[0]+longLine[2])-(shiftedShortLine[0]+shiftedShortLine[2]))/2
+                    if abs(dist) > 5 : # REVISIT : this number is adjustible depending on lidar results
+                        f.write("Skipping - distance > 5" + "\n")
+                        continue # lines are not close enough to remove or merge
+
+
+                    ## Translate the shorter line to overlap the longer line perfectly
+                    shiftedShortLine = (int(round(shortLine[0]+dist*math.sin(ar))),int(round(shortLine[1]+dist*math.cos(ar))),
+                               int(round(shortLine[2]+dist*math.sin(ar))),int(round(shortLine[3]+dist*math.cos(ar))))
+                    f.write("dist: " + str(dist) + "\n")
+                    f.write("angl: " + str(a))
+                    f.write("longLine:  " + str(longLine) + "\n")
+                    f.write("shortLine: " + str(shortLine) + "\n")
+                    f.write("shshtLine: " + str(shiftedShortLine) + "\n")
+                    
+                    ## Check that the two lines actually overlap
+                    if abs(a-90) < 45 : # if line is more vertical than horizontal then
+                        # set offset value to select y coordinates
+                        yOffset = 1
+                    else :
+                        # set offset value to select x coordinates
+                        yOffset = 0
+                    
+                    f.write("yOffset : " + str(yOffset) + "\n")
+                    # Find max and min values of (x or y depending on angle as above) the long Line
+                    if longLine[0+yOffset] > longLine[2+yOffset] :
+                        longMax = longLine[0+yOffset]
+                        longMin = longLine[2+yOffset]
+                    else :
+                        longMax = longLine[2+yOffset]
+                        longMin = longLine[0+yOffset]
+                        
+                    f.write("longMin: " + str(longMin) + ", longMax: " + str(longMax) + "\n")
+                    overlapTolerance = 50 # REVISIT : this is configurable - should not be greater than the minimum feature desired
+                    overlapTest = 0
+                    for coordOffset in [0,2] :
+                        # If that coordinate is between the two endpoints of longLine (or within tolerance)
+                        f.write("pos: " + str(coordOffset+yOffset) + ", shortVal: " + str(shiftedShortLine[coordOffset+yOffset]) + ", wTol: " + str(shiftedShortLine[coordOffset+yOffset]+overlapTolerance) + "\n")
+                        if shiftedShortLine[coordOffset+yOffset]+overlapTolerance>longMin \
+                            and shiftedShortLine[coordOffset+yOffset]-overlapTolerance<longMax :
+                            f.write("Overlap test true" + "\n")
+                            overlapTest += 1
+                            
+                    # Different types of overlap need different operations
+                    if overlapTest == 0 :
+                        # line does not overlap at all - do not merge
+                        f.write("No overlap - continue" + "\n")
+                        continue
+                    #elif overlapTest == 2 : # do not create a new line as longLine is what will be made
+                    elif overlapTest == 1 :
+                        # shortLine is overlaps but is not completely contained by long line
+                        # Find new line 
+                        f.write("Overlap partial" + "\n")
+                        ## Find the max ends and merge the lines
+                        # If line is not vertical - check min max X values to find longest line
+                        # Init
+                        min = (longLine[0],longLine[1])
+                        max = (longLine[0],longLine[1])
+                        coords = [tuple(longLine[2:]),tuple(shiftedShortLine[:2]),tuple(shiftedShortLine[2:])]
+                        f.write("coords: " + str(coords) + "\n")
+                        # If not vertical - check for x values
+                        if a != 90 :   
+                            # Check for max in min values in the other three coords
+                            for coord in coords :
+                                if coord[0] < min[0] :
+                                    min = coord
+                                if coord[0] > max[0] :
+                                    max = coord
+                        else :                           
+                            # Check for max in min values in the other three coords
+                            for coord in coords :
+                                if coord[1] < min[1] :
+                                    min = coord
+                                if coord[1] > max[1] :
+                                    max = coord
+                        
+                        # Construct new line segment from max and min coords
+                        newLine = (int(round(min[0])),int(round(min[1])),int(round(max[0])),int(round(max[1])))
+                        # If the new line is different to the longLine - remove old lines and create new
+                        if newLine != longLine :
+                            f.write("newLinell:" + str(newLine) + "\n")
+                            newLines[newLine] = {"angle" : a }
+                            oldLines.add(longLine)
+                            
+                    # At this point the short line should be removed regardless of any change to the larger line    
+                    oldLines.add(shortLine)
+                    break
+                        
+                
+                # If changes need to be made, break the loop, make the changes then start again
+                if len(oldLines) > 0 :
+                    break
+                    
+            if len(oldLines) > 0 :
+                # Remove old lines and add new
+                for oldLine in oldLines :
+                    lines.pop(oldLine)
+                lines.update(newLines)
+                oldLines = set()
+                newLines = {}
+            else :
+                # No new lines - must be complete
+                break
+        
+        f.write("Lines: " + str(lines) + "\n")
+        f.close()
 
     def run(self):   
         # May not need all of these
@@ -1451,11 +1616,11 @@ class mappingThread(simThreadBase):
             lidarMapStore = lidarMap       
         
         # REVISIT : Generating test data - remove this
-        with threadLock :
-            for i in range(1,500) :
-                lidarMapStore.add((i,500+int(round(i/15))))
-                if i > 200 :
-                    lidarMapStore.add((i,500-1+int(round(i/100))))
+        # with threadLock :
+            # for i in range(1,500) :
+                # lidarMapStore.add((i,500+int(round(i/15))))
+                # if i > 200 :
+                    # lidarMapStore.add((i,500-1+int(round(i/100))))
             
 
         
@@ -1509,8 +1674,6 @@ class mappingThread(simThreadBase):
         # cv2.destroyAllWindows()  
         lines = cv2.HoughLinesP(map,rho=1,theta=np.pi/180, threshold=50,lines=np.array([]), minLineLength=10,maxLineGap=80 )
             
-        # LOG
-        f = open("mapping.log", "w")
         
  
         # Format wall data
@@ -1518,171 +1681,11 @@ class mappingThread(simThreadBase):
         for line in lines :
             walls[(line[0][0],line[0][1],line[0][2],line[0][3])] = { "angle" : constrainAngle180(math.atan2(line[0][3] - line[0][1], line[0][2] - line[0][0]) * 180.0 / math.pi,180,0),
                              }
-
-      
         # for wall in walls : 
             # cv2.line(clearMap1, (int(round(wall[0])),int(round(wall[1]))), (int(round(wall[2])),int(round(wall[3]))), random.randint(20,255), 1, cv2.LINE_AA)
-        f.write("Walls: " + str(walls) + "\n")
-        ## Remove overlapping lines
-        newWalls = {}
-        oldWalls = set()
-        changes = False
-        while True :
-            for wallA in walls :
-                for wallB in walls :
-                    f.write("#######################START" + "\n")
-                    f.write("A: " + str(wallA) + "-a: " + str(walls[wallA]["angle"]) + ", to: " + str(wallB) + "-a: " + str(walls[wallB]["angle"]) + "\n")
-                    ## do not compare wall with its self
-                    if wallA == wallB :
-                        f.write("Skipping - same" + "\n")
-                        continue
-                    ## if the walls are not ~ parallel skip
-                    dA0 = abs(walls[wallA]["angle"] - walls[wallB]["angle"])
-                    dA1 = abs(walls[wallA]["angle"] - walls[wallB]["angle"] - 180)
-                    dA2 = abs(walls[wallA]["angle"] - walls[wallB]["angle"] + 180)
-                    if ( dA0 > 2 ) and ( dA1 > 2 ) and ( dA2 > 2 ):
-                        f.write("Skipping - not parallel" + "\n")
-                        continue
-                    ## Find the longer and shorter walls
-                    lenA = getLength(wallA)
-                    lenB = getLength(wallB)
-                    if lenA >= lenB :
-                        longWall = wallA
-                        shortWall = wallB
-                    else :
-                        longWall = wallB
-                        shortWall = wallA
-                        
-                    a = walls[longWall]["angle"]
-                    ar = math.radians(a)
-                    f.write("Long: " + str(longWall) + ", short: " + str(shortWall) + "\n")
-                    ## Rotate the shorter wall so that is is perfectly parallel 
-                    # Only do operation if they are are not already perfectly parallel
-                    if walls[shortWall]["angle"] != a :
-                        f.write("Not perfect" + "\n")
-                        f.write("LongA: " + str(a) + ", ShortA: " + str(walls[shortWall]["angle"]) + "\n")
-                        # Calculate difference in angle
-                        dA = math.radians(constrainAngle180(a - walls[shortWall]["angle"],180,0))
-                        # Calculate centre point (average)
-                        shortWallCentre = ((shortWall[0]+shortWall[2])/2,(shortWall[1]+shortWall[3])/2)
-                        f.write("Centre: " + str(shortWallCentre) + "\n")
-                        shiftedShortWall = rotate(shortWallCentre, shortWall[:2], dA) + rotate(shortWallCentre, shortWall[2:], dA) #origin, point, angle
-                        f.write("shiftedShortWall: " + str(shiftedShortWall) + "\n")
-                    else :
-                        shiftedShortWall = shortWall
-                    ## if the walls are not  close enough together - skip
-                    # Calculate distance between walls
-                    if a != 90 :
-                        # Solve y=mx+c twice and sub into abs(d-c)/sqrt(m**2+1) https://en.wikipedia.org/wiki/Distance_between_two_straight_lines
-                        m = math.tan(ar)
-                        dist = (longWall[1]-shiftedShortWall[1]+m*(shiftedShortWall[0]-longWall[0]))/math.sqrt(m**2+1)
-                    else : # lines are vertical - dist is just difference in x0
-                        dist = ((longWall[0]+longWall[2])-(shiftedShortWall[0]+shiftedShortWall[2]))/2
-                    if abs(dist) > 5 : # REVISIT : this number is adjustible depending on lidar results
-                        f.write("Skipping - distance > 5" + "\n")
-                        continue # lines are not close enough to remove or merge
 
-
-                    ## Translate the shorter wall to overlap the longer wall perfectly
-                    shiftedShortWall = (int(round(shortWall[0]+dist*math.sin(ar))),int(round(shortWall[1]+dist*math.cos(ar))),
-                               int(round(shortWall[2]+dist*math.sin(ar))),int(round(shortWall[3]+dist*math.cos(ar))))
-                    f.write("dist: " + str(dist) + "\n")
-                    f.write("angl: " + str(a))
-                    f.write("longWall:  " + str(longWall) + "\n")
-                    f.write("shortWall: " + str(shortWall) + "\n")
-                    f.write("shshtWall: " + str(shiftedShortWall) + "\n")
-                    
-                    ## Check that the two lines actually overlap
-                    if abs(a-90) < 45 : # if line is more vertical than horizontal then
-                        # set offset value to select y coordinates
-                        yOffset = 1
-                    else :
-                        # set offset value to select x coordinates
-                        yOffset = 0
-                    
-                    f.write("yOffset : " + str(yOffset) + "\n")
-                    # Find max and min values of (x or y depending on angle as above) the long Wall
-                    if longWall[0+yOffset] > longWall[2+yOffset] :
-                        longMax = longWall[0+yOffset]
-                        longMin = longWall[2+yOffset]
-                    else :
-                        longMax = longWall[2+yOffset]
-                        longMin = longWall[0+yOffset]
-                        
-                    f.write("longMin: " + str(longMin) + ", longMax: " + str(longMax) + "\n")
-                    overlapTolerance = 50 # REVISIT : this is configurable - should not be greater than the minimum feature desired
-                    overlapTest = 0
-                    for coordOffset in [0,2] :
-                        # If that coordinate is between the two endpoints of longWall (or within tolerance)
-                        f.write("pos: " + str(coordOffset+yOffset) + ", shortVal: " + str(shiftedShortWall[coordOffset+yOffset]) + ", wTol: " + str(shiftedShortWall[coordOffset+yOffset]+overlapTolerance) + "\n")
-                        if shiftedShortWall[coordOffset+yOffset]+overlapTolerance>longMin \
-                            and shiftedShortWall[coordOffset+yOffset]-overlapTolerance<longMax :
-                            f.write("Overlap test true" + "\n")
-                            overlapTest += 1
-                            
-                    # Different types of overlap need different operations
-                    if overlapTest == 0 :
-                        # wall does not overlap at all - do not merge
-                        f.write("No overlap - continue" + "\n")
-                        continue
-                    #elif overlapTest == 2 : # do not create a new wall as longWall is what will be made
-                    elif overlapTest == 1 :
-                        # shortWall is overlaps but is not completely contained by long wall
-                        # Find new wall 
-                        f.write("Overlap partial" + "\n")
-                        ## Find the max ends and merge the walls
-                        # If wall is not vertical - check min max X values to find longest wall
-                        # Init
-                        min = (longWall[0],longWall[1])
-                        max = (longWall[0],longWall[1])
-                        coords = [tuple(longWall[2:]),tuple(shiftedShortWall[:2]),tuple(shiftedShortWall[2:])]
-                        f.write("coords: " + str(coords) + "\n")
-                        # If not vertical - check for x values
-                        if a != 90 :   
-                            # Check for max in min values in the other three coords
-                            for coord in coords :
-                                if coord[0] < min[0] :
-                                    min = coord
-                                if coord[0] > max[0] :
-                                    max = coord
-                        else :                           
-                            # Check for max in min values in the other three coords
-                            for coord in coords :
-                                if coord[1] < min[1] :
-                                    min = coord
-                                if coord[1] > max[1] :
-                                    max = coord
-                        
-                        # Construct new wall segment from max and min coords
-                        newWall = (int(round(min[0])),int(round(min[1])),int(round(max[0])),int(round(max[1])))
-                        # If the new wall is different to the longWall - remove old walls and create new
-                        if newWall != longWall :
-                            f.write("newWallll:" + str(newWall) + "\n")
-                            newWalls[newWall] = {"angle" : a }
-                            oldWalls.add(longWall)
-                            
-                    # At this point the short wall should be removed regardless of any change to the larger wall    
-                    oldWalls.add(shortWall)
-                    break
-                        
-                
-                # If changes need to be made, break the loop, make the changes then start again
-                if len(oldWalls) > 0 :
-                    break
-                    
-            if len(oldWalls) > 0 :
-                # Remove old walls and add new
-                for oldWall in oldWalls :
-                    walls.pop(oldWall)
-                walls.update(newWalls)
-                oldWalls = set()
-                newWalls = {}
-            else :
-                # No new walls - must be complete
-                break
-        
-        f.write("Walls: " + str(walls) + "\n")
-        f.close()
+        self.simplifyLines(walls)
+            
         for wall in walls : 
             cv2.line(clearMap2, tuple(wall[:2]), tuple(wall[2:]), 255, 3, cv2.LINE_AA)
         for wall in walls : 
@@ -1706,8 +1709,13 @@ class mappingThread(simThreadBase):
             # Add paths either side of the wall
             paths[(int(round(wall[0]+offsetX)), int(round(wall[1]+offsetY)), int(round(wall[2]+offsetX)), int(round(wall[3]+offsetY)))] = {"angle" : a}
             paths[(int(round(wall[0]-offsetX)), int(round(wall[1]-offsetY)), int(round(wall[2]-offsetX)), int(round(wall[3]-offsetY)))] = {"angle" : a}
-            
-            
+           
+        # To remove overlapping lines caused by walls being ~ 2* wallPathOffset apart
+        self.simplifyLines(paths)    
+        
+        
+        
+        # Display results
         for path in paths : 
             cv2.line(clearMap3, tuple(path[:2]), tuple(path[2:]), 150, 3, cv2.LINE_AA)
             
