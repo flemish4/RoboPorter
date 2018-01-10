@@ -1433,8 +1433,18 @@ class mappingThread(simThreadBase):
                         f.write("Skipping - not parallel" + "\n")
                         continue
                     ## Find the longer and shorter lines
-                    lenA = getLength(lineA)
-                    lenB = getLength(lineB)
+                    if "length" in lines[lineA] :
+                        lenA = lines[lineA]["length"]
+                    else :
+                        lenA = getLength(lineA)
+                        lines[lineA]["length"] = lenA
+                        
+                    if "length" in lines[lineB] :
+                        lenB = lines[lineB]["length"]
+                    else :
+                        lenB = getLength(lineB)
+                        lines[lineB]["length"] = lenB
+                    
                     if lenA >= lenB :
                         longLine = lineA
                         shortLine = lineB
@@ -1573,6 +1583,91 @@ class mappingThread(simThreadBase):
         f.write("Lines: " + str(lines) + "\n")
         f.close()
 
+    # Modified from https://www.cdn.geeksforgeeks.org/check-if-two-given-line-segments-intersect/
+    # Given three colinear points p, q, r, the function checks if
+    # point q lies on line segment 'pr'
+    def onSegment(self, p, q, r) :
+        if  q[0] <= max(p[0], r[0]) and q[0] >= min(p[0], r[0]) and q[1] <= max(p[1], r[1]) and q[1] >= min(p[1], r[1]) :
+            return True
+     
+        return False
+     
+    # To find orientation of ordered triplet (p, q, r).
+    # The function returns following values
+    # 0 --> p, q and r are colinear
+    # 1 --> Clockwise
+    # 2 --> Counterclockwise
+    def orientation(self, p, q, r) :
+        # See https://www.geeksforgeeks.org/orientation-3-ordered-points/
+        # for details of below formula.
+        val = (q[1] - p[1]) * (r[0] - q[0]) - (q[0] - p[0]) * (r[1] - q[1])
+        if val == 0 :
+            return 0  # colinear
+        elif val > 0 :
+            return 1 # clockwise
+        else :
+            return 2 # counter clockwise
+    
+     
+    # The main function that returns true if line segment 'p1q1'
+    # and 'p2q2' intersect.
+    def doIntersect(self, lineA, lineB) :
+        # Convert format
+        p1 = lineA[:2]
+        q1 = lineA[2:]
+        p2 = lineB[:2]
+        q2 = lineB[2:]
+        
+        # Find the four orientations needed for general and
+        # special cases
+        o1 = self.orientation(p1, q1, p2)
+        o2 = self.orientation(p1, q1, q2)
+        o3 = self.orientation(p2, q2, p1)
+        o4 = self.orientation(p2, q2, q1) 
+        
+        # General case
+        if o1 != o2 and o3 != o4 :
+            return 1
+     
+        # Special Cases
+        # p1, q1 and p2 are colinear and p2 lies on segment p1q1
+        if o1 == 0 and self.onSegment(p1, p2, q1) :
+            return 2
+     
+        # p1, q1 and p2 are colinear and q2 lies on segment p1q1
+        if o2 == 0 and self.onSegment(p1, q2, q1) :
+            return 2
+     
+        # p2, q2 and p1 are colinear and p1 lies on segment p2q2
+        if o3 == 0 and self.onSegment(p2, p1, q2) :
+            return 2
+     
+         # p2, q2 and q1 are colinear and q1 lies on segment p2q2
+        if o4 == 0 and self.onSegment(p2, q1, q2) :
+            return 2
+     
+        return 0 # Doesn't fall in any of the above cases
+    
+    # https://stackoverflow.com/questions/20677795/how-do-i-compute-the-intersection-point-of-two-lines-in-python
+    def lineABC(self, line):
+        A = (line[1] - line[3])
+        B = (line[2] - line[0])
+        C = (line[0]*line[3] - line[2]*line[1])
+        return A, B, -C
+
+    def intersection(self, lineA, lineB):
+        L1 = self.lineABC(lineA)
+        L2 = self.lineABC(lineB)
+        D  = L1[0] * L2[1] - L1[1] * L2[0]
+        Dx = L1[2] * L2[1] - L1[1] * L2[2]
+        Dy = L1[0] * L2[2] - L1[2] * L2[0]
+        if D != 0:
+            x = int(round(float(Dx) / D))
+            y = int(round(float(Dy) / D))
+            return x,y
+        else:
+            return False
+    
     def run(self):   
         # May not need all of these
         global USAvgDistances
@@ -1679,13 +1774,19 @@ class mappingThread(simThreadBase):
         # Format wall data
         walls = {}
         for line in lines :
-            walls[(line[0][0],line[0][1],line[0][2],line[0][3])] = { "angle" : constrainAngle180(math.atan2(line[0][3] - line[0][1], line[0][2] - line[0][0]) * 180.0 / math.pi,180,0),
-                             }
+            # Ensure the first coordinate is the minimum x coordinate
+            if ( line[0][0] <= line[0][2]) :
+                walls[(line[0][0],line[0][1],line[0][2],line[0][3])] = { "angle" : constrainAngle180(math.atan2(line[0][3] - line[0][1], line[0][2] - line[0][0]) * 180.0 / math.pi,180,0),
+                                 }
+            else :
+                walls[(line[0][2],line[0][3],line[0][0],line[0][1])] = { "angle" : constrainAngle180(math.atan2(line[0][3] - line[0][1], line[0][2] - line[0][0]) * 180.0 / math.pi,180,0),
+                                 }
+            
         # for wall in walls : 
             # cv2.line(clearMap1, (int(round(wall[0])),int(round(wall[1]))), (int(round(wall[2])),int(round(wall[3]))), random.randint(20,255), 1, cv2.LINE_AA)
 
         self.simplifyLines(walls)
-            
+        
         for wall in walls : 
             cv2.line(clearMap2, tuple(wall[:2]), tuple(wall[2:]), 255, 3, cv2.LINE_AA)
         for wall in walls : 
@@ -1698,26 +1799,96 @@ class mappingThread(simThreadBase):
         ## Find paths
         # Create raw paths either side of every wall
         # REVISIT : Configurable parameter
-        wallPathOffset = 100
+        wallPathOffset = 50
         paths = {}
+        print("walls: " + str(walls))
         for wall, data in walls.iteritems() :
+            # Skip lines that are too short
+            if data["length"] < wallPathOffset*2 :
+                continue
             # Find offsets for lines parallel to the wall
-            a = data["angle"]  
-            ar = math.radians(a + 90) # perperndicular angle
-            offsetX = wallPathOffset * math.cos(ar)
-            offsetY = wallPathOffset * math.sin(ar)
+            a = data["angle"] 
+            ar = math.radians(a)
+            pr = math.radians(a + 90) # perperndicular angle
+            offsetX = wallPathOffset * math.cos(pr)
+            offsetY = wallPathOffset * math.sin(pr)
+            shortX  = wallPathOffset * math.cos(ar)
+            shortY  = wallPathOffset * math.sin(ar)
+            print("################################")
+            print("wall: " + str(wall))
+            print("a: " + str(a) + ", ar: " + str(ar) + ", pr: " + str(pr))
+            print("shortX: " + str(shortX) + ", shortY: " + str(shortY))
+            if wall[1] > wall[3] :
+                print("neg slope")
+                shortY = - shortY
+            shortX = 0
+            shortY = 0
             # Add paths either side of the wall
-            paths[(int(round(wall[0]+offsetX)), int(round(wall[1]+offsetY)), int(round(wall[2]+offsetX)), int(round(wall[3]+offsetY)))] = {"angle" : a}
-            paths[(int(round(wall[0]-offsetX)), int(round(wall[1]-offsetY)), int(round(wall[2]-offsetX)), int(round(wall[3]-offsetY)))] = {"angle" : a}
+            p1 = (int(round(wall[0]+offsetX+shortX)), int(round(wall[1]+offsetY+shortY)), int(round(wall[2]+offsetX-shortX)), int(round(wall[3]+offsetY-shortY)))
+            p2 = (int(round(wall[0]-offsetX+shortX)), int(round(wall[1]-offsetY+shortY)), int(round(wall[2]-offsetX-shortX)), int(round(wall[3]-offsetY-shortY)))
+            paths[p1] = {"angle" : a}
+            paths[p2] = {"angle" : a}
+            print("p1: " + str(p1) + ", p2: " + str(p2))
+            # cv2.line(clearMap3, tuple(p1[:2]), tuple(p1[2:]), 150, 3, cv2.LINE_AA)
+            # cv2.line(clearMap3, tuple(p2[:2]), tuple(p2[2:]), 150, 3, cv2.LINE_AA)  
+            # cv2.namedWindow("output3", cv2.WINDOW_NORMAL)      
+            # cv2.imshow('output3',clearMap3)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()  
+            if exitFlag :
+                break
            
         # To remove overlapping lines caused by walls being ~ 2* wallPathOffset apart
         self.simplifyLines(paths)    
         
-        
-        
         # Display results
         for path in paths : 
             cv2.line(clearMap3, tuple(path[:2]), tuple(path[2:]), 150, 3, cv2.LINE_AA)
+        ## Fix paths with collisions
+        newPaths = {}
+        oldPaths = set()
+        changes = False
+        #while True :
+        for path, pathData in paths.iteritems() :
+            for wall, wallData in walls.iteritems() :
+                #If no collision 
+                intersection = self.doIntersect(path, wall)
+                if intersection == 0 :
+                    continue
+                elif intersection == 1 : # full overlap
+                    # Find intersection location
+                    x,y = self.intersection(path, wall)
+                    cv2.circle(clearMap3, (x,y), 10, 100, thickness=1, lineType=9, shift=0)
+                    p1 = (path[0],path[1],x,y)
+                    p2 = (x,y,path[2],path[3])
+                    len1 = getLength(p1)
+                    len2 = getLength(p2)   
+                    a = pathData["angle"] 
+                    ar = math.radians(a) 
+                    if len1 > wallPathOffset :        
+                        shortX  = wallPathOffset * math.cos(ar)
+                        shortY  = wallPathOffset * math.sin(ar)
+                        if path[1] > path[3] :
+                            print("neg slope")
+                            shortY = - shortY
+                        p1 = (p1[0],p1[1],int(round(x-shortX)), int(round(y-shortY)))
+                        cv2.line(clearMap3, tuple(p1[:2]), tuple(p1[2:]), 220, 3, cv2.LINE_AA)
+                    if len2 > wallPathOffset :       
+                        shortX  = wallPathOffset * math.cos(ar)
+                        shortY  = wallPathOffset * math.sin(ar)
+                        if path[1] > path[3] :
+                            print("neg slope")
+                            shortY = - shortY
+                        p2 = (int(round(x+shortX)), int(round(y+shortY)),p2[2],p2[3])
+                        cv2.line(clearMap3, tuple(p2[:2]), tuple(p2[2:]), 220, 3, cv2.LINE_AA)
+                        
+                    
+                # full and touching 
+                
+                #Else find collision location
+                
+                    #Split path at this location
+        
             
         # cv2.namedWindow("output1", cv2.WINDOW_NORMAL)    
         # cv2.imshow('output1',clearMap1)            
