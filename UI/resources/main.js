@@ -85,6 +85,10 @@ $(document).ready(function(){
     s.onmessage = function(e) {
         data = JSON.parse(e.data);
         $("#debugdata").html("") ;
+        // Write to ultrasonic debug screen
+
+        // Delete ultrasonic data 
+        
         $.each(data, function(i,j){
             $("#debugdata").append("<br>"+i+":"+j)
         })
@@ -229,7 +233,7 @@ $(document).ready(function(){
         $('a[id^="link-"]').removeClass("active");
         $("#div-home").show();
         $(this).addClass("active");
-        if($(window).width() < 991){ // if window width less than 991, ie the menu is shrank, collapse the menu item
+        if($(window).width() < 768){ // if window width less than 768, ie the menu is shrank, collapse the menu item
             $('#navbarNav').toggle("collapse");
         }
     }) ;
@@ -239,7 +243,7 @@ $(document).ready(function(){
         $('a[id^="link-"]').removeClass("active");
         $("#div-control").show();
         $(this).addClass("active");
-        if($(window).width() < 991){
+        if($(window).width() < 768){
             $('#navbarNav').toggle("collapse");
         }
     }) ;
@@ -249,7 +253,7 @@ $(document).ready(function(){
                 $('a[id^="link-"]').removeClass("active");
                 $("#div-nav").show();
                 $(this).addClass("active");
-                if($(window).width() < 991){
+                if($(window).width() < 768){
                     $('#navbarNav').toggle("collapse");
                 }
                 imageObj.onload = function() {
@@ -306,7 +310,7 @@ $(document).ready(function(){
         $('a[id^="link-"]').removeClass("active");
         $("#div-debug").show();
         $(this).addClass("active");
-        if($(window).width() < 991){
+        if($(window).width() < 768){
             $('#navbarNav').toggle("collapse");
         }
     }) ;
@@ -316,14 +320,14 @@ $(document).ready(function(){
         $('a[id^="link-"]').removeClass("active");
         $("#div-status").show();
         $(this).addClass("active");
-        if($(window).width() < 991){
+        if($(window).width() < 768){
             $('#navbarNav').toggle("collapse");
         }
     }) ;
 
     $("#link-settings").click(function(){
         $("#settings-modal").modal("show") ;
-        if($(window).width() < 991){
+        if($(window).width() < 768){
             $('#navbarNav').toggle("collapse");
         }
         

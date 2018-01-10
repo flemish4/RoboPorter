@@ -3,15 +3,15 @@ session_start() ;
 if(!isset($_SESSION['loggedin'])){
 	header("Location: login/");
 };
-?> -->
+?>  -->
 
 <!doctype html>
 <html lang="en">
 <head>
 	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 	
-	<script type="text/javascript" src="resources/jquery-3.2.1.min.js"></script> 
-	<script src="resources/popper.js" crossorigin="anonymous"></script>
+	<script type="text/javascript" src="resources/js/jquery-3.2.1.min.js"></script> 
+	<script src="resources/js/popper.js" crossorigin="anonymous"></script>
 	<script src="resources/js/bootstrap.min.js" crossorigin="anonymous"></script>
 	<script type="text/javascript" src="resources/main.js"></script>
 	
@@ -47,7 +47,7 @@ if(!isset($_SESSION['loggedin'])){
 						<li><a class="nav-item nav-link" href="#" id="link-settings">Settings</a></li>
 					</ul>
 					<ul class="nav navbar-nav ml-auto">
-						<!-- <?php echo '<li><a class="nav-item nav-link" href="#">Hello '.ucfirst($_SESSION['loggedin']).'</a></li>' ?> -->
+						<!-- <?php echo '<li><a class="nav-item nav-link" href="#">Hello '.ucfirst($_SESSION['loggedin']).'</a></li>' ?> --> 
 						<li><a class="nav-item nav-link" href="php/logout.php">Sign Out</a></li>
 					</ul>
 				</div>
@@ -135,7 +135,6 @@ if(!isset($_SESSION['loggedin'])){
 							<div class="row">
 								<div class="col-12">
 									<div class="tab-content" id="settings-content" style="margin:2%;">
-
 										<!-- General Settings -->
 										<div class="tab-pane fade show active" id="home-settings" role="tabpanel"style="margin-top:1vh;">
 											<h5>General Settings</h5>
@@ -144,8 +143,8 @@ if(!isset($_SESSION['loggedin'])){
 										<!-- User Settings -->
 										<div class="tab-pane fade" id="user-settings" role="tabpanel" style="padding-top:1vh;">
 											<div class="row">
-												<div class="col-6">
-													<div class="card" id="new_user_card">
+												<div class="col-lg-6 col-12">
+													<div class="card" id="new_user_card" style="margin-top:2%;">
 														<div class="card-body">
 															<form id="new_user" action="#">
 																<div class="form-group">
@@ -160,14 +159,13 @@ if(!isset($_SESSION['loggedin'])){
 																	<input type="submit" value="Create New User" class="btn btn-primary" style="margin-top:1vh;">
 																	<div class="alert alert-danger" id="new_user_warning" style="margin-top:2vh;"></div>
 																	<div class="alert alert-success" id="new_user_success" style="margin-top:2vh;">Success!!</div>
-																	
 																</div>
 															</form>
 														</div>
 													</div>
 												</div>
-												<div class="col-6">
-													<div class="card" id="new_user_card">
+												<div class="col-lg-6 col-12" >
+													<div class="card" id="new_user_card" style="margin-top:2%;">
 														<div class="card-body">
 															<form id="change_pass" action="#">
 																<div class="form-group">
@@ -330,7 +328,9 @@ if(!isset($_SESSION['loggedin'])){
 					</div>
 				</div>
 				<div class="col-12 col-md-6">
-
+					<div>Left Speed Vector:<span id="debug-left-speed"></span></div>
+					<div>Right Speed Vector:<span id="debug-right-speed"></span></div>
+					<div>Right Speed Vector:<span id="debug-obstruction"></span></div>
 				</div>
 			</div>
 
