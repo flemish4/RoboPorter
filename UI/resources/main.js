@@ -28,23 +28,23 @@ $(document).ready(function(){
     var csize = $("#DebugCanvasDiv").width() ;   // Get width of canvas div
     debug_canvas1.width = csize ; // set canvas width to size of div width
     debug_canvas1.height = csize ; // set height to div width i.e. make the canvas square
-    var dscale = 0.25 ; // size of roboporter compared to width of div
+    var dscale = 0.35 ; // size of roboporter compared to width of div
     debug_context1.fillStyle="#595959" ; //roboporter color
     debug_context1.fillRect(((csize/2)-(dscale*csize/2)),(csize/2)-(dscale*csize/2), (csize*dscale) ,(csize*dscale)); // draw roboporter rectangle
     debug_context1.fillStyle="#ff0000" ; //ultrasonic bar color
     var maxbarlen = (csize - dscale*csize)/2 ; // The maximum debug bar length 
     var dh1 = maxbarlen;// length of ultrasonic bar 1
-    var dh2 = 40 ;
-    var dh3 = 60 ;
-    var dh4 = 30 ;
-    var dh5 = 40 ;
-    var dh6 = 50 ; 
-    var dh7 = 30 ;
-    var dh8 = 40 ;
-    var dh9 = 50 ;
-    var dh10 = 60 ;
-    var dh11 = 60 ;
-    var dh12 = 60 ;
+    var dh2 = 0.4*maxbarlen ;
+    var dh3 = maxbarlen ;
+    var dh4 = maxbarlen ;
+    var dh5 = maxbarlen ;
+    var dh6 = maxbarlen ; 
+    var dh7 = maxbarlen ;
+    var dh8 = maxbarlen ;
+    var dh9 = maxbarlen ;
+    var dh10 = maxbarlen ;
+    var dh11 = maxbarlen ;
+    var dh12 = maxbarlen ;
     var dw = dscale*csize/3 ; // ultrasonic bar width
 
     //fil rectangles for the top
@@ -68,16 +68,15 @@ $(document).ready(function(){
     debug_context1.fillRect((csize/2)-(dscale*csize/2)-dh12,(csize/2)*(1-dscale)+dw*2,dh12,dw) ;
     
 
-    
-    setTimeout(() => { // Manages the connection timeout modal. After 22 seconds it fades in an alert saying no connection is available
+    setTimeout(() => { // Manages the connection timeout modal. After 21 seconds it fades in an alert saying no connection is available
         $("#connecting").fadeOut(1000, function(){
             $('#noconnection').fadeIn(1000) ;
-            $('#pagereloadconn').prop('disabled', function(i, v) { return !v;}); // Toggles the availability of the button
+            $('#pagereloadconn').prop('disabled', false); // Toggles the availability of the button
         });   
     }, 21000);
 
     $(".pagereload").click(function(){
-        location.reload();
+        location.reload(true);
     });
 
 
@@ -85,8 +84,6 @@ $(document).ready(function(){
     s.onclose = function(e) { }
     s.onmessage = function(e) {
         data = JSON.parse(e.data);
-        
-
         $("#debugdata").html("") ;
         $.each(data, function(i,j){
             $("#debugdata").append("<br>"+i+":"+j)

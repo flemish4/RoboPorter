@@ -63,8 +63,13 @@ if(!isset($_SESSION['loggedin'])){
 						<h4 class="modal-title">Connecting to Roboporter</h4>
 					</div>	
 					<div class="modal-body">
-						<div id="connecting" class="alert alert-secondary">Connecting....</div>
-						<div id="noconnection" class="alert alert-danger">No Connection Available</div>
+						<div id="connecting" class="alert alert-secondary">Attempting to connect to RoboPorter...</div>
+						<div id="noconnection" class="alert alert-danger">No Connection Available <a class="alert-link" data-toggle="collapse" href="#connection_collapse">Whys this?</a></div>
+						<div class="collapse" id="connection_collapse">
+							<div class="card card-body">
+							The most likely reason for this is that another user is connected to RoboPorter.
+							</div>
+						</div>
 					</div>
 					<div class="modal-footer">
 						<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
