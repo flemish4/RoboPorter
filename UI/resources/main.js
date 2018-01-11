@@ -5,8 +5,9 @@ $(document).ready(function(){
     $("#change_password_warning").hide() ;
     $("#change_password_success").hide() ;
 
-    var timearray = [] ; 
-    var s = new WebSocket("ws://192.168.1.2:5555");
+    var s = new WebSocket("ws://192.168.1.2:5555"); // Creates websocket connection
+
+    // Code below handles mapping canvas
     var canvas1 = document.getElementById('MapCanvas1');
     var context1 = canvas1.getContext('2d');
     var canvas2 = document.getElementById('MapCanvas2');
@@ -23,50 +24,28 @@ $(document).ready(function(){
     var wh_ratio ; 
     var new_height ; 
 
-    var debug_canvas1 = document.getElementById('DebugCanvas1'); // Get Denug Canvas ID
+    // Code below handles Debug Canvas
+    var debug_canvas1 = document.getElementById('DebugCanvas1'); // Get Debug Canvas 1 ID i.e. the grey roboporter box
     var debug_context1 = debug_canvas1.getContext('2d') ; 
+    var debug_canvas2 = document.getElementById('DebugCanvas2'); // Get Debug Canvas 2 ID i.e. the bars
+    var debug_context2 = debug_canvas2.getContext('2d') ; 
     var csize = $("#DebugCanvasDiv").width() ;   // Get width of canvas div
+    $("#DebugCanvasDiv").height(csize+10); // Set height of div plus 10px for padding
     debug_canvas1.width = csize ; // set canvas width to size of div width
     debug_canvas1.height = csize ; // set height to div width i.e. make the canvas square
+    debug_canvas2.width = csize ; 
+    debug_canvas2.height = csize ; 
+    
     var dscale = 0.35 ; // size of roboporter compared to width of div
+
     debug_context1.fillStyle="#595959" ; //roboporter color
     debug_context1.fillRect(((csize/2)-(dscale*csize/2)),(csize/2)-(dscale*csize/2), (csize*dscale) ,(csize*dscale)); // draw roboporter rectangle
-    debug_context1.fillStyle="#ff0000" ; //ultrasonic bar color
-    var maxbarlen = (csize - dscale*csize)/2 ; // The maximum debug bar length 
-    var dh1 = maxbarlen;// length of ultrasonic bar 1
-    var dh2 = 0.4*maxbarlen ;
-    var dh3 = maxbarlen ;
-    var dh4 = maxbarlen ;
-    var dh5 = maxbarlen ;
-    var dh6 = maxbarlen ; 
-    var dh7 = maxbarlen ;
-    var dh8 = maxbarlen ;
-    var dh9 = maxbarlen ;
-    var dh10 = maxbarlen ;
-    var dh11 = maxbarlen ;
-    var dh12 = maxbarlen ;
-    var dw = dscale*csize/3 ; // ultrasonic bar width
-
-    //fil rectangles for the top
-    debug_context1.fillRect((csize/2)*(1-dscale),(csize/2)*(1-dscale)-dh1,dw,dh1) ;
-    debug_context1.fillRect((csize/2)*(1-dscale)+dw,(csize/2)*(1-dscale)-dh2,dw,dh2) ;
-    debug_context1.fillRect((csize/2)*(1-dscale)+(dw*2),(csize/2)*(1-dscale)-dh3,dw,dh3) ;
-
-    //fill rectangles for the right side
-    debug_context1.fillRect((csize/2)+(dscale*csize/2),(csize/2)*(1-dscale),dh4,dw) ;
-    debug_context1.fillRect((csize/2)+(dscale*csize/2),(csize/2)*(1-dscale)+dw,dh5,dw) ;
-    debug_context1.fillRect((csize/2)+(dscale*csize/2),(csize/2)*(1-dscale)+dw*2,dh6,dw) ;
-
-    //fill rectangles for the base
-    debug_context1.fillRect((csize/2)*(1-dscale),(csize/2)*(1-dscale)+(csize*dscale),dw,dh7) ;
-    debug_context1.fillRect((csize/2)*(1-dscale)+dw,(csize/2)*(1-dscale)+(csize*dscale),dw,dh8) ;
-    debug_context1.fillRect((csize/2)*(1-dscale)+(dw*2),(csize/2)*(1-dscale)+(csize*dscale),dw,dh9) ;
-
-    //fill rectangles for the left side
-    debug_context1.fillRect((csize/2)-(dscale*csize/2)-dh10,(csize/2)*(1-dscale),dh10,dw) ;
-    debug_context1.fillRect((csize/2)-(dscale*csize/2)-dh11,(csize/2)*(1-dscale)+dw,dh11,dw) ;
-    debug_context1.fillRect((csize/2)-(dscale*csize/2)-dh12,(csize/2)*(1-dscale)+dw*2,dh12,dw) ;
     
+    // Draw some text that shows when there is no debug data available
+    debug_context2.fillStyle="Red" ; //Text Color
+    debug_context2.font = "30px Arial"; // Font and 
+    debug_context2.fillText("No Debug Data Available",10,50);
+    debug_context2.fillStyle="#ff0000" ; //ultrasonic bar color
 
     setTimeout(() => { // Manages the connection timeout modal. After 21 seconds it fades in an alert saying no connection is available
         $("#connecting").fadeOut(1000, function(){
@@ -79,20 +58,76 @@ $(document).ready(function(){
         location.reload(true);
     });
 
-
     s.onopen = function(e) { $("#noconnection-modal").modal("hide");}
     s.onclose = function(e) { }
     s.onmessage = function(e) {
+        
         data = JSON.parse(e.data);
-        $("#debugdata").html("") ;
+
+        $("#debugdata").html("") ; // Clear previous values
+        debug_context2.clearRect(0, 0, canvas.width, canvas.height);
+        
         // Write to ultrasonic debug screen
+        var maxbarlen = (csize - dscale*csize)/2 ; // The maximum debug bar length 
+        var dh1 = maxbarlen;// length of ultrasonic bar 1
+        var dh2 = 0.4*maxbarlen ;
+        var dh3 = maxbarlen ;
+        var dh4 = maxbarlen ;
+        var dh5 = maxbarlen ;
+        var dh6 = maxbarlen ; 
+        var dh7 = maxbarlen ;
+        var dh8 = maxbarlen ;
+        var dh9 = maxbarlen ;
+        var dh10 = maxbarlen ;
+        var dh11 = maxbarlen ;
+        var dh12 = maxbarlen ;
+        var dw = dscale*csize/3 ; // ultrasonic bar width
+
+        //fill rectangles for the top
+        debug_context2.fillRect((csize/2)*(1-dscale),(csize/2)*(1-dscale)-dh1,dw,dh1) ;
+        debug_context2.fillRect((csize/2)*(1-dscale)+dw,(csize/2)*(1-dscale)-dh2,dw,dh2) ;
+        debug_context2.fillRect((csize/2)*(1-dscale)+(dw*2),(csize/2)*(1-dscale)-dh3,dw,dh3) ;
+
+        //fill rectangles for the right side
+        debug_context2.fillRect((csize/2)+(dscale*csize/2),(csize/2)*(1-dscale),dh4,dw) ;
+        debug_context2.fillRect((csize/2)+(dscale*csize/2),(csize/2)*(1-dscale)+dw,dh5,dw) ;
+        debug_context2.fillRect((csize/2)+(dscale*csize/2),(csize/2)*(1-dscale)+dw*2,dh6,dw) ;
+
+        //fill rectangles for the base
+        debug_context2.fillRect((csize/2)*(1-dscale),(csize/2)*(1-dscale)+(csize*dscale),dw,dh7) ;
+        debug_context2.fillRect((csize/2)*(1-dscale)+dw,(csize/2)*(1-dscale)+(csize*dscale),dw,dh8) ;
+        debug_context2.fillRect((csize/2)*(1-dscale)+(dw*2),(csize/2)*(1-dscale)+(csize*dscale),dw,dh9) ;
+
+        //fill rectangles for the left side
+        debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh10,(csize/2)*(1-dscale),dh10,dw) ;
+        debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh11,(csize/2)*(1-dscale)+dw,dh11,dw) ;
+        debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh12,(csize/2)*(1-dscale)+dw*2,dh12,dw) ;
 
         // Delete ultrasonic data 
-        
+        delete data["US1"]
+        delete data["US2"]
+        delete data["US3"]
+        delete data["US4"]
+        delete data["US5"]
+        delete data["US6"]
+        delete data["US7"]
+        delete data["US8"]
+        delete data["US9"]
+        delete data["US10"]
+        delete data["US11"]
+        delete data["US12"]
+
+        //Print any remaining debug data 
         $.each(data, function(i,j){
             $("#debugdata").append("<br>"+i+":"+j)
         })
+
+        //Print data to home screen.
+        $("#home-debug-data").html("Speed Vector Left:"+data["Speed Vector 1"]+"<br> Speed Vector Right"+data["Speed Vector 2"])
+    
     }
+
+
         
     $('div[id^="div-"]').hide();
     $("#div-home").show();
@@ -193,19 +228,19 @@ $(document).ready(function(){
         }
     }) ;
 
-    $('#left-btn').click(function(){
+    $('.left-btn').click(function(){
         s.send("l")
     });
 
-    $('#right-btn').click(function(){
+    $('.right-btn').click(function(){
         s.send("r")
     });
 
-    $('#forward-btn').click(function(){
+    $('.forward-btn').click(function(){
         s.send("f")
     });
 
-    $('#back-btn').click(function(){
+    $('.back-btn').click(function(){
         s.send("b")
     });
 
@@ -213,7 +248,7 @@ $(document).ready(function(){
         s.send("a")
     });
 
-    $('#stop-btn').click(function(){
+    $('.stop-btn').click(function(){
         s.send("x")
     });
 

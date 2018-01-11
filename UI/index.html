@@ -67,12 +67,13 @@ if(!isset($_SESSION['loggedin'])){
 						<div id="noconnection" class="alert alert-danger">No Connection Available <a class="alert-link" data-toggle="collapse" href="#connection_collapse">Whys this?</a></div>
 						<div class="collapse" id="connection_collapse">
 							<div class="card card-body">
-							The most likely reason for this is that another user is connected to RoboPorter.
+							The most likely reason for this is that another user is connected to RoboPorter. You can force close the modal here:<br><br>
+							<button type="button" class="btn btn-default" data-dismiss="modal">Force Close Modal</button>
 							</div>
 						</div>
 					</div>
 					<div class="modal-footer">
-						<button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+							<button type="button" class="btn btn-default" data-dismiss="modal">Force Close Modal</button>
 						<button id="pagereloadconn" class="btn btn-success pagereload"  disabled>Reload Page<span class="glyphicon glyphicon-refresh"></span></button>
 					</div>
 				</div>
@@ -191,8 +192,7 @@ if(!isset($_SESSION['loggedin'])){
 										</div>
 									</div>
 								</div>
-							</div>
-							
+							</div>	
 						</div>
 					</div>
 					<div class="modal-footer">
@@ -208,11 +208,12 @@ if(!isset($_SESSION['loggedin'])){
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Home</h2></div></div>
 			<div class="row">
 				<div class="col-12 col-md-6" style="margin-bottom:1vh;">
-					<div class="card wd-100">
+					<div class="card">
 						<div class="card-body">
 							<h5 class="card-title">
 								Status
 							</h5>
+							<span id="current-status">No status to show!</span>
 						</div>
 					</div>
 				</div>
@@ -231,6 +232,44 @@ if(!isset($_SESSION['loggedin'])){
 					</div>
 				</div>
 			</div>
+			<div class="row">
+				<div class="col-12 col-md-6" style="margin-bottom:1vh;">
+					<div class="card">
+						<div class="card-body">
+							<h5 class="card-title">
+								Quick Control
+							</h5>
+							<div class="row no-gutters justify-content-center">
+								<div class="col-12 col-lg-8">
+									<div class="row justify-content-center" style="margin:1%;">
+										<div class="col-6"><button class="btn btn-secondary forward-button" style="width:100%;">Forward</button></div>
+									</div>	
+									<div class="row justify-content-center" style="margin:1%;">
+										<div class="col-6" ><button class="btn btn-secondary left-btn" style="width:100%;">Left</button></div>
+										<div class="col-6" ><button class="btn btn-secondary right-btn" style="width:100%;">Right</button></div>
+									</div>
+									<div class="row justify-content-center" style="margin:1%;">
+										<div class="col-6"><button class="btn btn-secondary back-btn" style="width:100%;">Backwards</button></div>
+									</div>
+									<div class="row justify-content-center"style="margin:5%;">
+										<button class="btn btn-danger stop-btn" style="width:100%">STOP</button>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="col-12 col-md-6" style="margin-bottom:1vh;">
+					<div class="card">
+						<div class="card-body">
+							<h5 class="card-title">
+								Debug
+							</h5>
+							<span id="home-debug-data">No Data to Show!</span>	
+						</div>
+					</div>
+				</div>
+			</div>
 		</div>
 
 		<!-- Control Screen Div -->
@@ -239,17 +278,17 @@ if(!isset($_SESSION['loggedin'])){
 			<div class="row no-gutters">
 				<div class="col-12 col-md-4">
 					<div class="row justify-content-center" style="margin:1%;">
-						<div class="col-6"><button class="btn btn-secondary" id="forward-btn"style="width:100%;">Forward</button></div>
+						<div class="col-6"><button class="btn btn-secondary forward-button" style="width:100%;">Forward</button></div>
 					</div>	
 					<div class="row justify-content-center" style="margin:1%;">
-						<div class="col-6" ><button class="btn btn-secondary" id="left-btn" style="width:100%;">Left</button></div>
-						<div class="col-6" ><button class="btn btn-secondary" id="right-btn" style="width:100%;">Right</button></div>
+						<div class="col-6" ><button class="btn btn-secondary left-btn"  style="width:100%;">Left</button></div>
+						<div class="col-6" ><button class="btn btn-secondary right-btn"  style="width:100%;">Right</button></div>
 					</div>
 					<div class="row justify-content-center" style="margin:1%;">
-						<div class="col-6"><button class="btn btn-secondary" id="back-btn" style="width:100%;">Backwards</button></div>
+						<div class="col-6"><button class="btn btn-secondary back-btn"  style="width:100%;">Backwards</button></div>
 					</div>
 					<div class="row justify-content-center"style="margin:5%;">
-						<button class="btn btn-danger" id="stop-btn" style="width:100%">STOP</button>
+						<button class="btn btn-danger stop-btn" style="width:100%">STOP</button>
 					</div>
 					<div class="row justify-content-center"style="margin:5%;">
 						<button class="btn" data-toggle="collapse" href="#manualcontrol">Manual Control</button>
@@ -317,24 +356,34 @@ if(!isset($_SESSION['loggedin'])){
 
 		<!-- Debug Div -->
 		<div id="div-debug">
-			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Debug</h2></div></div>	
+			<div class="row" style="margin:1%;">
+				<div class="col-12 text-center">
+					<h2>Debug Information</h2>
+				</div>
+			</div>	
 			<div class="row">
 				<div class="col-12 col-md-6">
 					<div class="row justify-content-center">
 						<h4>Ultrasonic Data</h4>
 					</div>
-					<div class="row" id="DebugCanvasDiv" style="width:100%;">
+					<div class="row justify-content-center" id="DebugCanvasDiv" style="width:100%;">
 						<canvas id="DebugCanvas1" style="position:absolute; border-style:solid ;"></canvas>
+						<canvas id="DebugCanvas2" style="position:absolute; border-style:solid ;"></canvas>
 					</div>
 				</div>
-				<div class="col-12 col-md-6">
-					<div>Left Speed Vector:<span id="debug-left-speed"></span></div>
-					<div>Right Speed Vector:<span id="debug-right-speed"></span></div>
-					<div>Right Speed Vector:<span id="debug-obstruction"></span></div>
+				<div class="col-12 col-md-6" >
+					<div class="row justify-content-center">
+						<h4>RoboPorter Variables</h4>
+					</div>
+					<div class="row">
+						<h5>
+							<span id="debugdata">
+								There is no debug data to show!
+							</span>
+						</h5>
+					</div>
 				</div>
 			</div>
-
-			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center" id="debugdata"></div></div>	
 		</div>
 
 		<!-- Status Div -->
