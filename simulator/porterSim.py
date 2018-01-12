@@ -1668,6 +1668,72 @@ class mappingThread(simThreadBase):
         else:
             return False
     
+    
+    
+    def fixPathWall(self, walls, paths, safetyLen) :
+        (oldPaths, newPaths) = self.fixPathWallCore(walls, paths, safetyLen)
+        # Remove old paths and add new
+        for oldPath in oldPaths :
+            paths.pop(oldPath)
+        paths.update(newPaths)
+
+    
+    # Recursive function - finds all intersections of paths and walls and returns (pathsToRemove, newPaths)
+    # For each path finds first intersection with wall (if any)
+    # Creates new paths that do not intersect as well as list of old paths
+    # Calls this function on new paths to check for more intersections
+    def fixPathWallCore(self, walls, paths, safetyLen) :
+        ## Fix paths with collisions with walls
+        newPaths = {}
+        oldPaths = set()
+        changes = False
+        for path, pathData in paths.iteritems() :
+            for wall, wallData in walls.iteritems() :
+                #If no collision 
+                intersection = self.doIntersect(path, wall)
+                if intersection == 0 :
+                    continue
+                else : #elif intersection >= 1 : # overlap
+                    # Find intersection location
+                    x,y = self.intersection(path, wall)
+                    p1 = (path[0],path[1],x,y)
+                    p2 = (x,y,path[2],path[3])
+                    len1 = getLength(p1)
+                    len2 = getLength(p2)   
+                    a = pathData["angle"] 
+                    ar = math.radians(a) 
+                    if len1 > safetyLen :        
+                        shortX  = safetyLen * math.cos(ar)
+                        shortY  = safetyLen * math.sin(ar)
+                        if path[1] > path[3] :
+                            print("neg slope")
+                            shortY = - shortY
+                        p1 = (p1[0],p1[1],int(round(x-shortX)), int(round(y-shortY)))
+                        newPaths[p1] = {"angle" : a }
+                    if len2 > safetyLen :       
+                        shortX  = safetyLen * math.cos(ar)
+                        shortY  = safetyLen * math.sin(ar)
+                        if path[1] > path[3] :
+                            print("neg slope")
+                            shortY = - shortY
+                        p2 = (int(round(x+shortX)), int(round(y+shortY)),p2[2],p2[3])
+                        newPaths[p2] = {"angle" : a }
+                        
+                    oldPaths.add(path) 
+                    # This path has now been removed so don't check it against other walls
+                    break
+                                           
+        if len(oldPaths) > 0 :
+            # Check that new paths have no colissions 
+            (oldNewPaths, newNewPaths) = self.fixPathWallCore(walls, newPaths, safetyLen)
+            #Remove oldNewPaths and add newNewPaths
+            for oldNewPath in oldNewPaths :
+                newPaths.pop(oldNewPath)
+            newPaths.update(newNewPaths)
+            
+        return (oldPaths, newPaths)
+            
+    
     def run(self):   
         # May not need all of these
         global USAvgDistances
@@ -1812,8 +1878,8 @@ class mappingThread(simThreadBase):
             pr = math.radians(a + 90) # perperndicular angle
             offsetX = wallPathOffset * math.cos(pr)
             offsetY = wallPathOffset * math.sin(pr)
-            shortX  = wallPathOffset * math.cos(ar)
-            shortY  = wallPathOffset * math.sin(ar)
+            shortX  = -5*wallPathOffset * math.cos(ar)
+            shortY  = -5*wallPathOffset * math.sin(ar)
             print("################################")
             print("wall: " + str(wall))
             print("a: " + str(a) + ", ar: " + str(ar) + ", pr: " + str(pr))
@@ -1821,8 +1887,6 @@ class mappingThread(simThreadBase):
             if wall[1] > wall[3] :
                 print("neg slope")
                 shortY = - shortY
-            shortX = 0
-            shortY = 0
             # Add paths either side of the wall
             p1 = (int(round(wall[0]+offsetX+shortX)), int(round(wall[1]+offsetY+shortY)), int(round(wall[2]+offsetX-shortX)), int(round(wall[3]+offsetY-shortY)))
             p2 = (int(round(wall[0]-offsetX+shortX)), int(round(wall[1]-offsetY+shortY)), int(round(wall[2]-offsetX-shortX)), int(round(wall[3]-offsetY-shortY)))
@@ -1839,50 +1903,15 @@ class mappingThread(simThreadBase):
                 break
            
         # To remove overlapping lines caused by walls being ~ 2* wallPathOffset apart
-        self.simplifyLines(paths)    
         
+
+        # In place modifications of paths - removes paths which intersect and creates new
+        self.fixPathWall(walls, paths, wallPathOffset)
+        self.simplifyLines(paths)    
+                
         # Display results
         for path in paths : 
-            cv2.line(clearMap3, tuple(path[:2]), tuple(path[2:]), 150, 3, cv2.LINE_AA)
-        ## Fix paths with collisions
-        newPaths = {}
-        oldPaths = set()
-        changes = False
-        #while True :
-        for path, pathData in paths.iteritems() :
-            for wall, wallData in walls.iteritems() :
-                #If no collision 
-                intersection = self.doIntersect(path, wall)
-                if intersection == 0 :
-                    continue
-                elif intersection == 1 : # full overlap
-                    # Find intersection location
-                    x,y = self.intersection(path, wall)
-                    cv2.circle(clearMap3, (x,y), 10, 100, thickness=1, lineType=9, shift=0)
-                    p1 = (path[0],path[1],x,y)
-                    p2 = (x,y,path[2],path[3])
-                    len1 = getLength(p1)
-                    len2 = getLength(p2)   
-                    a = pathData["angle"] 
-                    ar = math.radians(a) 
-                    if len1 > wallPathOffset :        
-                        shortX  = wallPathOffset * math.cos(ar)
-                        shortY  = wallPathOffset * math.sin(ar)
-                        if path[1] > path[3] :
-                            print("neg slope")
-                            shortY = - shortY
-                        p1 = (p1[0],p1[1],int(round(x-shortX)), int(round(y-shortY)))
-                        cv2.line(clearMap3, tuple(p1[:2]), tuple(p1[2:]), 220, 3, cv2.LINE_AA)
-                    if len2 > wallPathOffset :       
-                        shortX  = wallPathOffset * math.cos(ar)
-                        shortY  = wallPathOffset * math.sin(ar)
-                        if path[1] > path[3] :
-                            print("neg slope")
-                            shortY = - shortY
-                        p2 = (int(round(x+shortX)), int(round(y+shortY)),p2[2],p2[3])
-                        cv2.line(clearMap3, tuple(p2[:2]), tuple(p2[2:]), 220, 3, cv2.LINE_AA)
-                        
-                    
+            cv2.line(clearMap3, tuple(path[:2]), tuple(path[2:]), 150, 3, cv2.LINE_AA)    
                 # full and touching 
                 
                 #Else find collision location
