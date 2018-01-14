@@ -930,8 +930,8 @@ class pathMapClass() :
         self.mapGridResolution       = 10 #cm how far apart are the grid nodes
         self.wallSafetyDistance      = realPorterSize[0] / 2
         self.wallSafetyGridRadius    = math.ceil(self.wallSafetyDistance / self.mapGridResolution)
-        self.cornerPenaltyWeight     = 100
-        self.cornerAngleWeight       = 100
+        self.cornerPenaltyWeight     = 10
+        self.cornerAngleWeight       = 10
         self.angleOffsetLookup       = { 0 : [0,-1,0],
                                     1 : [1,-1,45],
                                     2 : [1,0,90],
@@ -1295,10 +1295,11 @@ class simThreadBase(MultiThreadBase) :
         global dataMap
         global threadLock
         file = open("aStar.log", "w")
-        #file.write("start: " + str(start) + ", goal: " + str(goal))
+        file.write("start: " + str(start) + ", goal: " + str(goal) + "\n")
         
         start = (roundBase(start[0],map.mapGridResolution),roundBase(start[1],map.mapGridResolution),start[2])
         goal  = (roundBase(goal[0],map.mapGridResolution),roundBase(goal[1],map.mapGridResolution))
+        file.write("start: " + str(start) + ", goal: " + str(goal) + "\n")
 
         with threadLock :
             dataMap = set()
@@ -1347,9 +1348,7 @@ class simThreadBase(MultiThreadBase) :
                     #file.write("updated" + "\n")
                                 
             file.write("Current node: " + str(current) + "\n")
-            dx = abs(current[0] - goal[0])
-            dy = abs(current[1] - goal[1])
-            if (dx < 20) and (dy <20) :
+            if (current[0],current[1]) == goal :
                 path = self.reconstruct_path(cameFrom, current)
                 with threadLock :
                     dataMap = path
