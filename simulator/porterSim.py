@@ -930,10 +930,10 @@ class pathMapClass() :
         self.mapGridResolution       = 10 #cm how far apart are the grid nodes
         self.wallSafetyDistance      = realPorterSize[0] / 2
         self.wallSafetyGridRadius    = math.ceil(self.wallSafetyDistance / self.mapGridResolution)
-        self.cornerPenaltyWeight     = 10 **2#200 **2
-        self.cornerAngleWeight       = 10 **2#50 **2
+        self.cornerPenaltyWeight     = 100
+        self.cornerAngleWeight       = 100
         self.angleOffsetLookup       = { 0 : [0,-1,0],
-                                    1 : [1,1,45],
+                                    1 : [1,-1,45],
                                     2 : [1,0,90],
                                     3 : [1,1,135],
                                     4 : [0,1,180],
@@ -989,41 +989,26 @@ class pathMapClass() :
         file = open("getNeighbors.log","w")
         file.write("New#########################" + "\n")
         edges = {}
-        # x = roundBase(id[0],self.mapGridResolution)
-        # y = roundBase(id[1],self.mapGridResolution)
         x = id[0]
         y = id[1]
         a = id[2]
-        # Add link to next node
-        # Calc the new cell location
-        nx = x + self.angleOffsetLookup[a][0]*self.mapGridResolution
-        ny = y + self.angleOffsetLookup[a][1]*self.mapGridResolution
-        # Calc distance to goal
-        dist = getLengthSquared([dest[0],dest[1],nx,ny]) # math.sqrt(( dest[0] - nx )**2 + ( dest[1] - ny )**2)
-        # Calc distance between the two cells (weight)
-        weight = getLengthSquared([x,y,nx,ny]) #math.sqrt(( x - nx )**2 + ( y - ny )**2)
-        # Check that cell in current directiom is not wall
-        #if not ((nx,ny) in self.wallMap) :
-                                     # This angle is equal to a*45
-        #if self.checkLine(x, y, dist, self.angleOffsetLookup[a][2]) :
-            # edges[(nx, ny, constrainInt(a+4,8,0))] = { "weight"     : weight,
-                                                            # "distToGoal" : dist}  
-        if not self.isWall((nx,ny)) :
-            edges[(nx, ny, a)] = {  "weight"     : weight,
-                                    "distToGoal" : dist}
         # Add links to same node at different angles
         # Distance from this square to the destination
-        dist = getLengthSquared([x,y,dest[0],dest[1]]) # math.sqrt(( x - dest[0] )**2 + ( y - dest[1] )**2)
         for aLink in range(0,8) :
-            if aLink != a :
-                #printVars({"weight"        : self.cornerPenaltyWeight + abs(aLink-a)*self.cornerAngleWeight,
-                #                "distToGoal"    : dist,
-                #                "cornerP"       : self.cornerPenaltyWeight,
-                #                "t3"            : abs(aLink-a)*self.cornerAngleWeight}, "edgeTest")
-                file.write("A: " + str(a) + ", nA: " + str(aLink) + ", dA: " + str(abs(aLink-a)) + "\n")
-                file.write("aW: " + str(self.angleWeight[abs(aLink-a)]) + ", res: " + str(self.angleWeight[abs(aLink-a)]*self.cornerAngleWeight) + "\n")
-                edges[(x,y,aLink)] = { "weight" : self.cornerPenaltyWeight + self.angleWeight[abs(aLink-a)]*self.cornerAngleWeight,
-                                       "distToGoal" : dist, }
+            # Calc the new cell location
+            nx = x + self.angleOffsetLookup[aLink][0]*self.mapGridResolution
+            ny = y + self.angleOffsetLookup[aLink][1]*self.mapGridResolution
+        
+            if not self.isWall((nx,ny)) :
+                # Calc distance to goal
+                dist = getLengthSquared([dest[0],dest[1],nx,ny]) # math.sqrt(( dest[0] - nx )**2 + ( dest[1] - ny )**2)
+                # Calc distance between the two cells (weight)
+                weight = (abs(self.angleOffsetLookup[aLink][0])+abs(self.angleOffsetLookup[aLink][1]))*self.mapGridResolution #math.sqrt(( x - nx )**2 + ( y - ny )**2)
+                if aLink != a :
+                    weight += self.cornerPenaltyWeight + self.angleWeight[abs(aLink-a)]*self.cornerAngleWeight
+
+                edges[(nx, ny, aLink)] = {  "weight"     : weight,
+                                        "distToGoal" : dist}
 
         return edges
         
@@ -1309,7 +1294,7 @@ class simThreadBase(MultiThreadBase) :
         global exitFlag
         global dataMap
         global threadLock
-        #file = open("aStar.log", "w")
+        file = open("aStar.log", "w")
         #file.write("start: " + str(start) + ", goal: " + str(goal))
         
         start = (roundBase(start[0],map.mapGridResolution),roundBase(start[1],map.mapGridResolution),start[2])
@@ -1361,14 +1346,14 @@ class simThreadBase(MultiThreadBase) :
                     current = node
                     #file.write("updated" + "\n")
                                 
-            #file.write("Current node: " + str(current) + "\n")
+            file.write("Current node: " + str(current) + "\n")
             dx = abs(current[0] - goal[0])
             dy = abs(current[1] - goal[1])
             if (dx < 20) and (dy <20) :
                 path = self.reconstruct_path(cameFrom, current)
                 with threadLock :
                     dataMap = path
-                #file.close()
+                file.close()
                 return path
 
             openSet.discard(current)
@@ -1379,7 +1364,7 @@ class simThreadBase(MultiThreadBase) :
                     dataMap.add((node[0],node[1]))
             
             neighbors = map.getNeighbors(current, goal)
-            #file.write("neighbors: " + str(neighbors) + "\n")
+            file.write("neighbors: " + str(neighbors) + "\n")
             for neighbor, data in neighbors.iteritems() :
                 #file.write("Neighbor: " + str(neighbor) + "\n")
                 #file.write("closedSet: " + str(closedSet) + "\n")
@@ -1410,7 +1395,7 @@ class simThreadBase(MultiThreadBase) :
                 #file.write("gScore: " + str(tentative_gScore) + "\n")
                 #file.write("fScore: " + str(fScore[neighbor]) + "\n")
 
-        #file.close()
+        file.close()
         return False
 
     
