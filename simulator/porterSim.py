@@ -36,7 +36,8 @@ global realPorterRadius
 global dataMap
 global realDataMap
 global wheelError
-
+global navMap
+navMap = set()
 wheelError          = 0
 manControl          = False    
 dataMap             = set()
@@ -573,6 +574,13 @@ class porterSim() :
             for point in lidarMap :
                 pygame.draw.circle(self.views["portermap"]["surface"], self.black, (point[0]/self.scale,point[1]/self.scale), 1)
     
+    def drawNavMap(self) :
+        global navMap
+        global threadLock
+        with threadLock : 
+            for point in navMap :
+                pygame.draw.circle(self.views["portermap"]["surface"], self.black, (point[0]/self.scale,point[1]/self.scale), 1)
+    
     def drawDataMap(self) :
         global dataMap
         global threadLock
@@ -800,6 +808,7 @@ class porterSim() :
                     self.drawLidarGrid()
                     self.drawDataMap()
                     self.drawRealDataMap()
+                    self.drawNavMap()
                 
             
             if self.simRunning : 
@@ -902,7 +911,7 @@ class porterSim() :
                 x   = porterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)
                 y   = porterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)
                 with threadLock :
-                    dataMap.add((int(round(x),int(y))))
+                    dataMap.add((int(round(x)),int(round(y))))
 
                 if (math.fabs(leftDelta - rightDelta) < 1.0e-6) : # basically going straight
                     new_x = x + leftDelta * math.cos(orientation);
@@ -924,12 +933,14 @@ class porterSim() :
 
 
 class pathMapClass() :
-    def __init__(self, lidarMapStore) :
+    def __init__(self, lidarMapStore, dilateAmount) :
         global realPorterSize
+        global threadLock
+        global navMap
         self.wallMap = set()
         self.mapGridResolution       = 10 #cm how far apart are the grid nodes
         self.wallSafetyDistance      = realPorterSize[0] / 2
-        self.wallSafetyGridRadius    = math.ceil(self.wallSafetyDistance / self.mapGridResolution)
+        self.wallSafetyGridRadius    = math.ceil(self.wallSafetyDistance / self.mapGridResolution) *15
         self.cornerPenaltyWeight     = 10
         self.cornerAngleWeight       = 10
         self.angleOffsetLookup       = { 0 : [0,-1,0],
@@ -968,7 +979,8 @@ class pathMapClass() :
                     self.pathMapLimits["yMin"] = point[1]
                 if point[1] > self.pathMapLimits["yMax"] :
                     self.pathMapLimits["yMax"] = point[1]
-                    
+        
+        # Adjust max/mins for size of porter
         self.pathMapLimits["xMin"] = self.pathMapLimits["xMin"] - realPorterSize[0]*2
         self.pathMapLimits["xMax"] = self.pathMapLimits["xMax"] + realPorterSize[0]*2
         self.pathMapLimits["yMin"] = self.pathMapLimits["yMin"] - realPorterSize[1]*2
@@ -984,6 +996,9 @@ class pathMapClass() :
                         
                         self.wallMap.add((roundBase(x,self.mapGridResolution),roundBase(y,self.mapGridResolution)))
 
+        with threadLock :
+            navMap = self.wallMap
+    
     
     def getNeighbors(self, id, dest) :
         file = open("getNeighbors.log","w")
@@ -1193,13 +1208,13 @@ class simThreadBase(MultiThreadBase) :
         
         origLocation = porterLocation
         desOrientation = porterOrientation
-        desLocation = [porterLocation[0] - distance * math.cos(math.radians(desOrientation+90)),
-                             porterLocation[1] - distance * math.sin(math.radians(desOrientation+90))]
+        # desLocation = [porterLocation[0] - distance * math.cos(math.radians(desOrientation+90)),
+                             # porterLocation[1] - distance * math.sin(math.radians(desOrientation+90))]
 
         # orientation is critical as any error will severely affect navigation
         # A PID loop will be used to adjust the speedVector to keep the orientation consistent
         # Stop when within Xcm of final destination OR when travelled distance
-        orientationPID = PID(0.05, 0.05, 0)
+        orientationPID = PID(0.05, 0.1, 0)
         orientationPID.SetPoint=0
         orientationPID.setSampleTime(0.01)
         # maintain porterOrientation whilst moving
@@ -1211,7 +1226,7 @@ class simThreadBase(MultiThreadBase) :
             time.sleep(0.01)
             maxSpeeds = self.getMaxSpeeds()
             speed = min(maxSpeeds)
-            print(porterOrientation-desOrientation)
+            #print(porterOrientation-desOrientation)
             orientationAdjust = orientationPID.update(porterOrientation-desOrientation)
             if (orientationAdjust != None) and (abs(orientationAdjust - prevOrientationAdjust)>0.0001) :
                 with threadLock :
@@ -1219,7 +1234,7 @@ class simThreadBase(MultiThreadBase) :
             distSq = (porterLocation[0]-origLocation[0])**2 + (porterLocation[1]-origLocation[1])**2
 
             # until at destination                
-            if ((abs(desLocation[0]-porterLocation[0])<5) and (abs(desLocation[1]-porterLocation[1])<5)) or (distSq >= distance**2) :
+            if (distSq >= distance**2) :
                 atDest = True
                 
         # final speed is the previous speed this must be dealt with later
@@ -1233,7 +1248,7 @@ class simThreadBase(MultiThreadBase) :
         global speedVector
         
         origOrientation = porterOrientation
-        maxSpeeds = self.getMaxSpeeds()
+        maxSpeed = min(self.getMaxSpeeds())
         sign = 1 if angle > 0 else -1
         
         if angle > 0 :        
@@ -1247,17 +1262,17 @@ class simThreadBase(MultiThreadBase) :
             if angle > 0 :        
                 # Turning clockwise therefore right wheel is still
                 with threadLock : 
-                    speedVector = [0, maxSpeeds[1]]
+                    speedVector = [0, maxSpeed]
             else :
                 # Turning anti clockwise therefore left wheel is still
                 with threadLock : 
-                    speedVector = [maxSpeeds[0],0]
+                    speedVector = [maxSpeed,0]
             
         
         if type == "onCentre" :
             # Even speed from each wheel but opposite
             with threadLock : 
-                speedVector = [maxSpeeds[0]*sign*-1,maxSpeeds[1]*sign]
+                speedVector = [maxSpeed*sign*-1,maxSpeed*sign]
         
         #if type == "onRadius" :
         #    pass
@@ -1350,8 +1365,8 @@ class simThreadBase(MultiThreadBase) :
             file.write("Current node: " + str(current) + "\n")
             if (current[0],current[1]) == goal :
                 path = self.reconstruct_path(cameFrom, current)
-                with threadLock :
-                    dataMap = path
+                #with threadLock :
+                #    dataMap = path
                 file.close()
                 return path
 
@@ -1398,12 +1413,24 @@ class simThreadBase(MultiThreadBase) :
         return False
 
     
-    def reconstruct_path(self,cameFrom, current) :
-        total_path = [current]
+    def reconstruct_path(self, cameFrom, current) :
+        totalPath = [current]
+        navPath = [("end", current)]
+        lastKeyNode = current
         while current in cameFrom.keys() :
+            previous = current
             current = cameFrom[current]
-            total_path.append(current)
-        return total_path
+            if current[2] != previous[2] : # if the angle has changed
+                # Append the end of the straight line, the turn and the start of the next
+                totalPath.append(previous)
+                totalPath.append((previous[0],previous[1],current[2]))
+                totalPath.append(current)
+                
+                navPath.append(("moveStraight", getLength([lastKeyNode[0],lastKeyNode[1], previous[0],previous[1]])))
+                navPath.append(("turn", constrainAngle360((previous[2]-current[2])*45,180,-180)))
+                lastKeyNode = current
+        navPath.append(("start", current))
+        return list(reversed(navPath))
     
     
     
@@ -1988,10 +2015,16 @@ class navigationThread(simThreadBase):
             lidarMapStore = lidarMap  
             
         # Create pathMap
-        pathMap = pathMapClass(lidarMapStore)
+        pathMap = pathMapClass(lidarMapStore, realPorterSize[0])
         print("before aStar")
         path = self.aStar((porterLocation[0],porterLocation[1],0), (600,600), pathMap)
         print(path)
+        
+        for instruction in path :
+            if instruction[0] == "turn" :
+                self.moveTurn(instruction[1], "onCentre")
+            elif instruction[0] == "moveStraight" :
+                self.moveStraight(instruction[1])
         
         
         # Things you may want to do
