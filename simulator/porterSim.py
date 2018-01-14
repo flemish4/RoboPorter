@@ -1332,7 +1332,7 @@ class simThreadBase(MultiThreadBase) :
         
         # For the first node, that value is completely heuristic.
         # REVISIT : Is this actually used??
-        fScore[start] = getLength(list(start)+list(goal)) #math.sqrt(( start[0] - goal[0] )**2 + ( start[1] - goal[1] )**2) # distance to dest #heuristic_cost_estimate(start, goal)
+        fScore[start] = getLengthSquared(list(start)+list(goal)) #math.sqrt(( start[0] - goal[0] )**2 + ( start[1] - goal[1] )**2) # distance to dest #heuristic_cost_estimate(start, goal)
 
         while (len(openSet) != 0) and (not exitFlag) :
             # current = the node in openSet having the lowest fScore[] value
