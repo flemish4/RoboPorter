@@ -16,10 +16,7 @@ if(!isset($_SESSION['loggedin'])){
 	<script type="text/javascript" src="resources/main.js"></script>
 	
 	<link rel="stylesheet" href="resources/css/bootstrap.min.css"  crossorigin="anonymous">
-	<!-- <link href="resources/menu.css" rel="stylesheet" type="text/css">
-	<link href="resources/login.css" rel="stylesheet" type="text/css">
-	<link href="resources/main.css" rel="stylesheet" type="text/css">
-	 -->
+	<link rel='shortcut icon' type='image/x-icon' href='favicon.ico' />
 	<title>RoboPorter</title>
 
 	<style>
@@ -29,10 +26,10 @@ if(!isset($_SESSION['loggedin'])){
 
 <body>
 	<div class="container">
-		<!-- Navbar -->
+		<!-- Navbar Below -->
 		<div class="row">
 			<nav class="navbar navbar-expand-md navbar-dark bg-dark" style="width:100% ;">
-				<a class="navbar-brand abs" href="#">Roboporter</a>
+				<a class="navbar-brand abs" href="#"><span class="fas fa-truck"></span>  Roboporter</a>
 				<button class="navbar-toggler" type="button"  id="navbar-toggle-id">
 					<span class="navbar-toggler-icon"></span>
 				</button>
@@ -48,13 +45,14 @@ if(!isset($_SESSION['loggedin'])){
 					</ul>
 					<ul class="nav navbar-nav ml-auto">
 						<!-- <?php echo '<li><a class="nav-item nav-link" href="#">Hello '.ucfirst($_SESSION['loggedin']).'</a></li>' ?>  -->
-						<li><a class="nav-item nav-link" href="php/logout.php">Sign Out</a></li>
+						<li><a class="nav-item nav-link" href="php/logout.php"><span class="fas fa-sign-out-alt"></span>  Sign Out</a></li>
 					</ul>
 				</div>
 			</nav>
 		</div>
 		
-		<!-- On Screen Modals Below -->
+		<!-- ******** On Screen Modals Below ******** -->
+
 		<!-- Connection Modal -->
 		<div class="modal fade" id="noconnection-modal" data-backdrop="static">
 			<div class="modal-dialog">
@@ -70,22 +68,23 @@ if(!isset($_SESSION['loggedin'])){
 						</div>
 						<div id="noconnection" class="alert alert-danger text-center">
 							<span class="fas fa-exclamation-triangle fa-5x"></span>
-							<br><br><h3>No Connection Available 
+							<br><br>
+							<h3>Unable To Connect<br>
 								<a class="alert-link" data-toggle="collapse" href="#connection_collapse">
-									<br>Whys this?
+									Why's this?
 								</a>
 							</h3>
 						</div>
 						<div class="collapse" id="connection_collapse">
 							<div class="card card-body">
-							The most likely reason for this is that another user is connected to RoboPorter. You can force close the modal here:<br><br>
+							The most likely reason for this is that another user is connected to RoboPorter. If you wish to browse the UI you can force close the modal here:<br><br>
 							<button type="button" class="btn btn-default" data-dismiss="modal">Force Close Modal</button>
 							</div>
 						</div>
 					</div>
 					<div class="modal-footer">
 							<button type="button" class="btn btn-default" data-dismiss="modal">Force Close Modal</button>
-						<button id="pagereloadconn" class="btn btn-success pagereload"  disabled>Reload Page<span class="glyphicon glyphicon-refresh"></span></button>
+						<button id="pagereloadconn" class="btn btn-success pagereload"  disabled><span class="fas fa-sync"></span>   Reload Page</button>
 					</div>
 				</div>
 			</div>
@@ -125,7 +124,7 @@ if(!isset($_SESSION['loggedin'])){
 							</div>
 					</div>
 					<div class="modal-footer">
-						<button class="btn btn-success pagereload">Reload Page</button>
+						<button class="btn btn-success pagereload"><span class="fas fa-sync"></span>   Reload Page</button>
 					</div>
 				</div>
 			</div>
@@ -163,7 +162,8 @@ if(!isset($_SESSION['loggedin'])){
 														<div class="card-body">
 															<form id="new_user" action="#">
 																<div class="form-group">
-																	<h5 class="card-title">Create New User</h5>
+																	<h5 class="card-title">Create New User
+																	</h5>
 																	<h6 class="card-subtitle ">Create a new Roboporter User Here</h6>
 																	<!-- <label for="existingpass" style="padding-top:0.5vh;" class="">Confirm Password</label> -->
 																	<input type="password" class="form-control" placeholder="Confirm Current Password" style="margin-top:1vh;" id="current_password_input" name="current_password_input">
@@ -216,7 +216,11 @@ if(!isset($_SESSION['loggedin'])){
 			</div>
 		</div>
 
-		<!-- Content Divs Below -->
+
+
+
+		<!-- ******** Content Divs Below ******** -->
+
 		<!-- Home Screen Div -->
 		<div id="div-home">
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Home</h2></div></div>
@@ -340,7 +344,7 @@ if(!isset($_SESSION['loggedin'])){
 			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Navigation</h2></div></div>
 			<div class="row justify-content-center no-gutters">
 				<div class="col-12 col-md-8" id="mapdiv" style=" width:100%;">
-					<canvas id="MapCanvas1" style="position:absolute; left:0; top:0; border-style:solid ;"></canvas>
+					<canvas id="MapCanvas1" style="position:absolute; left:0; top:0;"></canvas>
 					<canvas id="MapCanvas2" style="z-index:1; position:absolute; left:0; top:0;"></canvas>
 					<canvas id="MapCanvas3" style="z-index:2; position:absolute; left:0; top:0;"></canvas>
 				
@@ -375,22 +379,22 @@ if(!isset($_SESSION['loggedin'])){
 					<h2>Debug Information</h2>
 				</div>
 			</div>	
-			<div class="row">
+			<div class="row no-gutters">
 				<div class="col-12 col-md-6">
-					<div class="row justify-content-center">
+					<div class="row justify-content-center no-gutters">
 						<h4>Ultrasonic Data</h4>
 					</div>
-					<div class="row justify-content-center" id="DebugCanvasDiv" style="width:100%;">
-						<canvas id="DebugCanvas1" style="position:absolute; border-style:solid ;"></canvas>
-						<canvas id="DebugCanvas2" style="position:absolute; border-style:solid ;"></canvas>
+					<div class="row justify-content-center no-gutters" id="DebugCanvasDiv" style="width:100%;">
+						<canvas id="DebugCanvas1" style="position:absolute;"></canvas>
+						<canvas id="DebugCanvas2" style="position:absolute;"></canvas>
 					</div>
 				</div>
 				<div class="col-12 col-md-6" >
 					<div class="row justify-content-center">
 						<h4>RoboPorter Variables</h4>
 					</div>
-					<div class="row">
-						<h5>
+					<div class="row no-gutters">
+						<h5 style="padding-left:2%;">
 							<span id="debugdata">
 								There is no debug data to show!
 							</span>
@@ -400,10 +404,6 @@ if(!isset($_SESSION['loggedin'])){
 			</div>
 		</div>
 
-		<!-- Status Div -->
-		<!-- <div id="div-status">
-			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Status</h2></div></div>	
-		</div> -->
 	</div>
 </body>
 </html>

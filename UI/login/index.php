@@ -6,8 +6,9 @@
 <script type="text/javascript" src="../resources/js/jquery-3.2.1.min.js"></script> 
 <script type="text/javascript" src="../resources/js/popper.js"></script> 
 <script src="../resources/js/bootstrap.min.js"  crossorigin="anonymous"></script>
+<link rel='shortcut icon' type='image/x-icon' href='../favicon.ico' />
 
-
+<title>RoboPorter Login</title>
 <style>
 html, body {
   height: 100%;
@@ -48,46 +49,38 @@ $(document).ready(function(){
     });
 });  
 </script>
-
 </head>
 
 <body>
 
-
 <div class="container-fluid">
-
-<div class="modal hide fade" tabindex="-1" role="dialog" id="Modal">
-  <div class="modal-dialog" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Sign In</h5>
-      </div>
-      <div class="modal-body">
-        <form>
-          <div class="form-group">
-          <label for="username"> Username:</label>
-          <input type="text" class="form-control" name="username"></input>
-          <label for="password">Password:</label>
-          <input type="password" class="form-control" name="password"></input>
-          </div>
-        </form>
-        <div class="alert alert-danger" role="alert" id="failed">
-        Log in failed. Try again!
+  <div class="modal hide fade" tabindex="-1" role="dialog" id="Modal">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Sign In</h5>
         </div>
+        <div class="modal-body">
+          <form>
+            <div class="form-group">
+            <label for="username"> Username:</label>
+            <input type="text" class="form-control" name="username"></input>
+            <label for="password">Password:</label>
+            <input type="password" class="form-control" name="password"></input>
+            </div>
+          </form>
+          <div class="alert alert-danger" role="alert" id="failed">
+          Log in failed. Try again!
+          </div>
 
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-primary" id="submit">Sign In</button>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" id="submit">Sign In</button>
+        </div>
       </div>
     </div>
   </div>
 </div>
-
-</div>
-
-
-
-
 
 </body>
 </html>

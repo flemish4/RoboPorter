@@ -5,7 +5,8 @@ $(document).ready(function(){
     $("#change_password_warning").hide() ;
     $("#change_password_success").hide() ;
 
-    var s = new WebSocket("ws://192.168.1.2:5555"); // Creates websocket connection
+    // Creates websocket connection
+    var s = new WebSocket("ws://192.168.1.2:5555"); 
 
     // Code below handles mapping canvas
     var canvas1 = document.getElementById('MapCanvas1');
@@ -33,19 +34,33 @@ $(document).ready(function(){
     $("#DebugCanvasDiv").height(csize+10); // Set height of div plus 10px for padding
     debug_canvas1.width = csize ; // set canvas width to size of div width
     debug_canvas1.height = csize ; // set height to div width i.e. make the canvas square
-    debug_canvas2.width = csize ; 
+    debug_canvas2.width = csize; 
     debug_canvas2.height = csize ; 
     
-    var dscale = 0.35 ; // size of roboporter compared to width of div
+    //Draw Black Border Around Debug Canvas
+    var borderwidth = 8 ; 
+    debug_context1.beginPath();
+    debug_context1.lineWidth= borderwidth;
+    debug_context1.strokeStyle="black" ; 
+    debug_context1.rect(-0.5,-0.5,csize+0.5,csize+0.5);
+    debug_context1.stroke();
+    
+    // size of roboporter compared to width of div
+    var dscale = 0.35 ; 
 
     debug_context1.fillStyle="#595959" ; //roboporter color
-    debug_context1.fillRect(((csize/2)-(dscale*csize/2)),(csize/2)-(dscale*csize/2), (csize*dscale) ,(csize*dscale)); // draw roboporter rectangle
+    debug_context1.fillRect(((csize/2)-(dscale*csize/2))+0.5,(csize/2)-(dscale*csize/2)+0.5, (csize*dscale) ,(csize*dscale)); // draw roboporter rectangle
     
     // Draw some text that shows when there is no debug data available
     debug_context2.fillStyle="Red" ; //Text Color
     debug_context2.font = "30px Arial"; // Font and 
     debug_context2.fillText("No Debug Data Available",10,50);
     debug_context2.fillStyle="#ff0000" ; //ultrasonic bar color
+
+
+
+
+
 
     setTimeout(() => { // Manages the connection timeout modal. After 21 seconds it fades in an alert saying no connection is available
         $("#connecting").fadeOut(1000, function(){
@@ -58,17 +73,18 @@ $(document).ready(function(){
         location.reload(true);
     });
 
-    s.onopen = function(e) { $("#noconnection-modal").modal("hide");}
+    s.onopen = function(e) {}
     s.onclose = function(e) { }
     s.onmessage = function(e) {
-        
-        data = JSON.parse(e.data);
+
+        $("#noconnection-modal").modal("hide");
+        data = JSON.parse(e.data); // parses the JSON string into a Javascript object
 
         $("#debugdata").html("") ; // Clear previous values
-        debug_context2.clearRect(0, 0, canvas.width, canvas.height);
+        debug_context2.clearRect(0, 0, csize, csize); // Deletes all of the ultrasonic bars already drawn on the canvas
         
         // Write to ultrasonic debug screen
-        var maxbarlen = (csize - dscale*csize)/2 ; // The maximum debug bar length 
+        var maxbarlen = (csize - dscale*csize)/2 ; // The maximum ultrasonic bar length 
         var dh1 = maxbarlen;// length of ultrasonic bar 1
         var dh2 = 0.4*maxbarlen ;
         var dh3 = maxbarlen ;
@@ -102,33 +118,33 @@ $(document).ready(function(){
         debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh10,(csize/2)*(1-dscale),dh10,dw) ;
         debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh11,(csize/2)*(1-dscale)+dw,dh11,dw) ;
         debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh12,(csize/2)*(1-dscale)+dw*2,dh12,dw) ;
+        debug_context2.translate(0.5, 0.5); // Translates everything by half a pizel to stop bluring. The API specifies this has to be done https://stackoverflow.com/questions/8696631/canvas-drawings-like-lines-are-blurry
 
-        // Delete ultrasonic data 
-        delete data["US1"]
-        delete data["US2"]
-        delete data["US3"]
-        delete data["US4"]
-        delete data["US5"]
-        delete data["US6"]
-        delete data["US7"]
-        delete data["US8"]
-        delete data["US9"]
-        delete data["US10"]
-        delete data["US11"]
-        delete data["US12"]
+        // Delete ultrasonic data from javascript object. This allows any remaining data to be printed in a for loop
+        delete data["US1"] ;
+        delete data["US2"] ;
+        delete data["US3"] ;
+        delete data["US4"] ;
+        delete data["US5"] ;
+        delete data["US6"] ;
+        delete data["US7"] ;
+        delete data["US8"] ;
+        delete data["US9"] ;
+        delete data["US10"] ;
+        delete data["US11"];
+        delete data["US12"];
+        delete data["Type"] ;
 
-        //Print any remaining debug data 
+        //Print any remaining debug data to the debug data div
         $.each(data, function(i,j){
-            $("#debugdata").append("<br>"+i+":"+j)
+            $("#debugdata").append("<br>"+i+" : "+j) ;
         })
 
-        //Print data to home screen.
+        //Print data to home screen debug card
         $("#home-debug-data").html("Speed Vector Left:"+data["Speed Vector 1"]+"<br> Speed Vector Right"+data["Speed Vector 2"])
     
     }
 
-
-        
     $('div[id^="div-"]').hide();
     $("#div-home").show();
     $("#new_user_warning").hide();
@@ -293,6 +309,7 @@ $(document).ready(function(){
                 }
                 imageObj.onload = function() {
                     div_width = $('#mapdiv').width() ; 
+
                     canvas1.width = div_width ; 
                     canvas2.width = div_width ; 
                     canvas3.width = div_width ; 
@@ -304,7 +321,14 @@ $(document).ready(function(){
                     canvas3.height = new_height;
                     $("#mapdiv").height(new_height) ;
                     scale = imageObj.width/div_width ;
+
                     context1.drawImage(imageObj, 0, 0 , div_width ,new_height);
+
+                    context1.beginPath(); // draw border around debug canvas
+                    context1.lineWidth= borderwidth;
+                    context1.strokeStyle="black" ; 
+                    context1.rect(-0.5,-0.5,div_width+0.5,new_height+0.5);
+                    context1.stroke();
                 };
                 imageObj.src = 'php/map_generation.php';
             }) ;
