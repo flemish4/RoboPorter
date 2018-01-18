@@ -3,13 +3,13 @@ session_start() ;
 if(!isset($_SESSION['loggedin'])){
 	header("Location: login/");
 };
-?>  -->
+?> -->
 
 <!doctype html>
 <html lang="en">
 <head>
 	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-	
+	<script type="text/javascript" src="resources/js/fontawesome-all.js"></script> 
 	<script type="text/javascript" src="resources/js/jquery-3.2.1.min.js"></script> 
 	<script src="resources/js/popper.js" crossorigin="anonymous"></script>
 	<script src="resources/js/bootstrap.min.js" crossorigin="anonymous"></script>
@@ -47,7 +47,7 @@ if(!isset($_SESSION['loggedin'])){
 						<li><a class="nav-item nav-link" href="#" id="link-settings">Settings</a></li>
 					</ul>
 					<ul class="nav navbar-nav ml-auto">
-						<!-- <?php echo '<li><a class="nav-item nav-link" href="#">Hello '.ucfirst($_SESSION['loggedin']).'</a></li>' ?> --> 
+						<!-- <?php echo '<li><a class="nav-item nav-link" href="#">Hello '.ucfirst($_SESSION['loggedin']).'</a></li>' ?>  -->
 						<li><a class="nav-item nav-link" href="php/logout.php">Sign Out</a></li>
 					</ul>
 				</div>
@@ -63,8 +63,19 @@ if(!isset($_SESSION['loggedin'])){
 						<h4 class="modal-title">Connecting to Roboporter</h4>
 					</div>	
 					<div class="modal-body">
-						<div id="connecting" class="alert alert-secondary">Attempting to connect to RoboPorter...</div>
-						<div id="noconnection" class="alert alert-danger">No Connection Available <a class="alert-link" data-toggle="collapse" href="#connection_collapse">Whys this?</a></div>
+						<div id="connecting" class="alert alert-secondary text-center">
+							<span class="fas fa-cog fa-spin fa-5x"></span> <!--Font Awesome Spining Icon -->
+							<br><br>
+							<h3>Attempting to connect to RoboPorter</h3>
+						</div>
+						<div id="noconnection" class="alert alert-danger text-center">
+							<span class="fas fa-exclamation-triangle fa-5x"></span>
+							<br><br><h3>No Connection Available 
+								<a class="alert-link" data-toggle="collapse" href="#connection_collapse">
+									<br>Whys this?
+								</a>
+							</h3>
+						</div>
 						<div class="collapse" id="connection_collapse">
 							<div class="card card-body">
 							The most likely reason for this is that another user is connected to RoboPorter. You can force close the modal here:<br><br>
@@ -106,9 +117,12 @@ if(!isset($_SESSION['loggedin'])){
 					<div class="modal-header">
 						<h4 class="modal-title">Error</h4>
 					</div>
-						
 					<div class="modal-body">
-						<div id="connecting" class="alert alert-info">An error connecting to the roboporter has occured</div>
+							<div id="error-connection" class="alert alert-danger text-center">
+								<span class="fas fa-exclamation-triangle fa-5x"></span>
+								<br><br>
+								<h3>The Conection to the Roboporter has been lost!</h3>
+							</div>
 					</div>
 					<div class="modal-footer">
 						<button class="btn btn-success pagereload">Reload Page</button>
