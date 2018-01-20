@@ -1,5 +1,8 @@
 <!-- <?php
 session_start() ; 
+ini_set('display_errors',1) ;
+ini_set('display_startup_errors',1) ;
+error_reporting(E_ALL) ;
 if(!isset($_SESSION['loggedin'])){
 	header("Location: login/");
 };
@@ -44,7 +47,7 @@ if(!isset($_SESSION['loggedin'])){
 						<li><a class="nav-item nav-link" href="#" id="link-settings">Settings</a></li>
 					</ul>
 					<ul class="nav navbar-nav ml-auto">
-						<!-- <?php echo '<li><a class="nav-item nav-link" href="#">Hello '.ucfirst($_SESSION['loggedin']).'</a></li>' ?>  -->
+						<!-- <?php if(isset($_SESSION['loggedin'])){echo '<li><a class="nav-item nav-link" href="#">Hello '.ucfirst($_SESSION['loggedin']).'</a></li>';} ?> -->
 						<li><a class="nav-item nav-link" href="php/logout.php"><span class="fas fa-sign-out-alt"></span>  Sign Out</a></li>
 					</ul>
 				</div>

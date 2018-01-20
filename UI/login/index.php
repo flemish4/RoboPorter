@@ -22,6 +22,14 @@ html, body {
 
 <script>
 $(document).ready(function(){
+  <?php
+    if(isset($_GET["status"])){
+      echo '$("#loggedout").show();' ;
+    }else{
+      echo '$("#loggedout").hide();' ;
+    };
+  ?>
+
     $('#Modal').modal({
         backdrop: 'static',
         keyboard: false
@@ -62,6 +70,9 @@ $(document).ready(function(){
         </div>
         <div class="modal-body">
           <form>
+            <div class="alert alert-success" role="alert" id="loggedout">
+            Logged Out Successfully 
+            </div>
             <div class="form-group">
             <label for="username"> Username:</label>
             <input type="text" class="form-control" name="username"></input>
