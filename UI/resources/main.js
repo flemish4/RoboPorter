@@ -6,7 +6,7 @@ $(document).ready(function(){
     $("#change_password_success").hide() ;
 
     // Creates websocket connection
-    var s = new WebSocket("ws://192.168.1.2:5555"); 
+    var s = new WebSocket("ws://192.168.0.1:5555"); 
 
     // Code below handles mapping canvas
     var canvas1 = document.getElementById('MapCanvas1');
@@ -42,7 +42,7 @@ $(document).ready(function(){
     debug_context1.beginPath();
     debug_context1.lineWidth= borderwidth;
     debug_context1.strokeStyle="black" ; 
-    debug_context1.rect(-0.5,-0.5,csize+0.5,csize+0.5);
+    debug_context1.rect(0.5,0.5,csize+0.5,csize+0.5);
     debug_context1.stroke();
     
     // size of roboporter compared to width of div
@@ -81,10 +81,11 @@ $(document).ready(function(){
         data = JSON.parse(e.data); // parses the JSON string into a Javascript object
 
         $("#debugdata").html("") ; // Clear previous values
-        debug_context2.clearRect(0, 0, csize, csize); // Deletes all of the ultrasonic bars already drawn on the canvas
         
+        
+        debug_context2.clearRect(0, 0, csize+0.5, csize+0.5); // Deletes all of the ultrasonic bars already drawn on the canvas
         // Write to ultrasonic debug screen
-        var maxbarlen = (csize - dscale*csize)/2 ; // The maximum ultrasonic bar length 
+        var maxbarlen = (csize - dscale*csize)/2 -borderwidth/2; // The maximum ultrasonic bar length 
         var dh1 = maxbarlen;// length of ultrasonic bar 1
         var dh2 = 0.4*maxbarlen ;
         var dh3 = maxbarlen ;
@@ -100,25 +101,24 @@ $(document).ready(function(){
         var dw = dscale*csize/3 ; // ultrasonic bar width
 
         //fill rectangles for the top
-        debug_context2.fillRect((csize/2)*(1-dscale),(csize/2)*(1-dscale)-dh1,dw,dh1) ;
-        debug_context2.fillRect((csize/2)*(1-dscale)+dw,(csize/2)*(1-dscale)-dh2,dw,dh2) ;
-        debug_context2.fillRect((csize/2)*(1-dscale)+(dw*2),(csize/2)*(1-dscale)-dh3,dw,dh3) ;
+        debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)-dh1+0.5,dw,dh1) ;
+        debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)-dh2+0.5,dw,dh2) ;
+        debug_context2.fillRect((csize/2)*(1-dscale)+(dw*2)+0.5,(csize/2)*(1-dscale)-dh3+0.5,dw,dh3) ;
 
         //fill rectangles for the right side
-        debug_context2.fillRect((csize/2)+(dscale*csize/2),(csize/2)*(1-dscale),dh4,dw) ;
-        debug_context2.fillRect((csize/2)+(dscale*csize/2),(csize/2)*(1-dscale)+dw,dh5,dw) ;
-        debug_context2.fillRect((csize/2)+(dscale*csize/2),(csize/2)*(1-dscale)+dw*2,dh6,dw) ;
+        debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+0.5,dh4,dw) ;
+        debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+dw+0.5,dh5,dw) ;
+        debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+dw*2+0.5,dh6,dw) ;
 
         //fill rectangles for the base
-        debug_context2.fillRect((csize/2)*(1-dscale),(csize/2)*(1-dscale)+(csize*dscale),dw,dh7) ;
-        debug_context2.fillRect((csize/2)*(1-dscale)+dw,(csize/2)*(1-dscale)+(csize*dscale),dw,dh8) ;
-        debug_context2.fillRect((csize/2)*(1-dscale)+(dw*2),(csize/2)*(1-dscale)+(csize*dscale),dw,dh9) ;
+        debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh7) ;
+        debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh8) ;
+        debug_context2.fillRect((csize/2)*(1-dscale)+(dw*2)+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh9) ;
 
         //fill rectangles for the left side
-        debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh10,(csize/2)*(1-dscale),dh10,dw) ;
-        debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh11,(csize/2)*(1-dscale)+dw,dh11,dw) ;
-        debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh12,(csize/2)*(1-dscale)+dw*2,dh12,dw) ;
-        debug_context2.translate(0.5, 0.5); // Translates everything by half a pizel to stop bluring. The API specifies this has to be done https://stackoverflow.com/questions/8696631/canvas-drawings-like-lines-are-blurry
+        debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh10+0.5,(csize/2)*(1-dscale),dh10+0.5,dw) ;
+        debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh11+0.5,(csize/2)*(1-dscale)+dw,dh11+0.5,dw) ;
+        debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh12+0.5,(csize/2)*(1-dscale)+dw*2,dh12+0.5,dw) ;
 
         // Delete ultrasonic data from javascript object. This allows any remaining data to be printed in a for loop
         delete data["US1"] ;

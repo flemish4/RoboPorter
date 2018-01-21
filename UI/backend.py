@@ -16,33 +16,53 @@ global thread_close
 
 # s  Connection from backend to UI
 # s2 Debug info
-# s3 Send commands to Main PI
+# s3 Send commands to Control PI
 
 
 global s
 global s2
 global s3
+connected2 = False
+connected3 = False
 
 s2 = socket.socket()
-host2 = '192.168.1.1'
+host2 = '192.168.0.2'
 port2 = 5003
-s2.connect((host2,port2))
+print "Connecting to Socket 2"
+while connected2 == False:
+    connected2 = True 
+    try:
+        s2.connect((host2,port2))
+    except:
+        connected2 = False
+    time.sleep(0.2)
+print "Connected to Socket 2"
 s2.send("S1")
 s2.setblocking(0)
 
+
 s3 = socket.socket()
-host3 = '192.168.1.1'
+host3 = '192.168.0.2'
 port3 = 5002
-s3.connect((host3,port3))
+
+print "Connecting to Socket 3"
+while connected3 == False:
+    connected3 = True 
+    try:
+        s3.connect((host3,port3))
+    except:
+        connected3 = False
+    time.sleep(0.2)
+print "Connected to Socket 3"
 
 
-def pi_recv():
+def pi_recv(): # Data from Control PI
     global s2
     print "Started Debug Recieve"
     while 1:
         try:
             data = s2.recv(1024)
-            print data
+            # print data
             data_send(data)
         except:
             pass
@@ -61,7 +81,7 @@ def demask(data):
     for eachvalue in data:   
         databytes.append(ord(eachvalue))
     firstmaskbyte = 2
-    if databytes[0] != 138:
+    if databytes[0] != 138 and databytes[0] !=136 : #If not a pong or a closing frame. See data framing in websocket protocol for more info
         mask = [databytes[firstmaskbyte] , databytes[firstmaskbyte+1] , databytes[firstmaskbyte+2] , databytes[firstmaskbyte+3]]
         del databytes[0:6]
         for value in databytes:
@@ -75,7 +95,7 @@ def demask(data):
             finalstring+=chr(value) # append each value to string
         return finalstring;
 
-def ping():
+def ping(): #try to ping UI to check connection
     global s
     sendbytes = []
     sendbytes.append(137)
@@ -98,7 +118,7 @@ def data_send(datatosend):
     s.send(bytearray(sendbytes))	
 
 
-def socket_recieve(s):
+def socket_recieve(s): # Data from User Interface
     global recieved_data
     global thread_close
     data = ""
@@ -156,7 +176,6 @@ Sec-Websocket-Accept:'''+jointkey+'''
     print "Connection to UI Made"
     while connectionopen == True:
         time.sleep(0.2)
-
         try:
             ping()
         except:

@@ -7,7 +7,10 @@ So this is where the Roboporter UI files are stored. It is broken down into two 
 The Backend Software is written in python and is /backend.py This software runs on the second RPi and acts as the link between the UI and the server python code. It is mostly just a piece of software the forwards connections from one program to the other and handles web socket connections.
 
 ## Front End 
-The front end is a web interface built using the Bootstrap framework. To get it working the following steps must be followed on the Raspberry Pi:
+The front end is a web interface built using the Bootstrap framework. 
+
+## Setup to get UI working
+To get the UI working the following steps must be followed on the Raspberry Pi:
 1. Install Apache Web Server 
 2. Install PHP 7 or greater
 3. Install MySql 
@@ -44,11 +47,11 @@ wpa_key_mgmt=WPA-PSK
 wpa_pairwise=TKIP
 rsn_pairwise=CCMP
 
-```
- You can also change the password and SSID at this point.
+``` 
+You can also change the password and SSID at this point.
+
 11. You also need to add `DAEMON_CONF="/etc/hostapd/hostapd.conf"` to `/etc/default/hostapd`
 12. Setup bridge in `/etc/network/interfaces` so it looks like this:
-
 ```
 # This file describes the network interfaces available on your system
 # and how to activate them. For more information, see interfaces(5).
@@ -57,27 +60,18 @@ rsn_pairwise=CCMP
 auto lo
 iface lo inet loopback
 
-# The primary network interface
-#auto eth0
-#iface eth0 inet static
-#       address 192.168.0.2
-#       netmask 255.255.255.0
-#       network 192.168.0.0
-#       broadcast 192.168.0.255
-#       gateway 192.168.0.1
-
 auto br0
 iface br0 inet static
-        address 192.168.0.2
+        address 192.168.0.1
         netmask 255.255.255.0
         network 192.168.0.0
         broadcast 192.168.0.255
         gateway 192.168.0.1
         bridge-ports eth0 wlan0
+``` 
+This bridge simply connects the eth0 and wlan0 interfaces together onto the same subnet.
 
- ``` 
-This bridge simply connects the eth0 and wlan0 interfaces together onto the same subnet 
-13. Configure dnsmasq `/etc/dnsmasq.conf` so that the following lines look like this: `address=/roboporter.local/192.168.0.2` and 
+13. Configure DNSMASQ `/etc/dnsmasq.conf` so that the following lines look like this: `address=/roboporter.local/192.168.0.2` and 
 `dchp-range=192.168.0.5,192.168.0.150,12h`. This redirects roboporter.local to the server and sets the range of IP addresses for the DHCP server.
 
 14. Reboot using `sudo reboot` 
