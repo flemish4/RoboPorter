@@ -3,6 +3,12 @@ import hashlib
 import base64
 import time
 import thread
+import logging
+
+import logging.handlers
+#the mask for data logging
+logging.basicConfig(format='%(asctime)s - (%(threadName)s) %(levelname)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p',
+                    level=logging.INFO) #change the logging level here to change the display verbosity
 
 
 connectionopen = True
@@ -28,7 +34,7 @@ connected3 = False
 s2 = socket.socket()
 host2 = '192.168.0.2'
 port2 = 5003
-print "Connecting to Socket 2"
+logging.info("Connecting to Socket 2")
 while connected2 == False:
     connected2 = True 
     try:
@@ -36,7 +42,7 @@ while connected2 == False:
     except:
         connected2 = False
     time.sleep(0.2)
-print "Connected to Socket 2"
+logging.info("Connected to Socket 2")
 s2.send("S1")
 s2.setblocking(0)
 
@@ -45,7 +51,7 @@ s3 = socket.socket()
 host3 = '192.168.0.2'
 port3 = 5002
 
-print "Connecting to Socket 3"
+logging.info("Connecting to Socket 3")
 while connected3 == False:
     connected3 = True 
     try:
@@ -53,12 +59,12 @@ while connected3 == False:
     except:
         connected3 = False
     time.sleep(0.2)
-print "Connected to Socket 3"
+logging.info("Connected to Socket 3")
 
 
 def pi_recv(): # Data from Control PI
     global s2
-    print "Started Debug Recieve"
+    logging.info("Started Debug Recieve Thread")
     while 1:
         try:
             data = s2.recv(1024)
@@ -126,7 +132,7 @@ def socket_recieve(s): # Data from User Interface
         try:
             data = s.recv(4000)
             data = demask(data)
-            print "Command from interface recieved ="+data
+            logging.info("Command from interface recieved ="+data)
             pi_send(data)
         except:
             pass
@@ -139,7 +145,7 @@ while 1:
     databytes = []
     xordatabytes = []
     finalstring = ""
-    print ("Waiting For Connection to User Interface")
+    logging.info("Waiting For Connection to User Interface")
     s = socket.socket()
     s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
     s.bind((host,port))
@@ -173,7 +179,7 @@ Sec-Websocket-Accept:'''+jointkey+'''
 
     thread.start_new_thread(socket_recieve,(s,))
 
-    print "Connection to UI Made"
+    logging.info("Connection to UI Made")
     while connectionopen == True:
         time.sleep(0.2)
         try:
@@ -181,6 +187,6 @@ Sec-Websocket-Accept:'''+jointkey+'''
         except:
             thread_close = True
             connectionopen = False
-            print "Connection to UI Lost"
+            logging.info("Connection to UI Lost")
         
    
