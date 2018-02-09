@@ -40,16 +40,17 @@ float Vref = 1500; // Output voltage with no current: ~ 1500mV or 1.5V
 unsigned long msec = 0;
 float time = 0.0;
 int sample = 0;
+//Battery values 
 float totalCharge = 0.0;
 float averageAmps = 0.0;
 float ampSeconds = 0.0;
 float ampHours = 0.0;
 float wattHours = 0.0;
-float Amps = 0.0;
+float Amps = 0.0; //Battery current
 float batteryVoltage = 0;
 //for ACS715 Motor Current sensor
 int sensorValue1 = 0;        // value read from the carrier board
-float amps = 0.0;
+float amps = 0.0;             //motor current in milliamps
 int outputValue = 0;
 
 float leftKp  = 0.5;
