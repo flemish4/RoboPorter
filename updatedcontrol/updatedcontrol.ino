@@ -111,8 +111,8 @@ int rightCurrent;
 void setup() {
 
   // Set up hardware interrupts
-  attachInterrupt(digitalPinToInterrupt(leftSensorPin_I) , leftSensorISR , CHANGE);
-  attachInterrupt(digitalPinToInterrupt(rightSensorPin_I), rightSensorISR, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(leftSensorPin_I) , leftSensorISR , RISING);
+  attachInterrupt(digitalPinToInterrupt(rightSensorPin_I), rightSensorISR, RISING);
 
   // Set up timer interrupt
   TCCR2A = 0;
