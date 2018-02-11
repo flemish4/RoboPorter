@@ -71,11 +71,47 @@ iface br0 inet static
 ``` 
 This bridge simply connects the eth0 and wlan0 interfaces together onto the same subnet.
 
-13. Configure DNSMASQ `/etc/dnsmasq.conf` so that the following lines look like this: `address=/roboporter.local/192.168.0.2` and 
+13. Configure DNSMASQ `/etc/dnsmasq.conf` so that the following lines look like this: `address=/roboporter.local/192.168.0.1` and 
 `dchp-range=192.168.0.5,192.168.0.150,12h`. This redirects roboporter.local to the server and sets the range of IP addresses for the DHCP server.
 
 14. Reboot using `sudo reboot` 
 15. Install FTP server vsftpd -- explained in log book. To be typed up later
+16. User group creation
+17. Copy UI files over to UI PI and copy server.py over to the Control PI. The UI files need to go in `/var/www/html` and the server.py file needs to go in `/home/pi`
+18. `Server.py` and `backend.py` need to be setup as services so they run on boot. To do this go to `/lib/systemd/system/portercontrol.service` on the Control PI and `/lib/systemd/system/porterUI.service` on the UI Pi. Then copy 
+``` 
+[Unit]
+Description=Roboporter Service
+After=multi-user.target
+
+[Service]
+Type=idle
+User=pi
+ExecStart=/usr/bin/python  /home/pi/server.py >/home/pi/sample.log 2>&1
+
+[Install]
+WantedBy=multi-user.target
+
+```
+to the Control PI and 
+
+```
+[Unit]
+Description=Roboporter UI Service
+After=multi-user.target
+
+[Service]
+Type=idle
+User=pi
+ExecStart=/usr/bin/python  /var/www/html/backend.py >/home/pi/sample.log 2>&1
+
+[Install]
+WantedBy=multi-user.target
+``` 
+to the UI pi.
+
+19. Finally you then need to run `sudo systemctl daemon-reload` on each Pi then `sudo systemctl enable portercontrol.service` and `sudo systemctl enable porterUI.service` on the approproate PIs. The status of each service can be viewed using `sudo systemctl status portercontrol` and `sudo systemctl status porterUI`
+20. Need to discuss static IP for Control Pi
 
 ## Implemented
 * Control Page
