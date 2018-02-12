@@ -57,11 +57,7 @@ $(document).ready(function(){
     debug_context2.fillText("No Debug Data Available",10,50);
     debug_context2.fillStyle="#ff0000" ; //ultrasonic bar color
 
-
-
-
-
-
+    
     setTimeout(() => { // Manages the connection timeout modal. After 21 seconds it fades in an alert saying no connection is available
         $("#connecting").fadeOut(1000, function(){
             $('#noconnection').fadeIn(1000) ;

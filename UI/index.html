@@ -17,7 +17,7 @@ if(!isset($_SESSION['loggedin'])){
 	<script src="resources/js/popper.js" crossorigin="anonymous"></script>
 	<script src="resources/js/bootstrap.min.js" crossorigin="anonymous"></script>
 	<script type="text/javascript" src="resources/main.js"></script>
-	
+
 	<link rel="stylesheet" href="resources/css/bootstrap.min.css"  crossorigin="anonymous">
 	<link rel='shortcut icon' type='image/x-icon' href='favicon.ico' />
 	<title>RoboPorter</title>
@@ -299,7 +299,7 @@ if(!isset($_SESSION['loggedin'])){
 			<div class="row no-gutters">
 				<div class="col-12 col-md-4">
 					<div class="row justify-content-center" style="margin:1%;">
-						<div class="col-6"><button class="btn btn-secondary forward-button" style="width:100%;">Forward</button></div>
+						<div class="col-6"><button class="btn btn-secondary forward-btn" style="width:100%;">Forward</button></div>
 					</div>	
 					<div class="row justify-content-center" style="margin:1%;">
 						<div class="col-6" ><button class="btn btn-secondary left-btn"  style="width:100%;">Left</button></div>
@@ -328,8 +328,11 @@ if(!isset($_SESSION['loggedin'])){
 							</div>
 						</div>
 					</div>
-					
+					<div id="webcam">
+						<!-- <img style="position:absolute;" src="http://192.168.1.229:8080/?action=snapshot"> -->
+					</div>
 				</div>
+
 				<div class="col-12 col-md-8">
 					<div class="row justify-content-center" style="padding-left:5% ; ">
 						<div class="col-12 text-center">
@@ -338,6 +341,12 @@ if(!isset($_SESSION['loggedin'])){
 							<button class="btn btn-secondary" id="autopiolot-btn" style="margin:1%;">Safety ON/OFF</button>
 						</div>
 					</div>
+				</div>
+			</div>
+			<div class="row justify-content-center" style="margin-bottom:5%;">
+				<div class="col-12 col-md-8 text-center">
+				<h4>Live Stream</h4>
+				<img width="100%" src="http://192.168.1.229:8080/?action=stream" alt="The Stream Failed to Load" style="margin-top:2%; border-style: solid; border-width: thick; border-color:grey;">
 				</div>
 			</div>
 		</div>
