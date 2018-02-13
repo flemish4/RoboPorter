@@ -111,14 +111,14 @@ global usCaution
     #ft,fb,fl,fr,bl,bm,br
     #lf,lc,lb,rf,rc,rb
 
-USAvgDistances = [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]
+USAvgDistances = [0, 0, 0, 0, 0, 0, 0, 0]
 obstruction = False
 usCaution = False
 USThresholds = [30, 20, 30] #threasholds for treating objects as obstacles [front,side,back]
 #make sure stopping distance is > usThresholds
-stoppingDistance = 20
+stoppingDistance = 15
 UShosts = 2
-maxSpeeds = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+maxSpeeds = [0, 0, 0, 0, 0, 0, 0, 0]
 
 ##--Multi-Threading/Muti-processing
 global threadLock #lock to be used when changing global variables
@@ -319,10 +319,9 @@ class debugThread(MultiThreadBase):
                         'US6': str(USAvgDistances[5]) ,
                         'US7': str(USAvgDistances[6]) ,
                         'US8': str(USAvgDistances[7]) ,                       
-                        'US9': str(USAvgDistances[8]) ,
-                        'US10': str(USAvgDistances[9]) ,
-                        'US11': str(USAvgDistances[10]) ,
-                        'US12': str(USAvgDistances[11]) ,
+                        'Speed Vector Left':str(speedVector[0]) ,
+                        'Speed Vector Right':str(speedVector[1]),
+                        'Obstruction':str(obstruction)
                     }
                     datatosend = json.dumps(debuginfo)
                     self.clientConnection.send(datatosend)
@@ -501,7 +500,6 @@ class motorDataThread(MultiThreadBase):
         logging.info("Starting %s", self.name)
         while not exitFlag.value:
             self.loopStartFlag()
-
             if obstruction:
                 if autoPilot and self.obs:
                     if lastSent != [0, 0]:  # ie still moving
@@ -557,6 +555,7 @@ class motorDataThread(MultiThreadBase):
 
             elif dataReady and (lastSent != speedVector): #no obstruction and the new command is different to the last command
                 logging.debug("Data Ready")
+                logging.info("Data Ready")
                 try:
                     if not safetyOn:
                         try:
@@ -668,8 +667,8 @@ class usDataThread(MultiThreadBase):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
-        self.rawUSdata_1 = [0., 0., 0., 0., 0., 0., 0.]
-        self.rawUSdata_2 = [0., 0., 0., 0., 0., 0.]
+        self.rawUSdata_1 = [0., 0., 0., 0.]
+        self.rawUSdata_2 = [0., 0., 0., 0.]
 
         self.inputBuf1 = ""
         self.inputBuf2 = ""
@@ -684,7 +683,9 @@ class usDataThread(MultiThreadBase):
             try:
                 self.inputBuf1 = USConn1.readline()
                 self.inputBuf1 = self.inputBuf1.rstrip("\n")
+                self.inputBuf1 = self.inputBuf1.strip(" ")
                 self.rawUSdata_1 = self.inputBuf1.split(",")
+                
                 #print ("rw1 ", self.inputBuf1)
             except Exception as e:
                 logging.error("%s", e)
@@ -694,7 +695,9 @@ class usDataThread(MultiThreadBase):
             try:
                 self.inputBuf2 = USConn2.readline()
                 self.inputBuf2 = self.inputBuf2.rstrip('\n')
+                self.inputBuf1 = self.inputBuf1.strip(" ")
                 self.rawUSdata_2 = self.inputBuf2.split(",")
+                
                 #print ("rw2 ", self.rawUSdata_2)
             except Exception as e:
                 logging.error("%s", e)
@@ -785,12 +788,12 @@ class usDataThread(MultiThreadBase):
         i = 0
 
         rawUSdata = self.rawUSdata_1 + self.rawUSdata_2
-        #print rawUSdata
+        print rawUSdata
 
-        if len(rawUSdata) == 13:
+        if len(rawUSdata) == 8:
             with threadLock:
-                for i in range(0, len(USAvgDistances)):
-                    USAvgDistances[i] += (int(rawUSdata[i]) - USAvgDistances[i]) / n
+                for i in range(0, len(USAvgDistances)-1):
+                    USAvgDistances[i] += (int(rawUSdata[i]) - USAvgDistances[i])/n
                 if self.profiling:
                     print ("\t" + self.name + " Avg Vector - " + str(USAvgDistances))
 
@@ -805,29 +808,31 @@ class usDataThread(MultiThreadBase):
         # if safetyOn:
         try:
             if lastCommand == "f":
-                if (int(USAvgDistances[1]) < USThresholds[0]) or (int(USAvgDistances[0]) < USThresholds[0]) or (int(USAvgDistances[2]) < USThresholds[0]) or (int(USAvgDistances[3]) < USThresholds[0]):
+                if (int(USAvgDistances[1]) < USThresholds[0]) or (int(USAvgDistances[0]) < USThresholds[0]):
                     logging.warning("FRONT TOO CLOSE. STOPPPPP!!!")
                     if obstruction != True:
                         with threadLock:
                             obstruction = True
+                    lastCommand = "" 
                     print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[2]))
                            + ", " + str(int(USAvgDistances[1])) + ", " + str(int(USAvgDistances[3])) + ", " + str(int(USAvgDistances[0])))
                 elif obstruction != False:
                     with threadLock:
                         obstruction = False
 
-                if (maxSpeeds[1] > abs(speedVector[0])) or (maxSpeeds[0] > abs(speedVector[0])) or (maxSpeeds[2] > abs(speedVector[0])) or (maxSpeeds[3] > abs(speedVector[0])):
+                if (maxSpeeds[1] > abs(speedVector[0])) or (maxSpeeds[0] > abs(speedVector[0])) or (maxSpeeds[2] > abs(speedVector[0])):
                     print("CAUTION\n")
                     usCaution = True
                 else:
                     usCaution = False
 
             elif lastCommand == "b":
-                if (int(USAvgDistances[4]) < USThresholds[2]) or (int(USAvgDistances[5]) < USThresholds[2]) or (int(USAvgDistances[6]) < USThresholds[2]):
+                if (int(USAvgDistances[4]) < USThresholds[2]) or (int(USAvgDistances[5]) < USThresholds[2]):
                     logging.warning("BACK TOO CLOSE. STOPPPPP!!!")
                     if obstruction != True:
                         with threadLock:
                             obstruction = True
+                    lastCommand = "" 
                     print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[4])) + ", " + str(int(USAvgDistances[5])) + ", " + str(int(USAvgDistances[6])) )
                 elif obstruction != False:
                     with threadLock:
@@ -840,26 +845,29 @@ class usDataThread(MultiThreadBase):
                     usCaution = False
 
             elif lastCommand == "l":
-                if (int(USAvgDistances[7]) < USThresholds[1]) or (int(USAvgDistances[8]) < USThresholds[1]) or (int(USAvgDistances[12]) < USThresholds[1]/2):
+                if (int(USAvgDistances[7]) < USThresholds[1]) or (int(USAvgDistances[8]) < USThresholds[1]):
                     logging.warning("LEFT SIDE TOO CLOSE. STOPPPPP!!!")
                     if obstruction != True:
                         with threadLock:
                             obstruction = True
+                    lastCommand = "" 
                     print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[7])) + ", " + str(int(USAvgDistances[8])) + ", " + str(int(USAvgDistances[9])))
                 elif obstruction != False:
                     with threadLock:
                         obstruction = False
 
             elif lastCommand == "r":
-                if (int(USAvgDistances[10]) < USThresholds[1]) or (int(USAvgDistances[11]) < USThresholds[1]) or (int(USAvgDistances[9]) < USThresholds[1]/2):
+                if (int(USAvgDistances[10]) < USThresholds[1]) or (int(USAvgDistances[11]) < USThresholds[1]):
                     logging.warning("RIGHT SIDE TOO CLOSE. STOPPPPP!!!")
                     if obstruction != True:
                         with threadLock:
                             obstruction = True
+                    lastCommand = "" 
                     print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[10])) + ", " + str(int(USAvgDistances[11])) + ", " + str(int(USAvgDistances[12])) + ", ")
                 elif obstruction != False:
                     with threadLock:
                         obstruction = False
+            
             elif lastCommand == "x":
                 with threadLock:
                     obstruction = False
@@ -1271,6 +1279,7 @@ def cmdToSpeeds(inputCommand): #convert commands to speed vectors for manual con
         return mSpeed, mSpeed  # Left, Right
     elif inputCommand[0] == "b":
         return -mSpeed, -mSpeed
+        logging.info("Converted to Speed")
     elif inputCommand[0] == "r":
         return (mSpeed-5), -(mSpeed-5)
     elif inputCommand[0] == "l":
@@ -1416,7 +1425,9 @@ if __name__ == '__main__':
             PORT = 5002
             # create a socket to establish a server
             logging.info("Binding the socket...")
+            
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((HOST, PORT))
 
             # listen to incoming connections on PORT

@@ -55,7 +55,7 @@ $(document).ready(function(){
     debug_context2.fillStyle="Red" ; //Text Color
     debug_context2.font = "30px Arial"; // Font and 
     debug_context2.fillText("No Debug Data Available",10,50);
-    debug_context2.fillStyle="#ff0000" ; //ultrasonic bar color
+    debug_context2.fillStyle="blue" ; //ultrasonic bar color
 
     
     setTimeout(() => { // Manages the connection timeout modal. After 21 seconds it fades in an alert saying no connection is available
@@ -70,7 +70,7 @@ $(document).ready(function(){
     });
 
     s.onopen = function(e) {}
-    s.onclose = function(e) { }
+    s.onclose = function(e) { $("#noconnection-modal").show() ; }
     s.onmessage = function(e) {
 
         $("#noconnection-modal").modal("hide");
@@ -78,66 +78,69 @@ $(document).ready(function(){
 
         $("#debugdata").html("") ; // Clear previous values
         
-        
         debug_context2.clearRect(0, 0, csize+0.5, csize+0.5); // Deletes all of the ultrasonic bars already drawn on the canvas
         // Write to ultrasonic debug screen
-        var maxbarlen = (csize - dscale*csize)/2 -borderwidth/2; // The maximum ultrasonic bar length 
-        var dh1 = maxbarlen;// length of ultrasonic bar 1
-        var dh2 = 0.4*maxbarlen ;
-        var dh3 = maxbarlen ;
-        var dh4 = maxbarlen ;
-        var dh5 = maxbarlen ;
-        var dh6 = maxbarlen ; 
-        var dh7 = maxbarlen ;
-        var dh8 = maxbarlen ;
-        var dh9 = maxbarlen ;
-        var dh10 = maxbarlen ;
-        var dh11 = maxbarlen ;
-        var dh12 = maxbarlen ;
-        var dw = dscale*csize/3 ; // ultrasonic bar width
+        try{ //try to set bar lengths
+            var ultrasonic_offset = 0.1 ; // offset to make sure dividing by zero never happens 
+            var maxbarlen = (csize - dscale*csize)/2 -borderwidth/2; // The maximum ultrasonic bar length 
+            var dh1 = ((data['US1']+ultrasonic_offset)/300)*maxbarlen;// length of ultrasonic bar 1
+            var dh3 = ((data['US3']+ultrasonic_offset)/300)*maxbarlen ;
+            var dh2 = ((data['US2']+ultrasonic_offset)/300)*maxbarlen ;
+            var dh5 = ((data['US5']+ultrasonic_offset)/300)*maxbarlen ;
+            var dh4 = ((data['US4']+ultrasonic_offset)/300)*maxbarlen ;
+            var dh6 = ((data['US6']+ultrasonic_offset)/300)*maxbarlen ; 
+            var dh7 = ((data['US7']+ultrasonic_offset)/300)*maxbarlen ;
+            var dh8 = ((data['US8']+ultrasonic_offset)/300)*maxbarlen ;
+            var dw = dscale*csize/2 ; // ultrasonic bar width
 
-        //fill rectangles for the top
-        debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)-dh1+0.5,dw,dh1) ;
-        debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)-dh2+0.5,dw,dh2) ;
-        debug_context2.fillRect((csize/2)*(1-dscale)+(dw*2)+0.5,(csize/2)*(1-dscale)-dh3+0.5,dw,dh3) ;
+            //fill rectangles for the top
+            debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)-dh1+0.5,dw,dh1) ;
+            debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)-dh2+0.5,dw,dh2) ;
+            
 
-        //fill rectangles for the right side
-        debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+0.5,dh4,dw) ;
-        debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+dw+0.5,dh5,dw) ;
-        debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+dw*2+0.5,dh6,dw) ;
+            //fill rectangles for the right side
+            debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+0.5,dh3,dw) ;
+            debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+dw+0.5,dh4,dw) ;
+        
 
-        //fill rectangles for the base
-        debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh7) ;
-        debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh8) ;
-        debug_context2.fillRect((csize/2)*(1-dscale)+(dw*2)+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh9) ;
+            //fill rectangles for the base
+            debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh5) ;
+            debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh6) ;
+            
 
-        //fill rectangles for the left side
-        debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh10+0.5,(csize/2)*(1-dscale),dh10+0.5,dw) ;
-        debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh11+0.5,(csize/2)*(1-dscale)+dw,dh11+0.5,dw) ;
-        debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh12+0.5,(csize/2)*(1-dscale)+dw*2,dh12+0.5,dw) ;
+            //fill rectangles for the left side
+            debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh7+0.5,(csize/2)*(1-dscale),dh7+0.5,dw) ;
+            debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh8+0.5,(csize/2)*(1-dscale)+dw,dh8+0.5,dw) ;
+            
 
-        // Delete ultrasonic data from javascript object. This allows any remaining data to be printed in a for loop
-        delete data["US1"] ;
-        delete data["US2"] ;
-        delete data["US3"] ;
-        delete data["US4"] ;
-        delete data["US5"] ;
-        delete data["US6"] ;
-        delete data["US7"] ;
-        delete data["US8"] ;
-        delete data["US9"] ;
-        delete data["US10"] ;
-        delete data["US11"];
-        delete data["US12"];
-        delete data["Type"] ;
-
+            // Delete ultrasonic data from javascript object. This allows any remaining data to be printed in a for loop
+            // delete data["US1"] ;
+            // delete data["US2"] ;
+            // delete data["US3"] ;
+            // delete data["US4"] ;
+            // delete data["US5"] ;
+            // delete data["US6"] ;
+            // delete data["US7"] ;
+            // delete data["US8"] ;
+            // delete data["US9"] ;
+            // delete data["US10"] ;
+            // delete data["US11"];
+            // delete data["US12"];
+            delete data["Type"] ;
+        
+        }catch(err){
+            alert(err)
+            debug_context2.fillStyle="Red" ; //Text Color
+            debug_context2.font = "30px Arial"; // Font and 
+            debug_context2.fillText("No Debug Data Available",10,50);
+        }
         //Print any remaining debug data to the debug data div
         $.each(data, function(i,j){
             $("#debugdata").append("<br>"+i+" : "+j) ;
         })
 
         //Print data to home screen debug card
-        $("#home-debug-data").html("Speed Vector Left:"+data["Speed Vector 1"]+"<br> Speed Vector Right"+data["Speed Vector 2"])
+        $("#home-debug-data").html("Speed Vector Left: "+data["Speed Vector Left"]+"<br> Speed Vector Right: "+data["Speed Vector Right"])
     
     }
 
