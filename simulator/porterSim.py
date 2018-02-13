@@ -940,7 +940,7 @@ class pathMapClass() :
         self.wallMap = set()
         self.mapGridResolution       = 10 #cm how far apart are the grid nodes
         self.wallSafetyDistance      = realPorterSize[0] / 2
-        self.wallSafetyGridRadius    = math.ceil(self.wallSafetyDistance / self.mapGridResolution) *15
+        self.wallSafetyGridRadius    = int(math.ceil(self.wallSafetyDistance / self.mapGridResolution)*20)
         self.cornerPenaltyWeight     = 10
         self.cornerAngleWeight       = 10
         self.angleOffsetLookup       = { 0 : [0,-1,0],
@@ -991,8 +991,8 @@ class pathMapClass() :
             for point in lidarMapStore :
                 xPoint = roundBase(point[0],self.mapGridResolution)
                 yPoint = roundBase(point[1],self.mapGridResolution)
-                for x in getRange(point[0] - self.wallSafetyGridRadius , point[0] + self.wallSafetyGridRadius) :
-                    for y in getRange(point[1] - self.wallSafetyGridRadius , point[1] + self.wallSafetyGridRadius) :
+                for x in range(xPoint - self.wallSafetyGridRadius , xPoint + self.wallSafetyGridRadius , self.mapGridResolution) :
+                    for y in range(yPoint - self.wallSafetyGridRadius , yPoint + self.wallSafetyGridRadius , self.mapGridResolution) :
                         
                         self.wallMap.add((roundBase(x,self.mapGridResolution),roundBase(y,self.mapGridResolution)))
 
@@ -1172,6 +1172,15 @@ class simThreadBase(MultiThreadBase) :
         self.simFrameTime = simFrameTime
         self.scale = scale
         self.pixelPorterSize = pixelPorterSize
+        self.angleOffsetLookup       = { 0 : [0,-1,0],
+                                    1 : [1,-1,45],
+                                    2 : [1,0,90],
+                                    3 : [1,1,135],
+                                    4 : [0,1,180],
+                                    5 : [-1,1,225],
+                                    6 : [-1,0,270],
+                                    7 : [-1,-1,315],
+                                  }
         
         
     def getLidar360(self) :
@@ -1196,6 +1205,11 @@ class simThreadBase(MultiThreadBase) :
         return [100,100]
         # REVISIT : STUB
 
+    def getDesOrientation(self, start, end) :
+        #print("getDesOrient: start: " + str(start) + ", end: " + str(end))
+        #print("orientation: " + str(constrainAngle360(-90-math.degrees(math.atan2(end[1] - start[1], end[0] - start[0])), 180, -180)))
+        return +90+math.degrees(math.atan2(end[1] - start[1], end[0] - start[0]))
+        
         
     # Maintains the orientation using a PID loop and moves a distance in that direction
     # REVISIT : Could add adjustment to heading if off course
@@ -1238,6 +1252,70 @@ class simThreadBase(MultiThreadBase) :
                 atDest = True
                 
         # final speed is the previous speed this must be dealt with later
+        return atDest        
+    # Maintains the orientation using a PID loop and moves a distance in that direction
+    # REVISIT : Could add adjustment to heading if off course
+    def moveTo(self, dest) :
+        global porterLocation
+        global porterOrientation
+        global speedVector
+        global exitFlag
+        global threadLock
+        print("in moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest))
+        
+        origLocation = porterLocation
+        desOrientation = self.getDesOrientation(origLocation, dest)
+        destPID = (dest[0] + self.angleOffsetLookup[dest[2]][0]*100 , dest[1] + self.angleOffsetLookup[dest[2]][1]*100 , dest[2])
+        
+        print("origOrientation: " + str(porterOrientation) + ", desOrientation: " + str(desOrientation))
+
+        # orientation is critical as any error will severely affect navigation
+        # A PID loop will be used to adjust the speedVector to keep the orientation consistent
+        # Stop when within Xcm of final destination OR when travelled distance
+        orientationPID = PID(0.05, 0.1, 0)
+        orientationPID.SetPoint=0
+        orientationPID.setSampleTime(0.01)
+        # Using angle of initial travel to determine whether final condition tests x or y values
+        if ((desOrientation >45) and (desOrientation<135)) or ((desOrientation <-45) and (desOrientation >-135)) : # if line is more vertical than horizontal then # REVISIT : this check is not correct
+            # set offset value to select y coordinates
+            yOffset = 0
+        else :
+            # set offset value to select x coordinates
+            yOffset = 1
+
+        # Find whether final condition must be greater than or less than
+        if origLocation[yOffset] < dest[yOffset] : 
+            testSign = 1
+        else :
+            testSign = -1
+        # maintain porterOrientation whilst moving
+        atDest = False 
+        atObstacle = False
+        orientationAdjust = 0
+        prevOrientationAdjust = 9999999
+        while (not atDest) and (not atObstacle) and (not exitFlag):
+            desOrientation = self.getDesOrientation(porterLocation, destPID)
+            maxSpeeds = self.getMaxSpeeds()
+            speed = min(maxSpeeds)
+            #print("porterOrientation: " + str(porterOrientation))
+            #print("desOrientation: " + str(desOrientation))
+            #print("error: " + str(porterOrientation-desOrientation))
+            orientationAdjust = orientationPID.update(porterOrientation-desOrientation)
+            #print("adjustment: " + str(orientationAdjust))
+            if (orientationAdjust != None) and (abs(orientationAdjust - prevOrientationAdjust)>0.0001) :
+                with threadLock :
+                    speedVector = [max(0.9*(1-orientationAdjust)*speed, 0),min(0.9*(1+orientationAdjust)*speed, speed)]
+
+            # until at destination  
+            #print("dest: " + str(dest) + ", current: " + str(porterLocation) + ", angle: " + str(porterOrientation))
+            # REVISIT : THIS SHOULD WORK BUT DOESN'T
+            #if (dest[yOffset]-porterLocation[yOffset])*testSign < 0 :
+            if ((porterLocation[0]-dest[0])**2 + (porterLocation[1]-dest[1])**2) < 100 :
+                atDest = True
+            # wait
+            time.sleep(0.01)
+                
+        # final speed is the previous speed this must be dealt with later
         return atDest
         
     # Positive angles will turn the robot clockwise and vice versa
@@ -1246,8 +1324,75 @@ class simThreadBase(MultiThreadBase) :
         global threadLock
         global porterOrientation
         global speedVector
+        print("in moveTurn, origAngle: " + str(porterOrientation) + ", angle: " + str(angle))
         
         origOrientation = porterOrientation
+        maxSpeed = min(self.getMaxSpeeds())
+        sign = 1 if angle > 0 else -1
+        
+        if angle > 0 :        
+            # Calculate final porterOrientation
+            desOrientation = constrainAngle360(porterOrientation+angle,origOrientation+720,origOrientation)
+        else :
+            # Calculate final porterOrientation
+            desOrientation = constrainAngle360(porterOrientation+angle,origOrientation+1,origOrientation-720)
+
+        if type == "onWheel" :
+            if angle > 0 :        
+                # Turning clockwise therefore right wheel is still
+                with threadLock : 
+                    speedVector = [0, maxSpeed]
+            else :
+                # Turning anti clockwise therefore left wheel is still
+                with threadLock : 
+                    speedVector = [maxSpeed,0]
+            
+        
+        if type == "onCentre" :
+            # Even speed from each wheel but opposite
+            with threadLock : 
+                speedVector = [maxSpeed*sign*-1,maxSpeed*sign]
+        
+        #if type == "onRadius" :
+        #    pass
+        
+        # Wait for angle to have been turned
+        totalTurn = 0
+        prevOrientation = origOrientation
+        done = False
+        while (not exitFlag) and (not done) :
+            rot = porterOrientation - prevOrientation
+            prevOrientation = porterOrientation
+            if angle > 0 :
+                # Must be turning clockwise
+                if rot < 0 :
+                    rot +=360
+                totalTurn += rot
+                if totalTurn >= angle :
+                    done = True
+            else :
+                # Must be turning anticlockwise
+                if rot > 0 :
+                    rot -=360
+                totalTurn += rot
+                if totalTurn <= angle :
+                    done = True
+                    
+            time.sleep(0.005)
+            
+        return done    # Positive angles will turn the robot clockwise and vice versa
+        
+        
+    # Type controls the point which remains still during the turn
+    def turnTo(self, dest, type) :
+        global threadLock
+        global porterOrientation
+        global speedVector
+        
+        origOrientation = porterOrientation
+        desOrientation = self.getDesOrientation(porterLocation, dest)
+        angle = constrainAngle360(desOrientation - porterOrientation,180,-180)
+        
         maxSpeed = min(self.getMaxSpeeds())
         sign = 1 if angle > 0 else -1
         
@@ -1417,6 +1562,7 @@ class simThreadBase(MultiThreadBase) :
         totalPath = [current]
         navPath = [("end", current)]
         lastKeyNode = current
+        #navPath.append(("moveTo", current))
         while current in cameFrom.keys() :
             previous = current
             current = cameFrom[current]
@@ -1426,8 +1572,10 @@ class simThreadBase(MultiThreadBase) :
                 totalPath.append((previous[0],previous[1],current[2]))
                 totalPath.append(current)
                 
-                navPath.append(("moveStraight", getLength([lastKeyNode[0],lastKeyNode[1], previous[0],previous[1]])))
+                #navPath.append(("moveStraight", getLength([lastKeyNode[0],lastKeyNode[1], previous[0],previous[1]])))
+                navPath.append(("moveTo", lastKeyNode))
                 navPath.append(("turn", constrainAngle360((previous[2]-current[2])*45,180,-180)))
+                #navPath.append(("turnTo", ())
                 lastKeyNode = current
         navPath.append(("start", current))
         return list(reversed(navPath))
@@ -2014,18 +2162,35 @@ class navigationThread(simThreadBase):
         with threadLock :
             lidarMapStore = lidarMap  
             
+            
+            
+        # self.getDesOrientation((0,0),(10,0))
+        # self.getDesOrientation((0,0),(10,10))
+        # self.getDesOrientation((0,0),(0,10))
+        # self.getDesOrientation((0,0),(-10,10))
+        # self.getDesOrientation((0,0),(-10,0))
+        # self.getDesOrientation((0,0),(-10,-10))
+        # self.getDesOrientation((0,0),(0,-10))
+        # self.getDesOrientation((0,0),(10,-10))
+        # return 0    
+            
+            
         # Create pathMap
         pathMap = pathMapClass(lidarMapStore, realPorterSize[0])
         print("before aStar")
         path = self.aStar((porterLocation[0],porterLocation[1],0), (600,600), pathMap)
         print(path)
-        
-        for instruction in path :
-            if instruction[0] == "turn" :
-                self.moveTurn(instruction[1], "onCentre")
-            elif instruction[0] == "moveStraight" :
-                self.moveStraight(instruction[1])
-        
+        #path = [("moveTo", (600,600))]
+        if len(path) > 1 :
+            for instruction in path :
+                if instruction[0] == "turn" :
+                    self.moveTurn(instruction[1], "onCentre")
+                elif instruction[0] == "moveStraight" :
+                    self.moveStraight(instruction[1])
+                elif instruction[0] == "moveTo" :
+                    self.moveTo(instruction[1])
+                elif instruction[0] == "turnTo" :
+                    self.turnTo(instruction[1], "onCentre")
         
         # Things you may want to do
         with threadLock :
