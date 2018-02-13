@@ -1638,6 +1638,28 @@ class simThreadBase(MultiThreadBase) :
         return list(reversed(navPath))
     
     
+    # Uses A* and navigation algorithms to navigate to the given dest = [x, y]
+    def goTo(self, pathMap, dest) :
+        global porterLocation
+        global speedVector
+        f=open("nav.log", "w")    
+        path = self.aStar((porterLocation[0],porterLocation[1],0), dest, pathMap)
+        f.write(str(path) +"\n")
+        if len(path) > 1 :
+            for instruction in path :
+                if instruction[0] == "turn" :
+                    self.moveTurn(instruction[1], "onCentre", f)
+                elif instruction[0] == "moveStraight" :
+                    self.moveStraight(instruction[1], f)
+                elif instruction[0] == "moveTo" :
+                    self.moveTo(instruction[1], f)
+                elif instruction[0] == "turnTo" :
+                    self.turnTo(instruction[1], "onCentre", f)
+                    
+        with threadLock :
+          speedVector = [0,0]
+        f.close()
+    
     
 class mappingThread(simThreadBase):
     def simplifyLines (self, lines) :
@@ -2206,56 +2228,20 @@ class navigationThread(simThreadBase):
             realDataMap = set()
             speedVector = [0,0]
             wheelSpeeds = [0,0]
-
-            
-        #self.moveStraight(1)
-        # self.moveTurn(97, "onCentre")
-        # self.moveStraight(200)
-        # self.moveTurn(-30, "onCentre")
-        # self.moveStraight(100)
-        # self.moveTurn(180, "onCentre")
-        # self.moveStraight(400)
         
         self.getLidar360()
         # Store lidar data
         with threadLock :
             lidarMapStore = lidarMap  
-            
-            
-            
-        # self.getDesOrientation((0,0),(10,0))
-        # self.getDesOrientation((0,0),(10,10))
-        # self.getDesOrientation((0,0),(0,10))
-        # self.getDesOrientation((0,0),(-10,10))
-        # self.getDesOrientation((0,0),(-10,0))
-        # self.getDesOrientation((0,0),(-10,-10))
-        # self.getDesOrientation((0,0),(0,-10))
-        # self.getDesOrientation((0,0),(10,-10))
-        # return 0    
-            
-        f=open("nav.log", "w")    
+  
         # Create pathMap
         pathMap = pathMapClass(lidarMapStore, realPorterSize[0])
-        print("before aStar")
-        path = self.aStar((porterLocation[0],porterLocation[1],0), (600,600), pathMap)
-        print(path)
-        f.write(str(path) +"\n")
-        #path = [("moveTo", (600,600))]
-        if len(path) > 1 :
-            for instruction in path :
-                if instruction[0] == "turn" :
-                    self.moveTurn(instruction[1], "onCentre", f)
-                elif instruction[0] == "moveStraight" :
-                    self.moveStraight(instruction[1], f)
-                elif instruction[0] == "moveTo" :
-                    self.moveTo(instruction[1], f)
-                elif instruction[0] == "turnTo" :
-                    self.turnTo(instruction[1], "onCentre", f)
         
-        f.close()
+        # Path find and navigate to destination
+        self.goTo(pathMap, (600,600))
+        
         # Things you may want to do
-        with threadLock :
-          speedVector = [0,0]
+        
         #   if lidarReady :
         #       lidarRun = "a"  
         while not exitFlag :
