@@ -18,6 +18,7 @@ global maxSpeeds
 global pathMap
 global porterLocation #vector holding local location [x,y] in cm
 global porterOrientation #angle from north (between -180,180) in degrees
+global porterOrientationUnConst #angle from north no constraint
 global lastCommand
 global speedVector
 global dataReady
@@ -57,6 +58,7 @@ threadLock = threading.Lock()
 USThreashholds      = {"front":30,"back":30,"side":20}
 stoppingDistance    = 20
 porterOrientation   = 0
+porterOrientationUnConst = 0
 porterImuOrientation = porterOrientation
 realPorterSize      = (73,70)
 realPorterRadius    = math.sqrt(realPorterSize[0]**2+realPorterSize[1]**2)
@@ -110,19 +112,26 @@ def constrainAngle180(angle, max, min) :
     return angle    
     
     
-def constrainInt(i, max, min) :
-    while i >= max :
-        i -= max
-    while i < min :
-        i += max
+# def constrainInt(i, max, min) :
+    # while i >= max :
+        # i -= max
+    # while i < min :
+        # i += max
         
-    # REVISIT : solution above is dumb but I'm not changing to below until I can test it
-    # if i >= max :
-        # return max -1
-    # if i < min :
-        # return min
+    # # REVISIT : solution above is dumb but I'm not changing to below until I can test it
+    # # if i >= max :
+        # # return max -1
+    # # if i < min :
+        # # return min
         
-    return i
+    # return i   
+    
+def constrainFloat(d, max, min) :
+    if d >= max :
+        return max
+    if d < min :
+        return min
+    return d
 
   
 def roundBase(x, base):
@@ -601,6 +610,7 @@ class porterSim() :
         global porterLocation
         global realPorterOrientation
         global porterOrientation
+        global porterOrientationUnConst
         global porterImuOrientation
         startSim = False
         # Configure variables if first loop
@@ -610,6 +620,7 @@ class porterSim() :
             self.porterReal = {}
             with threadLock :
                 porterOrientation = 0
+                porterOrientationUnConst = 0
                 porterImuOrientation = porterOrientation
                 realPorterOrientation = 0
                 porterLocation = (0,0)
@@ -649,6 +660,7 @@ class porterSim() :
                             porterOrientation -= 270
                         else :
                             porterOrientation += 90
+                        porterOrientationUnConst = porterOrientation
                         porterImuOrientation = porterOrientation    
                         realPorterOrientation = porterOrientation
                     
@@ -897,6 +909,7 @@ class porterSim() :
     def calculatePorterPosition(self) :
         global porterLocation
         global porterOrientation
+        global porterOrientationUnConst
         global porterImuOrientation
         global wheelSpeeds
         global threadLock
@@ -907,7 +920,8 @@ class porterSim() :
                 leftDelta  = self.simFrameTime * wheelSpeeds[0]
                 rightDelta = self.simFrameTime * wheelSpeeds[1]
                 orientation = math.radians(porterOrientation - 90)
-                orientation = math.radians(realPorterOrientation - 90)
+                orientationUnconst = math.radians(porterOrientationUnConst - 90)
+                #orientation = math.radians(realPorterOrientation - 90)
                 x   = porterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)
                 y   = porterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)
                 with threadLock :
@@ -917,6 +931,7 @@ class porterSim() :
                     new_x = x + leftDelta * math.cos(orientation);
                     new_y = y + rightDelta * math.sin(orientation);
                     new_heading = orientation;
+                    new_headingUnConst = orientationUnconst;
                 else :
                     R = self.pixelPorterSize[0] * (leftDelta + rightDelta) / (2 * (rightDelta - leftDelta))
                     wd = (rightDelta - leftDelta) / self.pixelPorterSize[0] ;
@@ -924,10 +939,12 @@ class porterSim() :
                     new_x = x + R * math.sin(wd + orientation) - R * math.sin(orientation);
                     new_y = y - R * math.cos(wd + orientation) + R * math.cos(orientation);
                     new_heading = orientation + wd/ self.scale;
+                    new_headingUnConst = orientationUnconst + wd/ self.scale;
                 
                 with threadLock :
                     porterLocation = (new_x + realPorterWheelOffsetY*math.cos(orientation),new_y + realPorterWheelOffsetY*math.sin(orientation))
                     porterOrientation = (math.degrees(new_heading) + 90)*0.5 + porterImuOrientation*0.5
+                    porterOrientationUnConst = (math.degrees(new_headingUnConst) + 90) # + porterImuOrientation*0.5
                     porterOrientation = constrainAngle360(porterOrientation, 180, -180)
 
 
@@ -1213,9 +1230,10 @@ class simThreadBase(MultiThreadBase) :
         
     # Maintains the orientation using a PID loop and moves a distance in that direction
     # REVISIT : Could add adjustment to heading if off course
-    def moveStraight(self, distance) :
+    def moveStraight(self, distance, f) :
         global porterLocation
         global porterOrientation
+        global porterOrientationUnConst
         global speedVector
         global exitFlag
         global threadLock
@@ -1255,62 +1273,81 @@ class simThreadBase(MultiThreadBase) :
         return atDest        
     # Maintains the orientation using a PID loop and moves a distance in that direction
     # REVISIT : Could add adjustment to heading if off course
-    def moveTo(self, dest) :
+    def moveTo(self, dest, f) :
         global porterLocation
         global porterOrientation
+        global porterOrientationUnConst
         global speedVector
         global exitFlag
         global threadLock
         print("in moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest))
-        
+        f.write("\n\nin moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest) + "\n")
         origLocation = porterLocation
-        desOrientation = self.getDesOrientation(origLocation, dest)
+        desOrientation = constrainAngle360(self.getDesOrientation(origLocation, dest), porterOrientationUnConst + 180, porterOrientationUnConst - 180)
         destPID = (dest[0] + self.angleOffsetLookup[dest[2]][0]*100 , dest[1] + self.angleOffsetLookup[dest[2]][1]*100 , dest[2])
         
         print("origOrientation: " + str(porterOrientation) + ", desOrientation: " + str(desOrientation))
+        f.write("\torigOrientation: " + str(porterOrientation) + ", desOrientation: " + str(desOrientation) + "\n")
 
         # orientation is critical as any error will severely affect navigation
         # A PID loop will be used to adjust the speedVector to keep the orientation consistent
         # Stop when within Xcm of final destination OR when travelled distance
-        orientationPID = PID(0.05, 0.1, 0)
+        orientationPID = PID(0.05, 0.01, 0)
         orientationPID.SetPoint=0
         orientationPID.setSampleTime(0.01)
         # Using angle of initial travel to determine whether final condition tests x or y values
-        if ((desOrientation >45) and (desOrientation<135)) or ((desOrientation <-45) and (desOrientation >-135)) : # if line is more vertical than horizontal then # REVISIT : this check is not correct
+        if (abs(origLocation[0]-dest[0]) > abs(origLocation[1]-dest[1])) : # if line is more vertical than horizontal then # REVISIT : this check is not correct
             # set offset value to select y coordinates
             yOffset = 0
         else :
             # set offset value to select x coordinates
             yOffset = 1
+        f.write("\tyOffset: " + str(yOffset) + "\n")
 
         # Find whether final condition must be greater than or less than
         if origLocation[yOffset] < dest[yOffset] : 
             testSign = 1
         else :
             testSign = -1
+        f.write("\ttestSign: " + str(testSign) + "\n")
         # maintain porterOrientation whilst moving
         atDest = False 
         atObstacle = False
         orientationAdjust = 0
         prevOrientationAdjust = 9999999
         while (not atDest) and (not atObstacle) and (not exitFlag):
-            desOrientation = self.getDesOrientation(porterLocation, destPID)
+            desOrientation = constrainAngle360(self.getDesOrientation(porterLocation, dest), porterOrientationUnConst + 180, porterOrientationUnConst - 180)
+            f.write("\tloop start" + "\n")
+            f.write("\tporterLocation: " + str(porterLocation) + "\n")
+            f.write("\tdesOrientation: " + str(desOrientation) + "\n")
             maxSpeeds = self.getMaxSpeeds()
             speed = min(maxSpeeds)
-            #print("porterOrientation: " + str(porterOrientation))
+            f.write("\tspeed: " + str(speed) + "\n")
+            
+            #print()
+            f.write("\tporterOrientationUnConst: " + str(porterOrientationUnConst) + "\n")
             #print("desOrientation: " + str(desOrientation))
-            #print("error: " + str(porterOrientation-desOrientation))
-            orientationAdjust = orientationPID.update(porterOrientation-desOrientation)
+            #print()
+            f.write("\terror: " + str(porterOrientationUnConst-desOrientation) + "\n")
+            f.write("\terrorconstr: " + str(constrainAngle360(porterOrientationUnConst-desOrientation,180,-180)) + "\n")
+            orientationAdjust = constrainFloat(orientationPID.update(constrainAngle360(porterOrientationUnConst-desOrientation,180,-180)),0.1,-0.1)
+            f.write("\torientationAdjust: " + str(orientationAdjust) + "\n")
+            
             #print("adjustment: " + str(orientationAdjust))
             if (orientationAdjust != None) and (abs(orientationAdjust - prevOrientationAdjust)>0.0001) :
                 with threadLock :
                     speedVector = [max(0.9*(1-orientationAdjust)*speed, 0),min(0.9*(1+orientationAdjust)*speed, speed)]
-
+                    
+                f.write("\tspeedVector: " + str(speedVector) + "\n")
             # until at destination  
             #print("dest: " + str(dest) + ", current: " + str(porterLocation) + ", angle: " + str(porterOrientation))
             # REVISIT : THIS SHOULD WORK BUT DOESN'T
-            #if (dest[yOffset]-porterLocation[yOffset])*testSign < 0 :
-            if ((porterLocation[0]-dest[0])**2 + (porterLocation[1]-dest[1])**2) < 100 :
+            
+            f.write("\tdest[yOffset]-porterLocation[yOffset])*testSign" + str((dest[yOffset]-porterLocation[yOffset])*testSign) + "\n")
+            #f.write( + "\n")
+            if (dest[yOffset]-porterLocation[yOffset])*testSign < 0 :
+            #if ((porterLocation[0]-dest[0])**2 + (porterLocation[1]-dest[1])**2) < 100 :
+                f.write("\tatDest" + "\n")
                 atDest = True
             # wait
             time.sleep(0.01)
@@ -1320,23 +1357,28 @@ class simThreadBase(MultiThreadBase) :
         
     # Positive angles will turn the robot clockwise and vice versa
     # Type controls the point which remains still during the turn
-    def moveTurn(self, angle, type) :
+    def moveTurn(self, angle, type, f) :
         global threadLock
         global porterOrientation
+        global porterOrientationUnConst
         global speedVector
-        print("in moveTurn, origAngle: " + str(porterOrientation) + ", angle: " + str(angle))
+        print()
+        f.write("\n\nin moveTurn, origAngle: " + str(porterOrientation) + ", angle: " + str(angle) + "\n")
+        print("\n\nin moveTurn, origAngle: " + str(porterOrientation) + ", angle: " + str(angle) + "\n")
         
-        origOrientation = porterOrientation
+        origOrientation = porterOrientationUnConst
         maxSpeed = min(self.getMaxSpeeds())
         sign = 1 if angle > 0 else -1
         
-        if angle > 0 :        
-            # Calculate final porterOrientation
-            desOrientation = constrainAngle360(porterOrientation+angle,origOrientation+720,origOrientation)
-        else :
-            # Calculate final porterOrientation
-            desOrientation = constrainAngle360(porterOrientation+angle,origOrientation+1,origOrientation-720)
+        desOrientation = origOrientation + angle
+        # if angle > 0 :        
+            # # Calculate final porterOrientation
+            # desOrientation = constrainAngle360(porterOrientation+angle,origOrientation+180,origOrientation-180)
+        # else :
+            # # Calculate final porterOrientation
+            # desOrientation = constrainAngle360(porterOrientation-angle,origOrientation+180,origOrientation-180)
 
+        f.write("\tdesOrientation: " + str(desOrientation) + "\n")
         if type == "onWheel" :
             if angle > 0 :        
                 # Turning clockwise therefore right wheel is still
@@ -1356,37 +1398,52 @@ class simThreadBase(MultiThreadBase) :
         #if type == "onRadius" :
         #    pass
         
+        f.write("\tspeedVector: " + str(speedVector) + "\n")
         # Wait for angle to have been turned
         totalTurn = 0
         prevOrientation = origOrientation
         done = False
-        while (not exitFlag) and (not done) :
-            rot = porterOrientation - prevOrientation
-            prevOrientation = porterOrientation
-            if angle > 0 :
-                # Must be turning clockwise
-                if rot < 0 :
-                    rot +=360
-                totalTurn += rot
-                if totalTurn >= angle :
-                    done = True
-            else :
-                # Must be turning anticlockwise
-                if rot > 0 :
-                    rot -=360
-                totalTurn += rot
-                if totalTurn <= angle :
-                    done = True
+        # while (not exitFlag) and (not done) :
+            # rot = porterOrientation - prevOrientation
+            # prevOrientation = porterOrientation
+            # if angle > 0 :
+                # # Must be turning clockwise
+                # if rot < 0 :
+                    # rot +=360
+                # totalTurn += rot
+                # if totalTurn >= angle :
+                    # done = True
+            # else :
+                # # Must be turning anticlockwise
+                # if rot > 0 :
+                    # rot -=360
+                # totalTurn += rot
+                # if totalTurn <= angle :
+                    # done = True
                     
+            # time.sleep(0.005)
+        print("porterOrientationUn: " + str(porterOrientationUnConst))
+        print("desOrientation: " + str(desOrientation))
+        print("(porterOrientationUnConst-desOrientation)*sign: " + str((porterOrientationUnConst-desOrientation)*sign))
+            
+            
+        while not (desOrientation-porterOrientationUnConst)*sign < 0 :
+            print("porterOrientationUn: " + str(porterOrientationUnConst))
+            print("desOrientation: " + str(desOrientation))
+            print("(porterOrientationUnConst-desOrientation)*sign: " + str((porterOrientationUnConst-desOrientation)*sign))
             time.sleep(0.005)
+            
+        f.write("\tporterOrientation" + str(porterOrientation) + "\n")
+        f.write( "\tdone turn"+ "\n")
             
         return done    # Positive angles will turn the robot clockwise and vice versa
         
         
     # Type controls the point which remains still during the turn
-    def turnTo(self, dest, type) :
+    def turnTo(self, dest, type, f) :
         global threadLock
         global porterOrientation
+        global porterOrientationUnConst
         global speedVector
         
         origOrientation = porterOrientation
@@ -1918,6 +1975,7 @@ class mappingThread(simThreadBase):
         global maxSpeeds
         global porterLocation #vector holding local location [x,y] in cm
         global porterOrientation #angle from north (between -180,180) in degrees
+        global porterOrientationUnConst
         global realPorterLocation # CHEATING ONLY
         global realPorterOrientation # CHEATING ONLY
         global realPorterSize
@@ -2125,6 +2183,7 @@ class navigationThread(simThreadBase):
         global maxSpeeds
         global porterLocation #vector holding local location [x,y] in cm
         global porterOrientation #angle from north (between -180,180) in degrees
+        global porterOrientationUnConst
         global lastCommand
         global speedVector
         global dataReady
@@ -2174,24 +2233,26 @@ class navigationThread(simThreadBase):
         # self.getDesOrientation((0,0),(10,-10))
         # return 0    
             
-            
+        f=open("nav.log", "w")    
         # Create pathMap
         pathMap = pathMapClass(lidarMapStore, realPorterSize[0])
         print("before aStar")
         path = self.aStar((porterLocation[0],porterLocation[1],0), (600,600), pathMap)
         print(path)
+        f.write(str(path) +"\n")
         #path = [("moveTo", (600,600))]
         if len(path) > 1 :
             for instruction in path :
                 if instruction[0] == "turn" :
-                    self.moveTurn(instruction[1], "onCentre")
+                    self.moveTurn(instruction[1], "onCentre", f)
                 elif instruction[0] == "moveStraight" :
-                    self.moveStraight(instruction[1])
+                    self.moveStraight(instruction[1], f)
                 elif instruction[0] == "moveTo" :
-                    self.moveTo(instruction[1])
+                    self.moveTo(instruction[1], f)
                 elif instruction[0] == "turnTo" :
-                    self.turnTo(instruction[1], "onCentre")
+                    self.turnTo(instruction[1], "onCentre", f)
         
+        f.close()
         # Things you may want to do
         with threadLock :
           speedVector = [0,0]
