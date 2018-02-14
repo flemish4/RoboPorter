@@ -6,8 +6,11 @@
 //
 // Pin assignments
 //
-const int analogInPin = A0; // VO of ACS712 current sensor goes to pin AO on Arduino
-const int analogIn2Pin = A3;
+const int analogInPin = A0; // VO of ACS712 current sensor1 goes to pin AO on Arduino
+const int analogIn2Pin = A1; // VO of ACS712 current sensor2 goes to pin A1 on Arduino
+const int analogIn3Pin = A2; // VO of ACS715 current sensor1 goes to pin A2 on Arduino
+const int analogIn4Pin = A3; // VO of ACS715 current sensor2 goes to pin A3 on Arduino
+
 const byte leftSensorPin_I  = 2;
 const byte rightSensorPin_I = 3;
 
@@ -33,25 +36,39 @@ Servo rightWheelServo;
 //
 // Global variables
 //
-//for ACS712 Battery Current sensor
-int sensorValue = 0; // value read from the carrier board
+//Common to both battery sensors
 float sensitivity = 100.0 / 500.0; //100mA per 500mV = 0.2
 float Vref = 1500; // Output voltage with no current: ~ 1500mV or 1.5V
 unsigned long msec = 0;
 float time = 0.0;
+//for ACS712 Battery Current 1 sensor
+int sensorValue = 0; // value read from the carrier board
 int sample = 0;
-//Battery values 
-float totalCharge = 0.0;
-float averageAmps = 0.0;
-float ampSeconds = 0.0;
-float ampHours = 0.0;
-float wattHours = 0.0;
-float Amps = 0.0; //Battery current
-float batteryVoltage = 0;
-//for ACS715 Motor Current sensor
-int sensorValue1 = 0;        // value read from the carrier board
-float amps = 0.0;             //motor current in milliamps
-int outputValue = 0;
+float totalCharge1 = 0.0;
+float averageAmps1 = 0.0;
+float ampSeconds1 = 0.0;
+float ampHours1 = 0.0;
+float wattHours1 = 0.0;
+float BatteryAmps1 = 0.0;
+float batteryVoltage1 = 0;
+//for ACS712 Battery Current 2 sensor
+int sensorValue1 = 0; // value read from the carrier board
+int sample1 = 0;
+float totalCharge2 = 0.0;
+float averageAmps2 = 0.0;
+float ampSeconds2 = 0.0;
+float ampHours2 = 0.0;
+float wattHours2 = 0.0;
+float BatteryAmps2 = 0.0;
+float batteryVoltage2 = 0;
+//for ACS715 Motor Current sensor 1
+int sensorValue2 = 0;        // value read from the carrier board
+float motoramps1 = 0.0;     
+int outputValue1 = 0;        //value in milliamps
+//for ACS715 Motor Current sensor 2
+int sensorValue3 = 0;        // value read from the carrier board
+float motoramps2 = 0.0;
+int outputValue2 = 0;
 
 float leftKp  = 0.5;
 float leftKi  = 0.5;
@@ -189,12 +206,6 @@ ISR (TIMER2_COMPA_vect) {
   leftWheelServo.write(90 + leftOffset);
   rightWheelServo.write(90 + rightOffset);
 
-  //leftCurrent = analogRead(0);
-  //rightCurrent = analogRead(1);
-
-
-//  if (sendcount >= 5) {
-
     leftCountString = String(abs(leftSensorDistanceCount), HEX);
     rightCountString = String(abs(rightSensorDistanceCount), HEX);
 
@@ -216,14 +227,6 @@ ISR (TIMER2_COMPA_vect) {
     
     leftSensorDistanceCount = 0;
     rightSensorDistanceCount = 0;
-//    sendcount = 0;
-
-    //Serial.print(rightCurrent);
-    //Serial.print(", ");
-    //Serial.println(leftCurrent);
-//  } else {
-//    sendcount ++;
-//  }
   
   timercount = 0;
   } else {
@@ -231,8 +234,9 @@ ISR (TIMER2_COMPA_vect) {
   }
 
 }
-void BatteryCurrentSensor() {
-   int avgBVal = 12;
+// ACS 712 sensor for sensing Battery current, charge and power
+void BatteryCurrentSensor1() {
+  int avgBVal = 12;
   // read the analog in value:
   for (int i = 0; i < avgSamples; i++)
   {
@@ -245,45 +249,46 @@ void BatteryCurrentSensor() {
   sensorValue = sensorValue / avgSamples;
   // The on-board ADC is 10-bits -> 2^10 = 1024 -> 5V / 1024 ~= 4.88mV
   // The voltage is in millivolts
-  float voltage = 4.88 * sensorValue;
+  float voltage1 = 4.88 * sensorValue;
   // This will calculate the actual current (in mA)
   // Using the Vref and sensitivity settings you configure
   
-  float current = (voltage - Vref) * sensitivity;
+  float current1 = (voltage1 - Vref) * sensitivity;
   Serial.print("Battery current:");
-  Serial.print(current);
+  Serial.print(current1);
   Serial.print("mA");
   Serial.print("\n");
-  float watts = amps * batteryVoltage;
+  float watts1 = BatteryAmps1 * batteryVoltage1;
   
   //Voltage and Current Values
-  batteryVoltage = avgBVal; //supplies Battery voltage as 12V for poweer calc
+  batteryVoltage1 = avgBVal; //supplies Battery voltage as 12V for poweer calc
  Serial.print("Volts = " );                      
-  Serial.print(batteryVoltage);  
+  Serial.print(batteryVoltage1);  
    Serial.print("\t Power (Watts) = ");  
-  Serial.print(watts);  
+  Serial.print(watts1);  
   
  //Timing calc
   sample = sample + 1;
   msec = millis();
   time = (float) msec / 1000.0;
-  totalCharge = totalCharge + amps;
-  averageAmps = totalCharge / sample;
-  ampSeconds = averageAmps*time;
-  ampHours = ampSeconds/3600;
-  wattHours = batteryVoltage * ampHours;
+  totalCharge1 = totalCharge1 + BatteryAmps1;
+  averageAmps1 = totalCharge1 / sample;
+  ampSeconds1 = averageAmps1*time;
+  ampHours1 = ampSeconds1/3600;
+  wattHours1 = batteryVoltage1 * ampHours1;
  
   Serial.print("\t Time (hours) = ");
   Serial.print(time/3600);
   Serial.print("\t Amp Hours (ah) = ");
-  Serial.print(ampHours);
+  Serial.print(ampHours1);
   Serial.print("\t Watt Hours (wh) = ");
-  Serial.println(wattHours);
+  Serial.println(wattHours1);
   // Reset the sensor value for the next reading
   sensorValue = 0;
 }
-  void MotorCurrentSensor() {
- 
+//2nd Battery Current Sensor
+void BatteryCurrentSensor2() {
+  int avgBVal2 = 12;
   // read the analog in value:
   for (int i = 0; i < avgSamples; i++)
   {
@@ -293,12 +298,81 @@ void BatteryCurrentSensor() {
     // after the last reading:
     delay(10);
   }
-  sensorValue1 = sensorValue1 / avgSamples;    
+  sensorValue1 = sensorValue1 / avgSamples;
+  // The on-board ADC is 10-bits -> 2^10 = 1024 -> 5V / 1024 ~= 4.88mV
+  // The voltage is in millivolts
+  float voltage2 = 4.88 * sensorValue1;
+  // This will calculate the actual current (in mA)
+  // Using the Vref and sensitivity settings you configure
+  float current2 = (voltage2 - Vref) * sensitivity;
+  Serial.print("Battery 2 current:");
+  Serial.print(current2);
+  Serial.print("mA");
+  Serial.print("\n");
+  float watts2 = BatteryAmps2 * batteryVoltage2;
+  
+  //Voltage and Current Values
+  batteryVoltage2 = avgBVal2; //supplies Battery voltage as 12V for poweer calc
+ Serial.print("Volts = " );                      
+  Serial.print(batteryVoltage2);  
+   Serial.print("\t Power (Watts) = ");  
+  Serial.print(watts2);  
+  
+ //Timing calc
+  sample1 = sample1 + 1;
+  msec = millis();
+  time = (float) msec / 1000.0;
+  totalCharge2 = totalCharge2 + BatteryAmps2;
+  averageAmps2 = totalCharge2 / sample1;
+  ampSeconds2 = averageAmps2*time;
+  ampHours2 = ampSeconds2/3600;
+  wattHours2 = batteryVoltage2 * ampHours2;
+ 
+  Serial.print("\t Time (hours) = ");
+  Serial.print(time/3600);
+  Serial.print("\t Amp Hours (ah) = ");
+  Serial.print(ampHours2);
+  Serial.print("\t Watt Hours (wh) = ");
+  Serial.println(wattHours2);
+  // Reset the sensor value for the next reading
+  sensorValue1 = 0;
+}
+//1st Motor Current Sensor
+  void MotorCurrentSensor1() {
+  // read the analog in value:
+  for (int i = 0; i < avgSamples; i++)
+  {
+    sensorValue2 += analogRead(analogIn3Pin);
+    // wait 10 milliseconds before the next loop
+    // for the analog-to-digital converter to settle
+    // after the last reading:
+    delay(10);
+  }
+  sensorValue2 = sensorValue2 / avgSamples;    
   // convert to milli amps
-  outputValue = (((long)sensorValue * 5000 / 1024) - 500 ) * 1000 / 133;  
-  amps = (float) outputValue / 1000; 
+  outputValue1 = (((long)sensorValue2 * 5000 / 1024) - 500 ) * 1000 / 133;  
+  motoramps1 = (float) outputValue1 / 1000; 
   Serial.print("\t Motor Current (amps) = ");     
-  Serial.print(amps); 
+  Serial.print(motoramps1); 
+}
+//Motor Current Sensor 2
+void MotorCurrentSensor2() {
+  // read the analog in value:
+  for (int i = 0; i < avgSamples; i++)
+  {
+    sensorValue3 += analogRead(analogIn4Pin);
+    // wait 10 milliseconds before the next loop
+    // for the analog-to-digital converter to settle
+    // after the last reading:
+    delay(10);
+  }
+  sensorValue3 = sensorValue3 / avgSamples;    
+  // convert to milli amps
+  outputValue2 = (((long)sensorValue3 * 5000 / 1024) - 500 ) * 1000 / 133;  
+  motoramps2 = (float) outputValue2 / 1000; 
+  //Current Value     
+  Serial.print("\t Current (amps) = ");     
+  Serial.print(motoramps2); 
 }
 
 //
