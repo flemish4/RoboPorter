@@ -54,7 +54,7 @@ else:
 import logging
 import logging.handlers
 #the mask for data logging
-logging.basicConfig(format='%(asctime)s - (%(threadName)s) %(levelname)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p',
+logging.basicConfig( format='%(asctime)s - (%(threadName)s) %(levelname)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p',
                     level=logging.INFO) #change the logging level here to change the display verbosity
 
 try:
@@ -294,7 +294,7 @@ class debugThread(MultiThreadBase):
         self.avgCounter = 0
         self.loopProfilingInterval = 10
         self.profiling = False
-
+        self.loopsdone = 0
         self.debugServer = False
         self.debugClient = False
         self.dataStore = ""
@@ -309,9 +309,10 @@ class debugThread(MultiThreadBase):
                 self.waitForClient()
             if self.debugClient:
                 try:
+                    
                     debuginfo = {
-                        'Type':'DebugData',
-                        'US1': str(USAvgDistances[0]) ,
+                        'Type':'DebugData', # Data Type
+                        'US1': str(USAvgDistances[0]) , # Ultrasonic Distances
                         'US2': str(USAvgDistances[1]) ,
                         'US3': str(USAvgDistances[2]) ,
                         'US4': str(USAvgDistances[3]) ,
@@ -319,12 +320,15 @@ class debugThread(MultiThreadBase):
                         'US6': str(USAvgDistances[5]) ,
                         'US7': str(USAvgDistances[6]) ,
                         'US8': str(USAvgDistances[7]) ,                       
-                        'Speed Vector Left':str(speedVector[0]) ,
-                        'Speed Vector Right':str(speedVector[1]),
-                        'Obstruction':str(obstruction)
+                        'Speed Vector Left':str(speedVector[0]) , # Left Speed Vector
+                        'Speed Vector Right':str(speedVector[1]), # Right Speed Vector
+                        'Obstruction':str(obstruction), # Obstruction 
+                        'Safety ON':str(safetyOn), # Is the Safety On
+                        'Debug Data Sent':str(self.loopsdone) # is a way of visually checking the debug is still updating. Will increment 1 each time an update is sent 
                     }
                     datatosend = json.dumps(debuginfo)
                     self.clientConnection.send(datatosend)
+                    self.loopsdone += 1 #increment loops done by 1
 
                     # logging.debug("Sending info to Logger")
                     # # Start Flag
@@ -395,7 +399,7 @@ class debugThread(MultiThreadBase):
 
                     # self.clientConnection.send("\n")
                     # self.logOverNetwork()
-                    time.sleep(1)
+                    time.sleep(0.8)
 
                 except Exception as e:
                     logging.error("%s", str(e))
@@ -538,6 +542,7 @@ class motorDataThread(MultiThreadBase):
                 elif lastSent != speedVector: #otherwise...
                     logging.warning("Obstacle Detected But Safety OFF...") #give a warning, but dont do anything to stop
                     self.send_serial_data(speedVector)
+            
             elif self.smoothBrake and usCaution:
                 print "smooth braking"
                 if lastSent != [0, 0]:
@@ -682,10 +687,8 @@ class usDataThread(MultiThreadBase):
         while not exitFlag.value:
             try:
                 self.inputBuf1 = USConn1.readline()
-                self.inputBuf1 = self.inputBuf1.rstrip("\n")
-                self.inputBuf1 = self.inputBuf1.strip(" ")
+                self.inputBuf1 = self.inputBuf1.rstrip(",\n")
                 self.rawUSdata_1 = self.inputBuf1.split(",")
-                
                 #print ("rw1 ", self.inputBuf1)
             except Exception as e:
                 logging.error("%s", e)
@@ -694,10 +697,8 @@ class usDataThread(MultiThreadBase):
         while not exitFlag.value:
             try:
                 self.inputBuf2 = USConn2.readline()
-                self.inputBuf2 = self.inputBuf2.rstrip('\n')
-                self.inputBuf1 = self.inputBuf1.strip(" ")
+                self.inputBuf2 = self.inputBuf2.rstrip(',\n')
                 self.rawUSdata_2 = self.inputBuf2.split(",")
-                
                 #print ("rw2 ", self.rawUSdata_2)
             except Exception as e:
                 logging.error("%s", e)
@@ -706,7 +707,6 @@ class usDataThread(MultiThreadBase):
         global stoppingDistance
         global maxSpeeds
 
-        #aMax = 500
         aMax = (2*numpy.pi*1000)/(60*0.12)
         #radToRPM = 60/(2*numpy.pi)
         for i in range(0,len(usData)):
@@ -717,7 +717,7 @@ class usDataThread(MultiThreadBase):
                 #print "BAD :("
                 maxSpeeds[i] = 0
 
-        print "max speeds = " + str(maxSpeeds)
+        #print "max speeds = " + str(maxSpeeds)
 
     def run(self):
         global speedVector
@@ -778,24 +778,25 @@ class usDataThread(MultiThreadBase):
                 self.loopEndFlag()
                 self.loopRunTime()
             else:
-                time.sleep(0.01)
+                time.sleep(0.01) # change to vary frequency of US data interupts 
 
         logging.info("Exiting")
 
-    def mAverage(self, n):
+    def mAverage(self, n): # moving average of raw data
         global USAvgDistances
         global threadLock
         i = 0
 
-        rawUSdata = self.rawUSdata_1 + self.rawUSdata_2
-        print rawUSdata
-
+        rawUSdata = self.rawUSdata_2 + self.rawUSdata_1
         if len(rawUSdata) == 8:
             with threadLock:
-                for i in range(0, len(USAvgDistances)-1):
+                for i in range(0, len(USAvgDistances)):
                     USAvgDistances[i] += (int(rawUSdata[i]) - USAvgDistances[i])/n
                 if self.profiling:
                     print ("\t" + self.name + " Avg Vector - " + str(USAvgDistances))
+          
+        #print USAvgDistances
+        #logging.info(USAvgDistances) 
 
     def US_safety_interrupt(self):
         global USAvgDistances
@@ -805,78 +806,78 @@ class usDataThread(MultiThreadBase):
         global threadLock
         global usCaution
 
-        # if safetyOn:
-        try:
-            if lastCommand == "f":
-                if (int(USAvgDistances[1]) < USThresholds[0]) or (int(USAvgDistances[0]) < USThresholds[0]):
-                    logging.warning("FRONT TOO CLOSE. STOPPPPP!!!")
-                    if obstruction != True:
+        if safetyOn:
+            try:
+                if lastCommand == "f":
+                    if (int(USAvgDistances[2]) < USThresholds[0]) or (int(USAvgDistances[3]) < USThresholds[0]):
+                        logging.warning("FRONT TOO CLOSE. STOPPPPP!!!")
+                        if obstruction != True:
+                            with threadLock:
+                                obstruction = True
+                        lastCommand = "" 
+                        print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[2])) + ", " + str(int(USAvgDistances[2])))
+                    elif obstruction != False:
                         with threadLock:
-                            obstruction = True
-                    lastCommand = "" 
-                    print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[2]))
-                           + ", " + str(int(USAvgDistances[1])) + ", " + str(int(USAvgDistances[3])) + ", " + str(int(USAvgDistances[0])))
-                elif obstruction != False:
+                            obstruction = False
+
+                    if (maxSpeeds[2] > abs(speedVector[0]) or (maxSpeeds[3] > abs(speedVector[0]))):
+                        print("CAUTION\n")
+                        usCaution = True
+                    else:
+                        usCaution = False
+
+                elif lastCommand == "b":
+                    if (int(USAvgDistances[6]) < USThresholds[2]) or (int(USAvgDistances[7]) < USThresholds[2]):
+                        logging.warning("BACK TOO CLOSE. STOPPPPP!!!")
+                        if obstruction != True:
+                            with threadLock:
+                                obstruction = True
+                        lastCommand = "" 
+                        print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[6])) + ", " + str(int(USAvgDistances[7])) )
+                    elif obstruction != False:
+                        with threadLock:
+                            obstruction = False
+
+                    if (maxSpeeds[6] > abs(speedVector[0]) or (maxSpeeds[7] > abs(speedVector[0]))):
+                        usCaution = True
+                        print("CAUTION\n")
+                    else:
+                        usCaution = False
+
+                elif lastCommand == "l":
+                    if (int(USAvgDistances[0]) < USThresholds[1]) or (int(USAvgDistances[1]) < USThresholds[1]):
+                        logging.warning("LEFT SIDE TOO CLOSE. STOPPPPP!!!")
+                        if obstruction != True:
+                            with threadLock:
+                                obstruction = True
+                        lastCommand = "" 
+                        print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[0])) + ", " + str(int(USAvgDistances[1])))
+                    elif obstruction != False:
+                        with threadLock:
+                            obstruction = False
+
+                elif lastCommand == "r":
+                    if (int(USAvgDistances[5]) < USThresholds[1]) or (int(USAvgDistances[6]) < USThresholds[1]):
+                        logging.warning("RIGHT SIDE TOO CLOSE. STOPPPPP!!!")
+                        if obstruction != True:
+                            with threadLock:
+                                obstruction = True
+                        lastCommand = "" 
+                        print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[5])) + ", " + str(int(USAvgDistances[6])))
+                    elif obstruction != False:
+                        with threadLock:
+                            obstruction = False
+                
+                elif lastCommand == "x":
                     with threadLock:
                         obstruction = False
 
-                if (maxSpeeds[1] > abs(speedVector[0])) or (maxSpeeds[0] > abs(speedVector[0])) or (maxSpeeds[2] > abs(speedVector[0])):
-                    print("CAUTION\n")
-                    usCaution = True
-                else:
-                    usCaution = False
 
-            elif lastCommand == "b":
-                if (int(USAvgDistances[4]) < USThresholds[2]) or (int(USAvgDistances[5]) < USThresholds[2]):
-                    logging.warning("BACK TOO CLOSE. STOPPPPP!!!")
-                    if obstruction != True:
-                        with threadLock:
-                            obstruction = True
-                    lastCommand = "" 
-                    print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[4])) + ", " + str(int(USAvgDistances[5])) + ", " + str(int(USAvgDistances[6])) )
-                elif obstruction != False:
-                    with threadLock:
-                        obstruction = False
-
-                if (maxSpeeds[6] > abs(speedVector[0])) or (maxSpeeds[5] > abs(speedVector[0])) or (maxSpeeds[6] > abs(speedVector[0])):
-                    usCaution = True
-                    print("CAUTION\n")
-                else:
-                    usCaution = False
-
-            elif lastCommand == "l":
-                if (int(USAvgDistances[7]) < USThresholds[1]) or (int(USAvgDistances[8]) < USThresholds[1]):
-                    logging.warning("LEFT SIDE TOO CLOSE. STOPPPPP!!!")
-                    if obstruction != True:
-                        with threadLock:
-                            obstruction = True
-                    lastCommand = "" 
-                    print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[7])) + ", " + str(int(USAvgDistances[8])) + ", " + str(int(USAvgDistances[9])))
-                elif obstruction != False:
-                    with threadLock:
-                        obstruction = False
-
-            elif lastCommand == "r":
-                if (int(USAvgDistances[10]) < USThresholds[1]) or (int(USAvgDistances[11]) < USThresholds[1]):
-                    logging.warning("RIGHT SIDE TOO CLOSE. STOPPPPP!!!")
-                    if obstruction != True:
-                        with threadLock:
-                            obstruction = True
-                    lastCommand = "" 
-                    print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[10])) + ", " + str(int(USAvgDistances[11])) + ", " + str(int(USAvgDistances[12])) + ", ")
-                elif obstruction != False:
-                    with threadLock:
-                        obstruction = False
-            
-            elif lastCommand == "x":
-                with threadLock:
-                    obstruction = False
-
-
-        except Exception as e:
-            self.errorCount += 1
-            logging.error("error in US interrupt function - %s", str(e))
-
+            except Exception as e:
+                self.errorCount += 1
+                logging.error("error in US interrupt function - %s", str(e))
+        else:
+            obstruction = False
 ###---Function Definitions
 
 def qrCalibrate(qrProcessor):
@@ -1361,6 +1362,7 @@ if __name__ == '__main__':
 
     # setup serial connection to motor controller
     logging.info("Trying to connect to serial devices")
+
     if Motor_Enable: 
         dataInput = "" #Reset the variable
         logging.info("Trying to connect to motor controller")
@@ -1386,14 +1388,14 @@ if __name__ == '__main__':
         logging.info("Trying to connect to Ultrasonic controller")
         try:
             if (platform == "linux") or (platform == "linux2"):
-                USConn1 = serial.Serial('/dev/ttyACM1', 19200)
+                USConn1 = serial.Serial('/dev/ttyACM1', 9600)
                 logging.info("Connected to Ultrasonic sensors at %s", str(USConn1))
                 if UShosts == 2:
-                    USConn2 = serial.Serial('/dev/ttyACM2', 19200)
+                    USConn2 = serial.Serial('/dev/ttyACM2', 9600)
                     logging.info("Connected to Ultrasonic sensors at %s", str(USConn2))
 
             elif (platform == "win32"):
-                USConn1 = serial.Serial('COM3', 19200)
+                USConn1 = serial.Serial('COM3', 9600)
 
             USthread = usDataThread(5, "Ultrasonic thread")
             USthread.start()
@@ -1493,16 +1495,10 @@ if __name__ == '__main__':
 
                     elif dataInput[0] == "s" and not autoPilot: #Toggle safety
                         if safetyOn:
-                            dataInput = raw_input("Do you solemnly swear you're up to no good!?..")
-
-                            if len(dataInput) > 0 and dataInput[0] == "Y":
-                                print ("May the force be with you... you are going to need it...")
-                                print ("(just don't tell Ms Webster about it... >,< )")
-                                safetyOn = False
+                            safetyOn = False
                         else:#if safety is off...turn it on
                             safetyOn = True
-                            print ("Mischief managed ;)")
-
+                            
                         dataInput = ""
                         if dataReady != False:
                             with threadLock:
