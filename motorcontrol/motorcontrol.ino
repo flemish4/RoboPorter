@@ -70,10 +70,10 @@ int sensorValue3 = 0;        // value read from the carrier board
 float motoramps2 = 0.0;
 int outputValue2 = 0;
 
-float leftKp  = 0.5;
-float leftKi  = 0.5;
-float rightKp = 0.5;
-float rightKi = 0.5;
+float leftKp  = 0.36;
+float leftKi  = 0.36;
+float rightKp = 0.36;
+float rightKi = 0.36;
 
 volatile int leftSensorPIDCount  = 0;
 volatile int rightSensorPIDCount = 0;
@@ -409,15 +409,17 @@ void rotateRight (int angle) {
 
 void moveRobot (int left, int right) {
 
+
+ //desiredLeftPIDCount = (left/100)* 0.6 * pulsesPerRevolution / 0.1  ; 
  desiredLeftPIDCount = (left / (float)60) * pulsesPerRevolution / (float)(1000 / pidPeriod);
  desiredRightPIDCount = (right / (float)60) * pulsesPerRevolution / (float)(1000 / pidPeriod);
 
 
-//      Serial.print(" - Left count is: ");
-//      Serial.print(desiredLeftPIDCount);
+      Serial.print(" - Left count is: ");
+      Serial.print(desiredLeftPIDCount);
 //      
-//      Serial.print(" Right count is: ");
-//      Serial.println(desiredRightPIDCount);
+      Serial.print(" Right count is: ");
+      Serial.println(desiredRightPIDCount);
 
 }
 

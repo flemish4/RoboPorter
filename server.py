@@ -399,7 +399,7 @@ class debugThread(MultiThreadBase):
 
                     # self.clientConnection.send("\n")
                     # self.logOverNetwork()
-                    time.sleep(0.8)
+                    time.sleep(0.5)
 
                 except Exception as e:
                     logging.error("%s", str(e))
@@ -543,20 +543,20 @@ class motorDataThread(MultiThreadBase):
                     logging.warning("Obstacle Detected But Safety OFF...") #give a warning, but dont do anything to stop
                     self.send_serial_data(speedVector)
             
-            elif self.smoothBrake and usCaution:
-                print "smooth braking"
-                if lastSent != [0, 0]:
-                    logging.info("Setting smooth speed")
-                    with threadLock:
-                        if lastCommand == "f":
-                            speedVector = [min(maxSpeeds[0:3]),min(maxSpeeds[0:3])]
-                            dataReady = False
-                        elif lastCommand == "b":
-                            speedVector = [min(maxSpeeds[4:6]),min(maxSpeeds[4:6])]
-                            dataReady = False
-                        else:
-                            logging.warning("Smooth Braking is not valid for rotation")
-                    self.send_serial_data(speedVector)
+            # elif self.smoothBrake and usCaution:
+            #     print "smooth braking"
+            #     if lastSent != [0, 0]:
+            #         logging.info("Setting smooth speed")
+            #         with threadLock:
+            #             if lastCommand == "f":
+            #                 speedVector = [min(maxSpeeds[0:3]),min(maxSpeeds[0:3])]
+            #                 dataReady = False
+            #             elif lastCommand == "b":
+            #                 speedVector = [min(maxSpeeds[4:6]),min(maxSpeeds[4:6])]
+            #                 dataReady = False
+            #             else:
+            #                 logging.warning("Smooth Braking is not valid for rotation")
+            #         self.send_serial_data(speedVector)
 
             elif dataReady and (lastSent != speedVector): #no obstruction and the new command is different to the last command
                 logging.debug("Data Ready")
@@ -663,6 +663,8 @@ class motorDataThread(MultiThreadBase):
             MotorConn.write(sendData)
             logging.info("Successfully sent... - %s", str(sendData))
             lastSent = sendCommand
+            # time.sleep(10)
+            # print MotorConn.read(MotorConn.inWaiting())
         except Exception as e:
             logging.error("Sending to Motor failed - %s", str(e))
             # self.actionState = 4
@@ -880,364 +882,6 @@ class usDataThread(MultiThreadBase):
             obstruction = False
 ###---Function Definitions
 
-def qrCalibrate(qrProcessor):
-    # Instruct user
-    print 'To calibrate the RoboPorter set camera to 5 cm away from QR Code'
-    print 'Click on the window when ready to continue...'
-
-    # Waiting for user input
-    qrProcessor.user_wait()
-
-    # Process one QR Code
-    qrProcessor.process_one()
-
-    # Calibrate Camera Focal Length Function
-    # When sysmbol detected..
-    F = 0
-
-    for symbol in qrProcessor.results:
-        # Seperate code into useful data
-        data = symbol.data.split(',')
-        location = data[0]
-        size = int(data[1])
-
-        # Save code corners
-        x0 = symbol.location[0][0]
-        x1 = symbol.location[1][0]
-        x2 = symbol.location[2][0]
-        x3 = symbol.location[3][0]
-        y0 = symbol.location[0][1]
-        y1 = symbol.location[1][1]
-        y2 = symbol.location[2][1]
-        y3 = symbol.location[3][1]
-
-        # Calculate x and y centre points
-        x_centre = (x0 + x1 + x2 + x3) / 4
-        y_centre = (y0 + y1 + y2 + y3) / 4
-
-        # Calculate average pixel width
-        P_x = (abs(x_centre - x0) + abs(x_centre - x1) + abs(x_centre - x2) + abs(x_centre - x3)) / 2
-        P_y = (abs(y_centre - y0) + abs(y_centre - y1) + abs(y_centre - y2) + abs(y_centre - y3)) / 2
-        P = (P_x + P_y) / 2
-
-        # Set Code actual size in mm
-        W = size
-
-        # Set distance to 1 metre
-        D = 50
-
-        # Calculate Focal length of camera
-        F = (P * D) / W
-
-        # Print result
-        print 'Focal length is', F
-        time.sleep(1)
-
-    return F
-
-def scanQRCode(inputImage, qrDict, lastQR):
-
-    updateEnabled = True
-    # create a Scanner
-    scanner = zbar.ImageScanner()
-
-    # configure the Scanner
-    scanner.parse_config('enable')
-
-    cv2_image = cv2.cvtColor(inputImage, cv2.COLOR_BGR2GRAY)
-    pil = Image.fromarray(cv2_image)
-
-    #pil = inputImage #.open('cam.jpg').convert('L')
-    width, height = pil.size
-    raw = pil.tobytes()
-
-    # wrap image data
-    image = zbar.Image(width, height, 'Y800', raw)
-    #print "Ready..."
-
-    # scan the image for QR Codes
-    try: #try to scan the image
-        scanner.scan(image)
-    except Exception as e:
-        logging.error("%s", e)
-
-    # When symbol detected
-    i = 0
-    for symbol in image:
-        i+=1
-        #print "symbol obtained"
-
-        # Seperate code into useful data
-        data = symbol.data.split(',')
-        #print ("data = ", data)
-
-        if len(data) == 5:
-            location = data[0]
-            size = float(data[1])
-            # Save code corners
-            x0 = symbol.location[0][0]
-            x1 = symbol.location[1][0]
-            x2 = symbol.location[2][0]
-            x3 = symbol.location[3][0]
-            y0 = symbol.location[0][1]
-            y1 = symbol.location[1][1]
-            y2 = symbol.location[2][1]
-            y3 = symbol.location[3][1]
-
-            # Calculate x and y centre points
-            x_centre = (x0 + x1 + x2 + x3) / 4
-            y_centre = (y0 + y1 + y2 + y3) / 4
-
-            # Calculate average pixel width
-            P_x = (abs(x_centre - x0) + abs(x_centre - x1) + abs(x_centre - x2) + abs(x_centre - x3)) / 2
-            P_y = (abs(y_centre - y0) + abs(y_centre - y1) + abs(y_centre - y2) + abs(y_centre - y3)) / 2
-            P = (P_x + P_y) / 2
-
-            # Set Code actual size in mm
-            F = 618
-            W = size
-            D = ((F * W) / P) / 10
-            # print 'F = ', F,'W = ', W, 'P = ', P, 'D = ', ((F * W) / P)
-            #print 'QR Code scanned:', symbol.data
-            #print 'RoboPorter is', "%.2fcm" % D, 'away from ' '%s' % data[0]
-
-            qrDict['visible'] = True
-            qrDict['string'] = data[0]
-            qrDict['locX'] = int(data[2]) * 50
-            qrDict['locY'] = int(data[3]) * 50
-            qrDict['distance'] = int(D)
-            qrDict['orientation'] = int(data[4])
-            qrDict['centre'] = [float(x_centre),float(y_centre)]
-
-            print ("QR Code data = " + str (qrDict))
-            if updateEnabled and lastCommand != "r" and lastCommand != "l":
-                print ("updating location")
-                if qrDict['orientation'] >=0 and qrDict['orientation'] < 90:
-                    porterLocation_Global[0] = qrDict['locX'] + qrDict['distance']*numpy.cos(numpy.deg2rad(90 - qrDict['orientation']))
-                    porterLocation_Global[1] = qrDict['locY'] + qrDict['distance']*numpy.sin(numpy.deg2rad(90 - qrDict['orientation']))
-                    if qrDict['last']  != qrDict['string']:
-                        porterOrientation.value = numpy.deg2rad((180+qrDict['orientation'])-360)
-                        orientationWheels.value = porterOrientation.value
-                elif qrDict['orientation'] >= 90 and qrDict['orientation'] < 180:
-                    porterLocation_Global[0] = qrDict['locX'] + qrDict['distance'] * numpy.cos(numpy.deg2rad(qrDict['orientation'] - 90))
-                    porterLocation_Global[1] = qrDict['locY'] - qrDict['distance'] * numpy.sin(numpy.deg2rad(qrDict['orientation'] - 90))
-                    if qrDict['last']  != qrDict['string']:
-                        porterOrientation.value = numpy.deg2rad((180+qrDict['orientation'])-360)
-                        orientationWheels.value = porterOrientation.value
-                elif qrDict['orientation'] >= 180 and qrDict['orientation'] < 270:
-                    porterLocation_Global[0] = qrDict['locX'] - qrDict['distance'] * numpy.cos(numpy.deg2rad(270 - qrDict['orientation']))
-                    porterLocation_Global[1] = qrDict['locY'] - qrDict['distance'] * numpy.sin(numpy.deg2rad(270 - qrDict['orientation']))
-                    if qrDict['last']  != qrDict['string']:
-                        porterOrientation.value = numpy.deg2rad(qrDict['orientation']-180)
-                        orientationWheels.value = porterOrientation.value
-                elif qrDict['orientation'] >= 270 and qrDict['orientation'] < 360:
-                    porterLocation_Global[0] = qrDict['locX'] - qrDict['distance'] * numpy.cos(numpy.deg2rad(qrDict['orientation'] - 270))
-                    porterLocation_Global[1] = qrDict['locY'] + qrDict['distance'] * numpy.sin(numpy.deg2rad(qrDict['orientation'] - 270))
-                    if qrDict['last']  != qrDict['string']:
-                        porterOrientation.value = numpy.deg2rad(qrDict['orientation'] - 180)
-                        orientationWheels.value = porterOrientation.value
-                else:
-                    print ("ERROR in QR code orientation")
-
-            if qrDict['last'] != qrDict['string']:
-                qrDict['last'] = qrDict['string']
-
-    if i==0:
-        qrDict['visible'] = False
-
-def CameraFunction(vpDict, qrDict,lastQR):
-    global vanish
-    global vpValid
-    global expectedFPS
-
-    frameCount = 0
-
-
-    profiling = True
-    verbose = False
-    vanishx = [0,0,0]
-    vanishy = [0,0,0]
-    varx = [0, 0, 0, 0, 0]
-    vary = [0, 0, 0, 0, 0]
-    capVid = cv2.VideoCapture(0)
-
-    #capVid = cv2.VideoCapture('testOutsideLab.avi')  # declare a VideoCapture object and associate to webcam, 0 => use 1st webcam
-
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    outvid = cv2.VideoWriter('output.avi', fourcc, 5.0, (640/2,480/2))
-
-    # while not capVid.isOpened():
-    #     print ("Error Opening Camera")
-
-    if capVid.isOpened() == False:  # check if VideoCapture object was associated to webcam successfully
-        print "error: capVid not accessed successfully\n\n"  # if not, print error message
-        #logging.error("error: capWebcam not accessed successfully\n\n")
-        os.system("pause")
-    else:
-        centre_point = capVid.read()[1].shape[1] / 4
-
-    while capVid.isOpened() and not exitFlag.value :
-        blnFrameReadSuccessfully, img = capVid.read()
-        #frameCount += 1
-
-        if True :#frameCount > 8:
-            #print "trying to get QR"
-            scanQRCode(img,qrDict,lastQR)
-            #frameCount = 0
-
-
-        img = cv2.resize(img, (0,0), fx=0.5, fy=0.5)
-        #origimg = img
-        #print "frame read"
-        startTime = time.time()
-        sumTime = 0
-        #cv2.imshow("input from cam", img)
-
-        #print "Image Loaded: " + str(startTime)
-
-        # if len(frameNumber) > 0:
-        #     frameNumber.append(frameNumber[len(frameNumber) - 1] + 1)
-        # else:
-        #     frameNumber[0] = 1
-
-        try: #try to find vanishing point
-            #print "hough Lines"
-            hough_lines, startTime, sumTime = vpLib.hough_transform(img, False, startTime, profiling, verbose)  #calculate hough lines
-
-            if hough_lines: #if lines found
-                random_sample = vpLib.getLineSample(hough_lines, 30)  # take a sample of 100 line
-                intersections = vpLib.find_intersections(random_sample, img)  # Find intersections in the sample
-
-                if profiling:
-                    duration = time.time() - startTime
-                    if verbose:
-                        print "Intersection Time :" + str(duration)
-                    sumTime += duration
-                    startTime = time.time()
-
-                #print str(intersections)
-                if intersections:  # if intersections are found
-                    grid_size[0] = img.shape[0] // 8 #set the grid size to be 20 by 20
-                    grid_size[1] = img.shape[1] // 20
-                    #find vanishing points
-                    vanishing_point = vpLib.vp_candidates(img, grid_size, intersections)
-                    #returns the best cell
-                    #print ("vanishing_point ", vanishing_point)
-                    vanish2, vanishx, vanishy = medianFilter(vanishing_point[0], 3, vanishx, vanishy)
-                    varx, vary = varianceFilter(vanishing_point[0], 5, varx, vary)
-
-                    if vpValid.value == True:
-                        cv2.circle(img, (vanish2[0], vanish2[1]), 5, (210, 255, 10), thickness=2)
-                    else:
-                        cv2.circle(img, (vanish2[0], vanish2[1]), 5, (10, 10, 255), thickness=2)
-
-                    vanish.value = int(vanish2[0]-centre_point)
-                    vpDict['xValue'] = int(vanish2[0]-centre_point)
-
-                    #print  ("vanishing point = ", vanish.value)
-                else:
-                    vpValid.value = False
-                    vpDict['valid'] = False
-            else:
-                vpValid.value = False
-                vpDict['valid'] = False
-            #
-            # print "valid vanishing point? " + str(vpValid.value)
-            # print "vanishing point = " + str(vanish.value)
-
-            #cv2.imshow('vp Image', img)
-
-            #time.sleep(0.25)
-
-
-            if profiling:
-                duration = time.time() - startTime
-                if verbose:
-                    print "Finish Time :" + str(duration)
-                sumTime += duration
-                startTime = time.time()
-
-            if profiling:
-                expectedFPS.value = 1/sumTime
-                if verbose:
-                    print "Expected FPS: " + str(expectedFPS.value)
-            else:
-                expectedFPS.value = 0
-
-            #fps.append(expectedFPS)
-            # plt.plot(frameNumber, fps)
-            # plt.pause(0.05)
-
-            if profiling and verbose:
-                print "----------------------------------------------"
-
-        except Exception as e:
-            pass
-            #logging.error("%s", e)
-
-            #time.sleep(1)
-
-        outvid.write(img)
-
-    capVid.release()
-    outvid.release()
-
-    cv2.destroyAllWindows()
-
-def medianFilter(vpCoord, n, vanishx, vanishy):
-    i = 0
-    #global vpValid
-
-    vanish = [0.,0.]
-    #print len(vpCoord)
-    if len(vpCoord) == 2:
-        #print vpCoord
-        #print vanishx, vanishy
-        vanishx[0] = vanishx[1]
-        vanishx[1] = vanishx[2]
-        vanishx[2] = vpCoord[0]
-
-        vanishy[0] = vanishy[1]
-        vanishy[1] = vanishy[2]
-        vanishy[2] = vpCoord[1]
-
-        sortedx = sorted(vanishx)
-        sortedy = sorted(vanishy)
-
-        medVanish = (sortedx[1],sortedy[1])
-
-
-    return medVanish, vanishx, vanishy
-
-def varianceFilter(vpCoord, n, varx, vary):
-    global vpValid
-    i = 0
-
-    while (len(varx) < n):
-        varx.append(0)
-
-    while (len(vary) < n):
-        vary.append(0)
-
-    for i in range(0, n - 1):
-        varx[i] = varx[i + 1]
-        vary[i] = vary[i + 1]
-
-    varx[n - 1] = vpCoord[0]
-    vary[n - 1] = vpCoord[1]
-
-    medVar = numpy.var(varx[0:n-1]), numpy.var(vary[0:n-1])
-
-    if (medVar[0] > 1000) or (medVar[1] > 150):
-        vpValid.value = False
-        vpDict['valid'] = False
-
-    else:
-        vpValid.value = True
-        vpDict['valid'] = True
-
-    return varx, vary
-
 def cmdToSpeeds(inputCommand): #convert commands to speed vectors for manual control
     mSpeed = 0
     validateBuffer = (0, 0)
@@ -1282,9 +926,9 @@ def cmdToSpeeds(inputCommand): #convert commands to speed vectors for manual con
         return -mSpeed, -mSpeed
         logging.info("Converted to Speed")
     elif inputCommand[0] == "r":
-        return (mSpeed-5), -(mSpeed-5)
-    elif inputCommand[0] == "l":
         return -(mSpeed-5), (mSpeed-5)
+    elif inputCommand[0] == "l":
+        return (mSpeed-5), -(mSpeed-5)
 
 def get_ip_address(ifname): #Who is this code based on?
     if (platform == "linux") or (platform == "linux2"):
@@ -1407,13 +1051,6 @@ if __name__ == '__main__':
             logging.error("%s", str(e))
             # USConnected = False
 
-    if Cam_Enable:
-        logging.info("Starting Cam Process")
-        cameraProcess = multiprocessing.Process(name="CAM Process", target=CameraFunction, args=(vpDict, qrDict,lastQR,))
-        cameraProcess.start()
-        processes.append(cameraProcess)
-        logging.info("Camera Process Running - %s", str(cameraProcess))
-        speechQueue.put("Camera Process Running")
 
     # chose input method
     dataInput = "n" #raw_input("Local Comms...? (y/n)")
