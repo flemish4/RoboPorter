@@ -6,7 +6,7 @@ error_reporting(E_ALL) ;
 if(!isset($_SESSION['loggedin'])){
 	header("Location: login/");
 };
-?> -->
+?>  -->
 
 <!doctype html>
 <html lang="en">
@@ -24,6 +24,7 @@ if(!isset($_SESSION['loggedin'])){
 
 	<style>
 		body{overflow-y:scroll;}
+		.red{color: red;}
 	</style>
 </head>
 
@@ -113,7 +114,7 @@ if(!isset($_SESSION['loggedin'])){
 		</div>
 
 		<!-- Error Modal -->
-		<div class="modal fade" id="noconnection-modal" data-backdrop="static">
+		<div class="modal fade" id="error-modal" data-backdrop="static">
 			<div class="modal-dialog">
 				<div class="modal-content">
 					<div class="modal-header">
@@ -127,7 +128,7 @@ if(!isset($_SESSION['loggedin'])){
 							</div>
 					</div>
 					<div class="modal-footer">
-						<button class="btn btn-success pagereload"><span class="fas fa-sync"></span>   Reload Page</button>
+						<button class="btn btn-success pagereload"><span class="fas fa-sync"></span>Reload Page</button>
 					</div>
 				</div>
 			</div>
@@ -219,7 +220,36 @@ if(!isset($_SESSION['loggedin'])){
 			</div>
 		</div>
 
-
+		<!-- Keyboard Modal -->
+		<div class="modal fade" id="keyinput-modal" data-backdrop="static">
+			<div class="modal-dialog modal-lg">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h4 class="modal-title">Use the WASD keys to control RoboPorter</h4>
+						<button class="close" type="button" data-dismiss="modal">&times;</button>
+					</div>	
+					<div class="modal-body">
+						<div class="row row justify-content-center">
+							<img width="70%" src="http://192.168.0.2:8080/?action=stream">
+						</div>
+						<div class="row justify-content-center" style="margin-top:1%;">
+							<span class="fas fa-caret-square-up fa-5x" id="up-key"></span>
+						</div>
+						<div class="row row justify-content-center">
+							<span class="fas fa-caret-square-left fa-5x" style="margin-right:1% ;"id="left-key"></span>
+							<span class="fas fa-caret-square-down fa-5x"id="down-key"></span>
+							<span class="fas fa-caret-square-right fa-5x" style="margin-left:1% ;"id="right-key"></span>
+						</div>
+						<div class="row justify-content-center">
+							<input class="btn btn-danger stop-btn" value="Stop!" style="width:70%; margin-top:1%;" >
+						</div>
+					</div>
+					<div class="modal-footer">
+						<!-- <button type="button" class="btn btn-default" data-dismiss="modal" id="keyclose">Close</button> -->
+					</div>
+				</div>
+			</div>
+		</div>
 
 
 		<!-- ******** Content Divs Below ******** -->
@@ -263,7 +293,7 @@ if(!isset($_SESSION['loggedin'])){
 							<div class="row no-gutters justify-content-center">
 								<div class="col-12 col-lg-8">
 									<div class="row justify-content-center" style="margin:1%;">
-										<div class="col-6"><button class="btn btn-secondary forward-button" style="width:100%;">Forward</button></div>
+										<div class="col-6"><button class="btn btn-secondary forward-btn" style="width:100%;">Forward</button></div>
 									</div>	
 									<div class="row justify-content-center" style="margin:1%;">
 										<div class="col-6" ><button class="btn btn-secondary left-btn" style="width:100%;">Left</button></div>
@@ -328,8 +358,8 @@ if(!isset($_SESSION['loggedin'])){
 							</div>
 						</div>
 					</div>
-					<div id="webcam">
-						<!-- <img style="position:absolute;" src="http://192.168.1.229:8080/?action=snapshot"> -->
+					<div class="row justify-content-center">
+						<input type="button" class="btn"  data-toggle="modal" data-target="#keyinput-modal" value="Control Using WASD Keys">
 					</div>
 				</div>
 
@@ -338,15 +368,19 @@ if(!isset($_SESSION['loggedin'])){
 						<div class="col-12 text-center">
 							<button class="btn btn-secondary" id="auto-btn" style="margin:1%;">Autopilot</button>
 							<button class="btn btn-secondary" id="shutdown-btn" style="margin:1%;">Shutdown Server</button>
-							<button class="btn btn-secondary" id="autopiolot-btn" style="margin:1%;">Safety ON/OFF</button>
+							<button class="btn btn-secondary" id="safety-btn" style="margin:1%;">Safety ON/OFF</button>
 						</div>
 					</div>
 				</div>
 			</div>
-			<div class="row justify-content-center" style="margin-bottom:5%;">
-				<div class="col-12 col-md-8 text-center">
-				<h4>Live Stream</h4>
-				<img width="100%" src="http://192.168.1.229:8080/?action=stream" alt="The Stream Failed to Load" style="margin-top:2%; border-style: solid; border-width: thick; border-color:grey;">
+			<div class="row justify-content-center"><h4>Live View of RoboPorter</h4></div>
+			<div class="row justify-content-center" style="margin-bottom:5%; padding-top:2%;">
+				<div class="col-12 col-lg-8 text-center" style="color:white;">
+				<div style="width:100%; background-color:grey; position:absolute; z-index:1; top:0; left: 0; padding:5%; border-radius:40px;" id="stream-failed">
+					<span class="fas fa-exclamation-triangle fa-7x"></span>
+					<h4 style=" padding-top:3%;">The stream failed to load!</h4>
+				</div>
+				<img width="100%" src="http://192.168.0.2:8080/?action=stream" style="position:absolute; z-index:2; top:0; left: 0; ">
 				</div>
 			</div>
 		</div>

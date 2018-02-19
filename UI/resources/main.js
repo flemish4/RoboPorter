@@ -5,6 +5,10 @@ $(document).ready(function(){
     $("#change_password_warning").hide() ;
     $("#change_password_success").hide() ;
 
+    //variables for WASD control
+    var keycommandsent = null ; 
+    var lastcommand ;
+
     // Creates websocket connection
     var s = new WebSocket("ws://192.168.0.1:5555"); 
 
@@ -24,6 +28,7 @@ $(document).ready(function(){
     var div_width ;
     var wh_ratio ; 
     var new_height ; 
+    
 
     // Code below handles Debug Canvas
     var debug_canvas1 = document.getElementById('DebugCanvas1'); // Get Debug Canvas 1 ID i.e. the grey roboporter box
@@ -42,14 +47,14 @@ $(document).ready(function(){
     debug_context1.beginPath();
     debug_context1.lineWidth= borderwidth;
     debug_context1.strokeStyle="black" ; 
-    debug_context1.rect(0.5,0.5,csize+0.5,csize+0.5);
+    debug_context1.rect(0.5,0.5,csize-0.5,csize-0.5);
     debug_context1.stroke();
     
     // size of roboporter compared to width of div
     var dscale = 0.35 ; 
 
     debug_context1.fillStyle="#595959" ; //roboporter color
-    debug_context1.fillRect(((csize/2)-(dscale*csize/2))+0.5,(csize/2)-(dscale*csize/2)+0.5, (csize*dscale) ,(csize*dscale)); // draw roboporter rectangle
+    debug_context1.fillRect(((csize/2)-(dscale*csize/2))+0.5,(csize/2)-(dscale*csize/2)+0.5, (csize*dscale),(csize*dscale)); // draw roboporter rectangle
     
     // Draw some text that shows when there is no debug data available
     debug_context2.fillStyle="Red" ; //Text Color
@@ -65,13 +70,17 @@ $(document).ready(function(){
         });   
     }, 21000);
 
-    $(".pagereload").click(function(){
-        location.reload(true);
-    });
 
     s.onopen = function(e) {}
-    s.onclose = function(e) { $("#noconnection-modal").show() ; }
+    s.onclose = function(e) { $("#error-modal").show() ; }
     s.onmessage = function(e) {
+
+        //  try{ // tries to clear the no connection timeout. Will display error on first run
+        //  clearTimeout(timeout) ;
+        //  }catch(err){}
+
+        //  var timeout = window.setTimeout(function(){$("#error-modal").show()},2000); // set new connection timeout. Should be set for slightly longer that debug refresh times
+
 
         $("#noconnection-modal").modal("hide");
         data = JSON.parse(e.data); // parses the JSON string into a Javascript object
@@ -83,49 +92,40 @@ $(document).ready(function(){
         try{ //try to set bar lengths
             var ultrasonic_offset = 0.1 ; // offset to make sure dividing by zero never happens 
             var maxbarlen = (csize - dscale*csize)/2 -borderwidth/2; // The maximum ultrasonic bar length 
-            var dh1 = ((data['US1']+ultrasonic_offset)/300)*maxbarlen;// length of ultrasonic bar 1
-            var dh3 = ((data['US3']+ultrasonic_offset)/300)*maxbarlen ;
-            var dh2 = ((data['US2']+ultrasonic_offset)/300)*maxbarlen ;
-            var dh5 = ((data['US5']+ultrasonic_offset)/300)*maxbarlen ;
-            var dh4 = ((data['US4']+ultrasonic_offset)/300)*maxbarlen ;
-            var dh6 = ((data['US6']+ultrasonic_offset)/300)*maxbarlen ; 
-            var dh7 = ((data['US7']+ultrasonic_offset)/300)*maxbarlen ;
-            var dh8 = ((data['US8']+ultrasonic_offset)/300)*maxbarlen ;
+            var dh1 = ((parseInt(data['US1'])+ultrasonic_offset)/300)*maxbarlen;// length of ultrasonic bar 1
+            var dh2 = ((parseInt(data['US2'])+ultrasonic_offset)/300)*maxbarlen ;
+            var dh3 = ((parseInt(data['US3'])+ultrasonic_offset)/300)*maxbarlen ;
+            var dh4 = ((parseInt(data['US4'])+ultrasonic_offset)/300)*maxbarlen ;
+            var dh5 = ((parseInt(data['US5'])+ultrasonic_offset)/300)*maxbarlen ;
+            var dh6 = ((parseInt(data['US6'])+ultrasonic_offset)/300)*maxbarlen ; 
+            var dh7 = ((parseInt(data['US7'])+ultrasonic_offset)/300)*maxbarlen ;
+            var dh8 = ((parseInt(data['US8'])+ultrasonic_offset)/300)*maxbarlen ;
             var dw = dscale*csize/2 ; // ultrasonic bar width
-
-            //fill rectangles for the top
-            debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)-dh1+0.5,dw,dh1) ;
-            debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)-dh2+0.5,dw,dh2) ;
+            //fill rectangles for the bottom
+            debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)-dh8+0.5,dw,dh8) ;
+            debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)-dh7+0.5,dw,dh7) ;
             
-
-            //fill rectangles for the right side
-            debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+0.5,dh3,dw) ;
-            debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+dw+0.5,dh4,dw) ;
-        
-
-            //fill rectangles for the base
-            debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh5) ;
-            debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh6) ;
-            
-
             //fill rectangles for the left side
-            debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh7+0.5,(csize/2)*(1-dscale),dh7+0.5,dw) ;
-            debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh8+0.5,(csize/2)*(1-dscale)+dw,dh8+0.5,dw) ;
+            debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+0.5,dh1,dw) ;
+            debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+dw+0.5,dh2,dw) ;
+        
+            //fill rectangles for the top
+            debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh3) ;
+            debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh4) ;
             
-
+            //fill rectangles for the right side
+            debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh5+0.5,(csize/2)*(1-dscale),dh5+0.5,dw) ;
+            debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh6+0.5,(csize/2)*(1-dscale)+dw,dh6+0.5,dw) ;
+            
             // Delete ultrasonic data from javascript object. This allows any remaining data to be printed in a for loop
-            // delete data["US1"] ;
-            // delete data["US2"] ;
-            // delete data["US3"] ;
-            // delete data["US4"] ;
-            // delete data["US5"] ;
-            // delete data["US6"] ;
-            // delete data["US7"] ;
-            // delete data["US8"] ;
-            // delete data["US9"] ;
-            // delete data["US10"] ;
-            // delete data["US11"];
-            // delete data["US12"];
+            delete data["US1"] ;
+            delete data["US2"] ;
+            delete data["US3"] ;
+            delete data["US4"] ;
+            delete data["US5"] ;
+            delete data["US6"] ;
+            delete data["US7"] ;
+            delete data["US8"] ;
             delete data["Type"] ;
         
         }catch(err){
@@ -134,6 +134,16 @@ $(document).ready(function(){
             debug_context2.font = "30px Arial"; // Font and 
             debug_context2.fillText("No Debug Data Available",10,50);
         }
+
+        // Change colour of safety button to indicate active or not active 
+        if(data["Safety ON"]== "True"){
+            $("#safety-btn").removeClass("btn-secondary");
+            $("#safety-btn").addClass("btn-success");
+        }else{
+            $("#safety-btn").removeClass("btn-success");
+            $("#safety-btn").addClass("btn-secondary");
+        }
+
         //Print any remaining debug data to the debug data div
         $.each(data, function(i,j){
             $("#debugdata").append("<br>"+i+" : "+j) ;
@@ -144,10 +154,99 @@ $(document).ready(function(){
     
     }
 
+    var wid = $("#stream-failed").width() ;
+    $("#stream-failed").height(0.5625*wid);
+
+
+    window.onresize = function() {
+        var wid = $("#stream-failed").width() ;
+        $("#stream-failed").height(0.5625*wid);
+    }
+
+    // detects keyboard input when the modal is shown
+    $(document).keydown(function(e){
+        if($('#keyinput-modal').is(':visible') == true){     
+            var keycode = e.which ;
+            switch(keycode){
+                case 87:
+                    if(lastcommand != "f"){
+                        $("#up-key").addClass("red") ;
+                        lastcommand = "f" ; 
+                        s.send("f") ;
+                    }
+                break;
+                case 65:
+                    if(lastcommand != "l"){
+                        $("#left-key").addClass("red") ;
+                        s.send("l") ;
+                        lastcommand = "l" ;
+                    }
+                break;
+                case 83:
+                    if(lastcommand != "b"){
+                        $("#down-key").addClass("red") ;
+                        s.send("b") ;
+                        lastcommand = "b" ;
+                    }
+                break;
+                case 68:
+                    if(lastcommand != "r"){
+                        $("#right-key").addClass("red") ;
+                        s.send("r") ;
+                        lastcommand = "r" ;
+                    }
+                break;
+            }
+            keycommandsent = true ; 
+        }
+
+    }) ;
+
+    // detects keyboard input when the modal is shown
+    $(document).keyup(function(e){
+        if($('#keyinput-modal').is(':visible') == true){     
+            var keycode = e.which ;
+            switch(keycode){
+                case 87:
+                    $("#up-key").removeClass("red") ;
+                    s.send("x") ;
+                break;
+                case 65:
+                    $("#left-key").removeClass("red") ;
+                    s.send("x") ;
+                break;
+                case 83:
+                    $("#down-key").removeClass("red") ;
+                    s.send("x") ;
+                break;
+                case 68:
+                    $("#right-key").removeClass("red") ;
+                    s.send("x") ;
+                break;
+            }
+            lastcommand = "x" ;
+            keycommandsent = false ; 
+        }
+
+    }) ;
+
+    // makes sure the last command sent from the keyboard modal is stop
+    $("#keyclose").click(function(){
+        if(keycommandsent != null){
+            s.send("x") ;
+            keycommandsent = null ; 
+        };
+
+    }) ;
+
     $('div[id^="div-"]').hide();
     $("#div-home").show();
     $("#new_user_warning").hide();
     $("#new_user_success").hide();
+
+    $(".pagereload").click(function(){
+        location.reload(true);
+    });
 
     // When the new user form is submited. Run this function:
     $("#new_user").submit(function(e){
@@ -265,6 +364,10 @@ $(document).ready(function(){
 
     $('.stop-btn').click(function(){
         s.send("x")
+    });
+
+    $('#safety-btn').click(function(){
+        s.send("s")
     });
 
     $('#man-control-send').click(function(){
