@@ -29,6 +29,7 @@ global USThreashholds
 global stoppingDistance
 global lidarRun
 global lidarAngles
+global lidarAnglesList
 global lidarMap
 global lidarReady
 global porterImuOrientation
@@ -38,8 +39,12 @@ global dataMap
 global realDataMap
 global wheelError
 global navMap
+global totalR
+global totalWd
 navMap = set()
 wheelError          = 0
+totalR          = 0
+totalWd          = 0
 manControl          = False    
 dataMap             = set()
 realDataMap         = set()
@@ -48,6 +53,7 @@ pathMap             = {}
 wheelSpeeds         = [0,0]    
 lidarReady          = True
 lidarAngles         = {}
+lidarAnglesList     = []
 lidarMap            = set()
 lidarRun            = ""
 obstruction         = False
@@ -225,8 +231,9 @@ class porterSim() :
         self.longestR           = math.sqrt((self.nTileX*self.tileW)**2+(self.nTileY*self.tileW)**2) # Length of a line that will always cover the whole map for lidar use
         self.runMode            = ""
         self.nextRunMode        = ""
-        self.lidarRpm           = 1 # This is approximate as per the calculation of self.lidarNSamples
-        self.lidarNSamples      = int(round(math.ceil(360*self.lidarRpm*self.simFrameTime))) # This calculates the number of lidar samples to be taken each frame - it rounds up so the realRPM will be slightly higher than given 
+        self.lidarRpm           = 1 #0.66 # This is approximate as per the calculation of self.lidarNSamples
+        self.lidarTotalNSamples = 260 #767
+        self.lidarNSamples      = int(round(math.ceil(767*self.lidarRpm*self.simFrameTime))) # This calculates the number of lidar samples to be taken each frame - it rounds up so the realRPM will be slightly higher than given 
         self.porterAdded        = False # Has the porter been placed at the start of simRun
         self.simRunning         = False # Is the simulation running
         self.draw_on            = 0 # Is drawing enabled in mapBuilder
@@ -501,6 +508,7 @@ class porterSim() :
         global realPorterSize
         global lidarMap
         global lidarAngles
+        global lidarAnglesList
         # Generate a list of points on line going from centre of porter out at angle given
         linePoints = list()
         # Centre coordinates of porter
@@ -531,6 +539,7 @@ class porterSim() :
         if r <4000 :  # If within 40m which it definitely will be...
             with threadLock :
                 lidarAngles[angle] = r
+                lidarAnglesList.append(r)
                 lidarMap.add((endPos[0],endPos[1]))
             # Draw lidar line and hit point on portermap
             pygame.draw.circle(self.views["portermap"]["surface"],self.black,[n/self.scale for n in endPos],5)
@@ -542,6 +551,7 @@ class porterSim() :
         global lidarReady
         global lidarMap
         global lidarAngles
+        global lidarAnglesList
         if lidarRun == "a":
             # Start 360 scan
             self.lidarPos = -180
@@ -549,11 +559,13 @@ class porterSim() :
                 lidarReady  = False
                 lidarMap    = set()
                 lidarAngles = {}
+                lidarAnglesList = []
             
         elif (len(lidarRun)>1) and (lidarRun[0] == "a") :
             # Get single sample
             with threadLock :
                 lidarAngles = {}
+                lidarAnglesList = []
                 lidarMap    = set()
             try :
                 angle = int(round(lidarRun[1:]))
@@ -562,13 +574,16 @@ class porterSim() :
                 pass
             
         if not lidarReady : # must have more samples to get in 360 scan
+            # Angle delta
+            angle_delta = float(360) / self.lidarTotalNSamples
             # Get 360 samples
-            endPos = int(round(self.lidarPos + self.lidarNSamples))
+            endPos = int(round(self.lidarPos + self.lidarNSamples*angle_delta))
             if endPos >= 180 :
                 endPos = 180
                 with threadLock :
-                    lidarReady = True
-            for angle in range(self.lidarPos,endPos) :
+                    lidarReady = True # REVISIT : this isn't right for real time
+            
+            for angle in np.arange(self.lidarPos,endPos, angle_delta) :
                 self.getLidarSample(angle)
         
             self.lidarPos = endPos
@@ -914,11 +929,14 @@ class porterSim() :
         global wheelSpeeds
         global threadLock
         global dataMap
+        global totalR
+        global totalWd
         
         if not realCollision :
             if wheelSpeeds != [0,0] :                
                 leftDelta  = self.simFrameTime * wheelSpeeds[0]
                 rightDelta = self.simFrameTime * wheelSpeeds[1]
+                totalR += (leftDelta + rightDelta)
                 orientation = math.radians(porterOrientation - 90)
                 orientationUnconst = math.radians(porterOrientationUnConst - 90)
                 #orientation = math.radians(realPorterOrientation - 90)
@@ -935,9 +953,10 @@ class porterSim() :
                 else :
                     R = self.pixelPorterSize[0] * (leftDelta + rightDelta) / (2 * (rightDelta - leftDelta))
                     wd = (rightDelta - leftDelta) / self.pixelPorterSize[0] ;
-
                     new_x = x + R * math.sin(wd + orientation) - R * math.sin(orientation);
                     new_y = y - R * math.cos(wd + orientation) + R * math.cos(orientation);
+                    
+                    totalWd += wd/ self.scale
                     new_heading = orientation + wd/ self.scale;
                     new_headingUnConst = orientationUnconst + wd/ self.scale;
                 
@@ -1230,7 +1249,7 @@ class simThreadBase(MultiThreadBase) :
         
     # Maintains the orientation using a PID loop and moves a distance in that direction
     # REVISIT : Could add adjustment to heading if off course
-    def moveStraight(self, distance, f) :
+    def moveStraight(self, distance) :
         global porterLocation
         global porterOrientation
         global porterOrientationUnConst
@@ -2016,6 +2035,8 @@ class mappingThread(simThreadBase):
         global realPorterSize
         global dataMap
         global realPorterRadius
+        global totalR
+        global totalWd
         # Things you may want to do
         #with threadLock :
         #    speedVector = [50,100]
@@ -2025,171 +2046,196 @@ class mappingThread(simThreadBase):
         with threadLock :
             dataMap                 = set()
         
-        # Get lidar data -> lidarMap
-        self.getLidar360()
+        
+        scans = []
+        dxy = 0
+        dtheta = 0
+        dt = 0
+        with open("lidar.out", "w") as f :
+            for i in range(0,25) :
+                # Get lidar data -> lidarMap
+                self.getLidar360()
+                scan = ' '.join(map(str,map(int,[x*10 for x in lidarAnglesList])))
+                scan = str(dxy) + " " + str(dtheta) + " " + str(dt) + " " + scan
+                f.write(scan + "\n")
+                print(totalR)
+                timeA = time.time()
+                xyA   = totalR
+                thetaA= totalWd
+                self.moveStraight(23)
+                speedVector = [0,0]
+                dxy = totalR - xyA
+                dtheta = totalWd - thetaA
+                dt = time.time() - timeA
+        
+        speedVector = [0,0]
         
         # Store lidar data
-        with threadLock :
-            lidarMapStore = lidarMap       
+        #with threadLock :
+        #    lidarMapStore = lidarMap       
         
-        # REVISIT : Generating test data - remove this
-        # with threadLock :
-            # for i in range(1,500) :
-                # lidarMapStore.add((i,500+int(round(i/15))))
-                # if i > 200 :
-                    # lidarMapStore.add((i,500-1+int(round(i/100))))
+        
+        
+        
+        ###### OLD LINE MAPPING STUFF
+        # # REVISIT : Generating test data - remove this
+        # # with threadLock :
+            # # for i in range(1,500) :
+                # # lidarMapStore.add((i,500+int(round(i/15))))
+                # # if i > 200 :
+                    # # lidarMapStore.add((i,500-1+int(round(i/100))))
             
 
         
-        # Find map limits
-        self.pathMapLimits = {   "xMin" : 0,
-                            "xMax" : 0,
-                            "yMin" : 0,
-                            "yMax" : 0,
-                        }
-        with threadLock :
-            for point in lidarMapStore :
-                if point[0] < self.pathMapLimits["xMin"] :
-                    self.pathMapLimits["xMin"] = point[0]
-                if point[0] > self.pathMapLimits["xMax"] :
-                    self.pathMapLimits["xMax"] = point[0]
-                if point[1] < self.pathMapLimits["yMin"] :
-                    self.pathMapLimits["yMin"] = point[1]
-                if point[1] > self.pathMapLimits["yMax"] :
-                    self.pathMapLimits["yMax"] = point[1]
+        # # Find map limits
+        # self.pathMapLimits = {   "xMin" : 0,
+                            # "xMax" : 0,
+                            # "yMin" : 0,
+                            # "yMax" : 0,
+                        # }
+        # with threadLock :
+            # for point in lidarMapStore :
+                # if point[0] < self.pathMapLimits["xMin"] :
+                    # self.pathMapLimits["xMin"] = point[0]
+                # if point[0] > self.pathMapLimits["xMax"] :
+                    # self.pathMapLimits["xMax"] = point[0]
+                # if point[1] < self.pathMapLimits["yMin"] :
+                    # self.pathMapLimits["yMin"] = point[1]
+                # if point[1] > self.pathMapLimits["yMax"] :
+                    # self.pathMapLimits["yMax"] = point[1]
                     
-        self.pathMapLimits["xMin"] = self.pathMapLimits["xMin"] - realPorterSize[0]*2
-        self.pathMapLimits["xMax"] = self.pathMapLimits["xMax"] + realPorterSize[0]*2
-        self.pathMapLimits["yMin"] = self.pathMapLimits["yMin"] - realPorterSize[1]*2
-        self.pathMapLimits["yMax"] = self.pathMapLimits["yMax"] + realPorterSize[1]*2
-        height = self.pathMapLimits["xMax"] - self.pathMapLimits["xMin"]
-        width = self.pathMapLimits["yMax"] - self.pathMapLimits["yMin"]
-        map = np.zeros((height,width,1), dtype = "uint8")
+        # self.pathMapLimits["xMin"] = self.pathMapLimits["xMin"] - realPorterSize[0]*2
+        # self.pathMapLimits["xMax"] = self.pathMapLimits["xMax"] + realPorterSize[0]*2
+        # self.pathMapLimits["yMin"] = self.pathMapLimits["yMin"] - realPorterSize[1]*2
+        # self.pathMapLimits["yMax"] = self.pathMapLimits["yMax"] + realPorterSize[1]*2
+        # height = self.pathMapLimits["xMax"] - self.pathMapLimits["xMin"]
+        # width = self.pathMapLimits["yMax"] - self.pathMapLimits["yMin"]
+        # map = np.zeros((height,width,1), dtype = "uint8")
         
-        with threadLock: 
-            for sample in lidarMap :
-                map.itemset((sample[0] + realPorterSize[0], sample[1] + realPorterSize[1], 0), 255)
+        # with threadLock: 
+            # for sample in lidarMap :
+                # map.itemset((sample[0] + realPorterSize[0], sample[1] + realPorterSize[1], 0), 255)
            
-        kernel = np.ones((3,3),np.uint8)
-        map = cv2.dilate(map,kernel,iterations = realPorterSize[0]/2)
-        map = cv2.erode(map,kernel, iterations = realPorterSize[0]*4/8)       
-        # cv2.namedWindow("output", cv2.WINDOW_NORMAL)    
-        # cv2.imshow('output',map)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()  
-        # Test outputs
-        clearMap1 = np.zeros(map.shape, np.uint8)
-        clearMap2 = np.zeros(map.shape, np.uint8)
-        clearMap3 = np.zeros(map.shape, np.uint8)
-        clearMap4 = np.zeros(map.shape, np.uint8)
-        #map = cv2.morphologyEx(map, cv2.MORPH_CLOSE, kernel, iterations=realPorterSize[0]/2)
+        # kernel = np.ones((3,3),np.uint8)
+        # map = cv2.dilate(map,kernel,iterations = realPorterSize[0]/2)
+        # map = cv2.erode(map,kernel, iterations = realPorterSize[0]*4/8)       
+        # # cv2.namedWindow("output", cv2.WINDOW_NORMAL)    
+        # # cv2.imshow('output',map)
+        # # cv2.waitKey(0)
+        # # cv2.destroyAllWindows()  
+        # # Test outputs
+        # clearMap1 = np.zeros(map.shape, np.uint8)
+        # clearMap2 = np.zeros(map.shape, np.uint8)
+        # clearMap3 = np.zeros(map.shape, np.uint8)
+        # clearMap4 = np.zeros(map.shape, np.uint8)
+        # #map = cv2.morphologyEx(map, cv2.MORPH_CLOSE, kernel, iterations=realPorterSize[0]/2)
 
-        map = cv2.Canny(map,200,200)            
-        # cv2.namedWindow("output", cv2.WINDOW_NORMAL)    
-        # cv2.imshow('output',map)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()  
-        lines = cv2.HoughLinesP(map,rho=1,theta=np.pi/180, threshold=50,lines=np.array([]), minLineLength=10,maxLineGap=80 )
+        # map = cv2.Canny(map,200,200)            
+        # # cv2.namedWindow("output", cv2.WINDOW_NORMAL)    
+        # # cv2.imshow('output',map)
+        # # cv2.waitKey(0)
+        # # cv2.destroyAllWindows()  
+        # lines = cv2.HoughLinesP(map,rho=1,theta=np.pi/180, threshold=50,lines=np.array([]), minLineLength=10,maxLineGap=80 )
             
         
  
-        # Format wall data
-        walls = {}
-        for line in lines :
-            # Ensure the first coordinate is the minimum x coordinate
-            if ( line[0][0] <= line[0][2]) :
-                walls[(line[0][0],line[0][1],line[0][2],line[0][3])] = { "angle" : constrainAngle180(math.atan2(line[0][3] - line[0][1], line[0][2] - line[0][0]) * 180.0 / math.pi,180,0),
-                                 }
-            else :
-                walls[(line[0][2],line[0][3],line[0][0],line[0][1])] = { "angle" : constrainAngle180(math.atan2(line[0][3] - line[0][1], line[0][2] - line[0][0]) * 180.0 / math.pi,180,0),
-                                 }
+        # # Format wall data
+        # walls = {}
+        # for line in lines :
+            # # Ensure the first coordinate is the minimum x coordinate
+            # if ( line[0][0] <= line[0][2]) :
+                # walls[(line[0][0],line[0][1],line[0][2],line[0][3])] = { "angle" : constrainAngle180(math.atan2(line[0][3] - line[0][1], line[0][2] - line[0][0]) * 180.0 / math.pi,180,0),
+                                 # }
+            # else :
+                # walls[(line[0][2],line[0][3],line[0][0],line[0][1])] = { "angle" : constrainAngle180(math.atan2(line[0][3] - line[0][1], line[0][2] - line[0][0]) * 180.0 / math.pi,180,0),
+                                 # }
             
-        # for wall in walls : 
-            # cv2.line(clearMap1, (int(round(wall[0])),int(round(wall[1]))), (int(round(wall[2])),int(round(wall[3]))), random.randint(20,255), 1, cv2.LINE_AA)
+        # # for wall in walls : 
+            # # cv2.line(clearMap1, (int(round(wall[0])),int(round(wall[1]))), (int(round(wall[2])),int(round(wall[3]))), random.randint(20,255), 1, cv2.LINE_AA)
 
-        self.simplifyLines(walls)
+        # self.simplifyLines(walls)
         
-        for wall in walls : 
-            cv2.line(clearMap2, tuple(wall[:2]), tuple(wall[2:]), 255, 3, cv2.LINE_AA)
-        for wall in walls : 
-            cv2.line(clearMap3, tuple(wall[:2]), tuple(wall[2:]), 255, 3, cv2.LINE_AA)
+        # for wall in walls : 
+            # cv2.line(clearMap2, tuple(wall[:2]), tuple(wall[2:]), 255, 3, cv2.LINE_AA)
+        # for wall in walls : 
+            # cv2.line(clearMap3, tuple(wall[:2]), tuple(wall[2:]), 255, 3, cv2.LINE_AA)
             
               
-        ## Connect up walls where necessary
+        # ## Connect up walls where necessary
         
         
-        ## Find paths
-        # Create raw paths either side of every wall
-        # REVISIT : Configurable parameter
-        wallPathOffset = 50
-        paths = {}
-        print("walls: " + str(walls))
-        for wall, data in walls.iteritems() :
-            # Skip lines that are too short
-            if data["length"] < wallPathOffset*2 :
-                continue
-            # Find offsets for lines parallel to the wall
-            a = data["angle"] 
-            ar = math.radians(a)
-            pr = math.radians(a + 90) # perperndicular angle
-            offsetX = wallPathOffset * math.cos(pr)
-            offsetY = wallPathOffset * math.sin(pr)
-            shortX  = -5*wallPathOffset * math.cos(ar)
-            shortY  = -5*wallPathOffset * math.sin(ar)
-            print("################################")
-            print("wall: " + str(wall))
-            print("a: " + str(a) + ", ar: " + str(ar) + ", pr: " + str(pr))
-            print("shortX: " + str(shortX) + ", shortY: " + str(shortY))
-            if wall[1] > wall[3] :
-                print("neg slope")
-                shortY = - shortY
-            # Add paths either side of the wall
-            p1 = (int(round(wall[0]+offsetX+shortX)), int(round(wall[1]+offsetY+shortY)), int(round(wall[2]+offsetX-shortX)), int(round(wall[3]+offsetY-shortY)))
-            p2 = (int(round(wall[0]-offsetX+shortX)), int(round(wall[1]-offsetY+shortY)), int(round(wall[2]-offsetX-shortX)), int(round(wall[3]-offsetY-shortY)))
-            paths[p1] = {"angle" : a}
-            paths[p2] = {"angle" : a}
-            print("p1: " + str(p1) + ", p2: " + str(p2))
-            # cv2.line(clearMap3, tuple(p1[:2]), tuple(p1[2:]), 150, 3, cv2.LINE_AA)
-            # cv2.line(clearMap3, tuple(p2[:2]), tuple(p2[2:]), 150, 3, cv2.LINE_AA)  
-            # cv2.namedWindow("output3", cv2.WINDOW_NORMAL)      
-            # cv2.imshow('output3',clearMap3)
-            # cv2.waitKey(0)
-            # cv2.destroyAllWindows()  
-            if exitFlag :
-                break
+        # ## Find paths
+        # # Create raw paths either side of every wall
+        # # REVISIT : Configurable parameter
+        # wallPathOffset = 50
+        # paths = {}
+        # print("walls: " + str(walls))
+        # for wall, data in walls.iteritems() :
+            # # Skip lines that are too short
+            # if data["length"] < wallPathOffset*2 :
+                # continue
+            # # Find offsets for lines parallel to the wall
+            # a = data["angle"] 
+            # ar = math.radians(a)
+            # pr = math.radians(a + 90) # perperndicular angle
+            # offsetX = wallPathOffset * math.cos(pr)
+            # offsetY = wallPathOffset * math.sin(pr)
+            # shortX  = -5*wallPathOffset * math.cos(ar)
+            # shortY  = -5*wallPathOffset * math.sin(ar)
+            # print("################################")
+            # print("wall: " + str(wall))
+            # print("a: " + str(a) + ", ar: " + str(ar) + ", pr: " + str(pr))
+            # print("shortX: " + str(shortX) + ", shortY: " + str(shortY))
+            # if wall[1] > wall[3] :
+                # print("neg slope")
+                # shortY = - shortY
+            # # Add paths either side of the wall
+            # p1 = (int(round(wall[0]+offsetX+shortX)), int(round(wall[1]+offsetY+shortY)), int(round(wall[2]+offsetX-shortX)), int(round(wall[3]+offsetY-shortY)))
+            # p2 = (int(round(wall[0]-offsetX+shortX)), int(round(wall[1]-offsetY+shortY)), int(round(wall[2]-offsetX-shortX)), int(round(wall[3]-offsetY-shortY)))
+            # paths[p1] = {"angle" : a}
+            # paths[p2] = {"angle" : a}
+            # print("p1: " + str(p1) + ", p2: " + str(p2))
+            # # cv2.line(clearMap3, tuple(p1[:2]), tuple(p1[2:]), 150, 3, cv2.LINE_AA)
+            # # cv2.line(clearMap3, tuple(p2[:2]), tuple(p2[2:]), 150, 3, cv2.LINE_AA)  
+            # # cv2.namedWindow("output3", cv2.WINDOW_NORMAL)      
+            # # cv2.imshow('output3',clearMap3)
+            # # cv2.waitKey(0)
+            # # cv2.destroyAllWindows()  
+            # if exitFlag :
+                # break
            
-        # To remove overlapping lines caused by walls being ~ 2* wallPathOffset apart
+        # # To remove overlapping lines caused by walls being ~ 2* wallPathOffset apart
         
 
-        # In place modifications of paths - removes paths which intersect and creates new
-        self.fixPathWall(walls, paths, wallPathOffset)
-        self.simplifyLines(paths)    
+        # # In place modifications of paths - removes paths which intersect and creates new
+        # self.fixPathWall(walls, paths, wallPathOffset)
+        # self.simplifyLines(paths)    
                 
-        # Display results
-        for path in paths : 
-            cv2.line(clearMap3, tuple(path[:2]), tuple(path[2:]), 150, 3, cv2.LINE_AA)    
-                # full and touching 
+        # # Display results
+        # for path in paths : 
+            # cv2.line(clearMap3, tuple(path[:2]), tuple(path[2:]), 150, 3, cv2.LINE_AA)    
+                # # full and touching 
                 
-                #Else find collision location
+                # #Else find collision location
                 
-                    #Split path at this location
+                    # #Split path at this location
         
             
-        # cv2.namedWindow("output1", cv2.WINDOW_NORMAL)    
-        # cv2.imshow('output1',clearMap1)            
-        cv2.namedWindow("output2", cv2.WINDOW_NORMAL)    
-        cv2.namedWindow("output3", cv2.WINDOW_NORMAL)    
-        cv2.imshow('output2',clearMap2)
-        #cv2.waitKey(0)
-        #cv2.destroyAllWindows()          
-        cv2.imshow('output3',clearMap3)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()  
-        ## Find path intersections
+        # # cv2.namedWindow("output1", cv2.WINDOW_NORMAL)    
+        # # cv2.imshow('output1',clearMap1)            
+        # cv2.namedWindow("output2", cv2.WINDOW_NORMAL)    
+        # cv2.namedWindow("output3", cv2.WINDOW_NORMAL)    
+        # cv2.imshow('output2',clearMap2)
+        # #cv2.waitKey(0)
+        # #cv2.destroyAllWindows()          
+        # cv2.imshow('output3',clearMap3)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()  
+        # ## Find path intersections
         
         
         
-        # Fix any gaps in paths
+        # # Fix any gaps in paths
 
         while not exitFlag :
             time.sleep(0.1)
