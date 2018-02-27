@@ -4,10 +4,19 @@ $(document).ready(function(){
     $("#noconnection-modal").modal("show");
     $("#change_password_warning").hide() ;
     $("#change_password_success").hide() ;
+    $("#error-modal").modal("hide");
+    $("#MapCanvas1").hide() ;
+    $("#MapCanvas2").hide() ;
+    $("#MapCanvas3").hide() ;
 
     //variables for WASD control
     var keycommandsent = null ; 
     var lastcommand ;
+
+    //Variables for Error Modal that shows when conection to roboporter is lost
+    var num_debug_sent = 0 ; 
+    var prev_debug_sent = 0 ;
+    var supress_error = false ;
 
     // Creates websocket connection
     var s = new WebSocket("ws://192.168.0.1:5555"); 
@@ -28,7 +37,7 @@ $(document).ready(function(){
     var div_width ;
     var wh_ratio ; 
     var new_height ; 
-    
+
 
     // Code below handles Debug Canvas
     var debug_canvas1 = document.getElementById('DebugCanvas1'); // Get Debug Canvas 1 ID i.e. the grey roboporter box
@@ -71,17 +80,39 @@ $(document).ready(function(){
     }, 21000);
 
 
+    // A interval that checks new debug data has been sent. If prev value and current debug ID are the same. The connection modal is not shows and the error hasnt been supressed
+    setInterval(function(){
+        if((prev_debug_sent == num_debug_sent) && ($('#noconnection-modal').is(':visible') == false) && (supress_error == false)){
+            $("#error-modal").modal("show");
+        }else{
+            //$("#error-modal").modal("hide");
+            num_debug_sent = prev_debug_sent;
+        }
+    },1000);
+
+
+    // Function for refreshing dropdown list with list of maps
+    function map_names(){
+        $.ajax({
+            type:'POST',
+            url:'php/map_names.php',
+            
+        }).done(function(msg){ 
+            $("#map_names_drop").html("") ;
+            var num_maps = msg.split(",") ; 
+            $.each(num_maps , function(i,value){
+                $("#map_names_drop").append ($('<option></option>').val(value).html(value)); 
+            });
+        })
+    }
+
+    //Manages socket send and recieve
     s.onopen = function(e) {}
-    s.onclose = function(e) { $("#error-modal").show() ; }
+    s.onclose = function(e) { //$("#error-modal").modal("show")
+     ; }
     s.onmessage = function(e) {
 
-        //  try{ // tries to clear the no connection timeout. Will display error on first run
-        //  clearTimeout(timeout) ;
-        //  }catch(err){}
-
-        //  var timeout = window.setTimeout(function(){$("#error-modal").show()},2000); // set new connection timeout. Should be set for slightly longer that debug refresh times
-
-
+       
         $("#noconnection-modal").modal("hide");
         data = JSON.parse(e.data); // parses the JSON string into a Javascript object
 
@@ -92,30 +123,30 @@ $(document).ready(function(){
         try{ //try to set bar lengths
             var ultrasonic_offset = 0.1 ; // offset to make sure dividing by zero never happens 
             var maxbarlen = (csize - dscale*csize)/2 -borderwidth/2; // The maximum ultrasonic bar length 
-            var dh1 = ((parseInt(data['US1'])+ultrasonic_offset)/300)*maxbarlen;// length of ultrasonic bar 1
-            var dh2 = ((parseInt(data['US2'])+ultrasonic_offset)/300)*maxbarlen ;
-            var dh3 = ((parseInt(data['US3'])+ultrasonic_offset)/300)*maxbarlen ;
-            var dh4 = ((parseInt(data['US4'])+ultrasonic_offset)/300)*maxbarlen ;
-            var dh5 = ((parseInt(data['US5'])+ultrasonic_offset)/300)*maxbarlen ;
-            var dh6 = ((parseInt(data['US6'])+ultrasonic_offset)/300)*maxbarlen ; 
-            var dh7 = ((parseInt(data['US7'])+ultrasonic_offset)/300)*maxbarlen ;
-            var dh8 = ((parseInt(data['US8'])+ultrasonic_offset)/300)*maxbarlen ;
+            var dh1 = ((parseInt(data['US1'],10)+ultrasonic_offset)/300)*maxbarlen;// length of ultrasonic bar 1
+            var dh2 = ((parseInt(data['US2'],10)+ultrasonic_offset)/300)*maxbarlen ;
+            var dh3 = ((parseInt(data['US3'],10)+ultrasonic_offset)/300)*maxbarlen ;
+            var dh4 = ((parseInt(data['US4'],10)+ultrasonic_offset)/300)*maxbarlen ;
+            var dh5 = ((parseInt(data['US5'],10)+ultrasonic_offset)/300)*maxbarlen ;
+            var dh6 = ((parseInt(data['US6'],10)+ultrasonic_offset)/300)*maxbarlen ; 
+            var dh7 = ((parseInt(data['US7'],10)+ultrasonic_offset)/300)*maxbarlen ;
+            var dh8 = ((parseInt(data['US8'],10)+ultrasonic_offset)/300)*maxbarlen ;
             var dw = dscale*csize/2 ; // ultrasonic bar width
-            //fill rectangles for the bottom
-            debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)-dh8+0.5,dw,dh8) ;
-            debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)-dh7+0.5,dw,dh7) ;
-            
-            //fill rectangles for the left side
-            debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+0.5,dh1,dw) ;
-            debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+dw+0.5,dh2,dw) ;
-        
             //fill rectangles for the top
-            debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh3) ;
-            debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh4) ;
+            debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)-dh3+0.5,dw,dh3) ;
+            debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)-dh4+0.5,dw,dh4) ;
             
             //fill rectangles for the right side
-            debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh5+0.5,(csize/2)*(1-dscale),dh5+0.5,dw) ;
-            debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh6+0.5,(csize/2)*(1-dscale)+dw,dh6+0.5,dw) ;
+            debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+0.5,dh5,dw) ;
+            debug_context2.fillRect((csize/2)+(dscale*csize/2)+0.5,(csize/2)*(1-dscale)+dw+0.5,dh6,dw) ;
+        
+            //fill rectangles for the bottom
+            debug_context2.fillRect((csize/2)*(1-dscale)+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh7) ;
+            debug_context2.fillRect((csize/2)*(1-dscale)+dw+0.5,(csize/2)*(1-dscale)+(csize*dscale)+0.5,dw,dh8) ;
+            
+            //fill rectangles for the left side
+            debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh1+0.5,(csize/2)*(1-dscale),dh1+0.5,dw) ;
+            debug_context2.fillRect((csize/2)-(dscale*csize/2)-dh2+0.5,(csize/2)*(1-dscale)+dw,dh2+0.5,dw) ;
             
             // Delete ultrasonic data from javascript object. This allows any remaining data to be printed in a for loop
             delete data["US1"] ;
@@ -127,6 +158,35 @@ $(document).ready(function(){
             delete data["US7"] ;
             delete data["US8"] ;
             delete data["Type"] ;
+
+            num_debug_sent = parseInt(data["Debug Data Sent"],10) ; 
+
+            $("#current-status").html(data["System Status"]) ; 
+
+            $("#battery-width").width(parseInt(data["Battery"]),10) ;
+            $("#battery-percentage").html(data["Battery"]) ; 
+
+            // Change colour of safety button to indicate active or not active 
+
+            if(data["Safety ON"]== "True"){
+                $("#safety-btn").removeClass("btn-secondary");
+                $("#safety-btn").addClass("btn-success");
+            }else{
+                $("#safety-btn").removeClass("btn-success");
+                $("#safety-btn").addClass("btn-secondary");
+            }
+    
+            if((data["System Status"] == "Mapping") || (data["System Status"] == "Navigation")){
+                $('.mancontrol').prop('disabled', true);
+            }
+    
+            //Print any remaining debug data to the debug data div
+            $.each(data, function(i,j){
+                $("#debugdata").append("<br>"+i+" : "+j) ;
+            })
+    
+            //Print data to home screen debug card
+            $("#home-debug-data").html("Speed Vector Left: "+data["Speed Vector Left"]+"<br> Speed Vector Right: "+data["Speed Vector Right"])
         
         }catch(err){
             alert(err)
@@ -134,29 +194,10 @@ $(document).ready(function(){
             debug_context2.font = "30px Arial"; // Font and 
             debug_context2.fillText("No Debug Data Available",10,50);
         }
-
-        // Change colour of safety button to indicate active or not active 
-        if(data["Safety ON"]== "True"){
-            $("#safety-btn").removeClass("btn-secondary");
-            $("#safety-btn").addClass("btn-success");
-        }else{
-            $("#safety-btn").removeClass("btn-success");
-            $("#safety-btn").addClass("btn-secondary");
-        }
-
-        //Print any remaining debug data to the debug data div
-        $.each(data, function(i,j){
-            $("#debugdata").append("<br>"+i+" : "+j) ;
-        })
-
-        //Print data to home screen debug card
-        $("#home-debug-data").html("Speed Vector Left: "+data["Speed Vector Left"]+"<br> Speed Vector Right: "+data["Speed Vector Right"])
-    
     }
 
     var wid = $("#stream-failed").width() ;
     $("#stream-failed").height(0.5625*wid);
-
 
     window.onresize = function() {
         var wid = $("#stream-failed").width() ;
@@ -244,11 +285,205 @@ $(document).ready(function(){
     $("#new_user_warning").hide();
     $("#new_user_success").hide();
 
+    // When the error close button is used set supress_error to true. This stops the modal reappearing. 
+    $("#error_modal_close").click(function(){
+        supress_error = true ; 
+    })
+
+
+    // reloads the page
     $(".pagereload").click(function(){
         location.reload(true);
     });
 
-    // When the new user form is submited. Run this function:
+
+    //The following commands deal with manual control buttons
+    $('.left-btn').click(function(){
+        s.send("l")
+    });
+
+    $('.right-btn').click(function(){
+        s.send("r")
+    });
+
+    $('.forward-btn').click(function(){
+        s.send("f")
+    });
+
+    $('.back-btn').click(function(){
+        s.send("b")
+    });
+
+    $('#auto-btn').click(function(){
+        s.send("a")
+    });
+
+    $('.stop-btn').click(function(){
+        s.send("x")
+    });
+
+    $('#safety-btn').click(function(){
+        s.send("s")
+    });
+
+    $('#man-control-send').click(function(){
+        var left = $("#left-motor-amount").val()
+        var right = $("#right-motor-amount").val()
+        s.send("m"+left+","+right)
+    });
+
+
+    // The following command colapses the nv bar when clicked
+    $("#navbar-toggle-id").click(function(){
+        $('#navbarNav').toggle("collapse");
+    })
+
+    // The following JQuery Commands are for Showing and Hiding The Content when a link is clicked
+    $("#link-home").click(function(){
+        $('div[id^="div-"]').hide();
+        $('a[id^="link-"]').removeClass("active");
+        $("#div-home").show();
+        $(this).addClass("active");
+        if($(window).width() < 768){ // if window width less than 768, ie the menu is shrank, collapse the menu item
+            $('#navbarNav').toggle("collapse");
+        }
+    }) ;
+
+    $("#link-control").click(function(){
+        $('div[id^="div-"]').hide();
+        $('a[id^="link-"]').removeClass("active");
+        $("#div-control").show();
+        $(this).addClass("active");
+        if($(window).width() < 768){
+            $('#navbarNav').toggle("collapse");
+        }
+    }) ;
+
+    $("#link-nav").click(function(){
+        $('div[id^="div-"]').hide();
+        $('a[id^="link-"]').removeClass("active");
+        $("#div-nav").show();
+        $(this).addClass("active");
+        if($(window).width() < 768){
+            $('#navbarNav').toggle("collapse");
+        }
+
+        
+        // context1.fillStyle="Black" ; //Text Color
+        // context1.font = "30px Arial"; // Font and 
+        // context1.fillText("Please choose a map",10.5,50.5);
+        map_names()
+
+    }) ;
+      
+    $("#link-debug").click(function(){
+        $('div[id^="div-"]').hide();
+        $('a[id^="link-"]').removeClass("active");
+        $("#div-debug").show();
+        $(this).addClass("active");
+        if($(window).width() < 768){
+            $('#navbarNav').toggle("collapse");
+        }
+    }) ;
+
+    $("#link-status").click(function(){
+        $('div[id^="div-"]').hide();
+        $('a[id^="link-"]').removeClass("active");
+        $("#div-status").show();
+        $(this).addClass("active");
+        if($(window).width() < 768){
+            $('#navbarNav').toggle("collapse");
+        }
+    }) ;
+
+    $("#link-settings").click(function(){
+        $("#settings-modal").modal("show") ;
+        if($(window).width() < 768){
+            $('#navbarNav').toggle("collapse");
+        }
+        
+    });
+
+
+    // The following JQUERY commands are for managing the mapping canvas and changing the map based on the dropdown selection
+    $("#mapdiv").click(function(e){
+        context2.clearRect(0,0,div_width,new_height) ;
+        var offset = $(this).parent().offset() ;
+        x = e.pageX-offset.left ;
+        y = e.pageY-offset.top ;
+        context2.fillStyle="#FF0000" ;
+        context2.fillRect(x-5,y-5,10,10) ;
+        realx = Math.round(x*scale) ;
+        realy = Math.round(y*scale) ; 
+    });
+
+    $("#mapdiv").mousemove(function(e){
+        context3.clearRect(0,0,canvas1.width,canvas1.height) ; 
+        var offset = $(this).parent().offset() ;
+        x = e.pageX-offset.left ;
+        y = e.pageY-offset.top ;
+        context3.fillStyle="#FF0000" ;
+        context3.fillRect(x-5,y-5,10,10) ;
+    });
+
+    $("#go-btn").click(function(){
+        if(realx != null){
+            alert("Sent") ;
+        }
+        else{
+            alert("Please click a location on the Map")
+        }
+    }) ; 
+
+    $("#change-map").click(function(){
+        var dropdowndata = {
+            'name' : $("#map_names_drop").val(),   
+            }
+
+        $.ajax({
+            type:'POST',
+            url:'php/name_to_id.php',
+            data: dropdowndata ,
+        }).done(function(msg){ 
+            imageObj.onload = function() {
+                $("#MapCanvas1").show() ;
+                $("#MapCanvas2").show() ;
+                $("#MapCanvas3").show() ;
+                div_width = $('#mapdiv').width() ; 
+        
+                canvas1.width = div_width ; 
+                canvas2.width = div_width ; 
+                canvas3.width = div_width ; 
+                
+                wh_ratio = imageObj.width / imageObj.height ; 
+                new_height = div_width/wh_ratio ;
+                canvas1.height = new_height;
+                canvas2.height = new_height;
+                canvas3.height = new_height;
+                $("#mapdiv").height(new_height) ;
+                scale = imageObj.width/div_width ;
+        
+                context1.drawImage(imageObj, 0.5, 0.5 , div_width ,new_height);
+        
+                context1.beginPath(); // draw border around debug canvas
+                context1.lineWidth= borderwidth;
+                context1.strokeStyle="black" ; 
+                context1.rect(-0.5,-0.5,div_width+0.5,new_height+0.5);
+                context1.stroke();
+            };
+            var imagesrc = "php/map_generation.php?a="+msg
+            imageObj.src = imagesrc;
+        })
+
+        
+
+    });
+    
+
+
+
+    // The following code handles changing and creating users
+     // When the new user form is submited. Run this function:
     $("#new_user").submit(function(e){
         e.preventDefault(); // Prevents any default form functions from happening
         if(!$("#current_password_input").val()){
@@ -298,6 +533,7 @@ $(document).ready(function(){
         }  
     });
 
+    // When the change password button is submitted
     $("#change_pass").submit(function(e){
         $("#change_password_success").hide() ;
         e.preventDefault(); // Prevents any default form functions from happening
@@ -341,157 +577,4 @@ $(document).ready(function(){
             }) ;
         }
     }) ;
-
-    $('.left-btn').click(function(){
-        s.send("l")
-    });
-
-    $('.right-btn').click(function(){
-        s.send("r")
-    });
-
-    $('.forward-btn').click(function(){
-        s.send("f")
-    });
-
-    $('.back-btn').click(function(){
-        s.send("b")
-    });
-
-    $('#auto-btn').click(function(){
-        s.send("a")
-    });
-
-    $('.stop-btn').click(function(){
-        s.send("x")
-    });
-
-    $('#safety-btn').click(function(){
-        s.send("s")
-    });
-
-    $('#man-control-send').click(function(){
-        var left = $("#left-motor-amount").val()
-        var right = $("#right-motor-amount").val()
-        s.send("m"+left+","+right)
-    });
-
-    $("#navbar-toggle-id").click(function(){
-        $('#navbarNav').toggle("collapse");
-    })
-
-    // The following JQuery Commands are for Showing and Hiding The Right Pane Content when a link is clicked
-    $("#link-home").click(function(){
-        $('div[id^="div-"]').hide();
-        $('a[id^="link-"]').removeClass("active");
-        $("#div-home").show();
-        $(this).addClass("active");
-        if($(window).width() < 768){ // if window width less than 768, ie the menu is shrank, collapse the menu item
-            $('#navbarNav').toggle("collapse");
-        }
-    }) ;
-
-    $("#link-control").click(function(){
-        $('div[id^="div-"]').hide();
-        $('a[id^="link-"]').removeClass("active");
-        $("#div-control").show();
-        $(this).addClass("active");
-        if($(window).width() < 768){
-            $('#navbarNav').toggle("collapse");
-        }
-    }) ;
-
-    $("#link-nav").click(function(){
-                $('div[id^="div-"]').hide();
-                $('a[id^="link-"]').removeClass("active");
-                $("#div-nav").show();
-                $(this).addClass("active");
-                if($(window).width() < 768){
-                    $('#navbarNav').toggle("collapse");
-                }
-                imageObj.onload = function() {
-                    div_width = $('#mapdiv').width() ; 
-
-                    canvas1.width = div_width ; 
-                    canvas2.width = div_width ; 
-                    canvas3.width = div_width ; 
-                    
-                    wh_ratio = imageObj.width / imageObj.height ; 
-                    new_height = div_width/wh_ratio ;
-                    canvas1.height = new_height;
-                    canvas2.height = new_height;
-                    canvas3.height = new_height;
-                    $("#mapdiv").height(new_height) ;
-                    scale = imageObj.width/div_width ;
-
-                    context1.drawImage(imageObj, 0, 0 , div_width ,new_height);
-
-                    context1.beginPath(); // draw border around debug canvas
-                    context1.lineWidth= borderwidth;
-                    context1.strokeStyle="black" ; 
-                    context1.rect(-0.5,-0.5,div_width+0.5,new_height+0.5);
-                    context1.stroke();
-                };
-                imageObj.src = 'php/map_generation.php';
-            }) ;
-      
-    $("#mapdiv").click(function(e){
-        context2.clearRect(0,0,div_width,new_height) ;
-        var offset = $(this).parent().offset() ;
-        x = e.pageX-offset.left ;
-        y = e.pageY-offset.top ;
-        context2.fillStyle="#FF0000" ;
-        context2.fillRect(x-5,y-5,10,10) ;
-        realx = Math.round(x*scale) ;
-        realy = Math.round(y*scale) ; 
-    });
-
-    $("#mapdiv").mousemove(function(e){
-        context3.clearRect(0,0,div_width,new_height) ; 
-        var offset = $(this).parent().offset() ;
-        x = e.pageX-offset.left ;
-        y = e.pageY-offset.top ;
-        context3.fillStyle="#FF0000" ;
-        context3.fillRect(x-5,y-5,10,10) ;
-        
-
-    });
-
-    $("#go-btn").click(function(){
-        if(realx != null){
-            alert("Sent") ;
-        }
-        else{
-            alert("Please click a location on the Map")
-        }
-    }) ; 
-
-    $("#link-debug").click(function(){
-        $('div[id^="div-"]').hide();
-        $('a[id^="link-"]').removeClass("active");
-        $("#div-debug").show();
-        $(this).addClass("active");
-        if($(window).width() < 768){
-            $('#navbarNav').toggle("collapse");
-        }
-    }) ;
-
-    $("#link-status").click(function(){
-        $('div[id^="div-"]').hide();
-        $('a[id^="link-"]').removeClass("active");
-        $("#div-status").show();
-        $(this).addClass("active");
-        if($(window).width() < 768){
-            $('#navbarNav').toggle("collapse");
-        }
-    }) ;
-
-    $("#link-settings").click(function(){
-        $("#settings-modal").modal("show") ;
-        if($(window).width() < 768){
-            $('#navbarNav').toggle("collapse");
-        }
-        
-    });
-
 });

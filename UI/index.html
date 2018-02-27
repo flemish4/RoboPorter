@@ -55,6 +55,7 @@ if(!isset($_SESSION['loggedin'])){
 			</nav>
 		</div>
 		
+		
 		<!-- ******** On Screen Modals Below ******** -->
 
 		<!-- Connection Modal -->
@@ -118,17 +119,18 @@ if(!isset($_SESSION['loggedin'])){
 			<div class="modal-dialog">
 				<div class="modal-content">
 					<div class="modal-header">
-						<h4 class="modal-title">Error</h4>
+						<h4 class="modal-title">Warning!!</h4>
 					</div>
 					<div class="modal-body">
 							<div id="error-connection" class="alert alert-danger text-center">
 								<span class="fas fa-exclamation-triangle fa-5x"></span>
 								<br><br>
-								<h3>The Conection to the Roboporter has been lost!</h3>
+								<h3>Connection to Roboporter has been lost!</h3>
 							</div>
 					</div>
 					<div class="modal-footer">
-						<button class="btn btn-success pagereload"><span class="fas fa-sync"></span>Reload Page</button>
+						<button type="button" class="btn btn-default" data-dismiss="modal" id="error_modal_close">Force Close Modal</button>
+						<button class="btn btn-success pagereload"><span class="fas fa-sync"></span> Reload Page</button>
 					</div>
 				</div>
 			</div>
@@ -252,6 +254,7 @@ if(!isset($_SESSION['loggedin'])){
 		</div>
 
 
+
 		<!-- ******** Content Divs Below ******** -->
 
 		<!-- Home Screen Div -->
@@ -275,8 +278,8 @@ if(!isset($_SESSION['loggedin'])){
 								Battery
 							</h5>	
 							<div class="progress" style="height:50px">
-								<div class="progress-bar bg-success" style="width:70%;">
-									70% Capacity Remaining
+								<div class="progress-bar bg-success" style="width:70%;" id="battery-width">
+									<span id="battery-percentage"></span>% Capacity Remaining
 								</div>
 							</div>
 						</div>
@@ -293,17 +296,17 @@ if(!isset($_SESSION['loggedin'])){
 							<div class="row no-gutters justify-content-center">
 								<div class="col-12 col-lg-8">
 									<div class="row justify-content-center" style="margin:1%;">
-										<div class="col-6"><button class="btn btn-secondary forward-btn" style="width:100%;">Forward</button></div>
+										<div class="col-6"><button class="btn btn-secondary forward-btn mancontrol" style="width:100%;">Forward</button></div>
 									</div>	
 									<div class="row justify-content-center" style="margin:1%;">
-										<div class="col-6" ><button class="btn btn-secondary left-btn" style="width:100%;">Left</button></div>
-										<div class="col-6" ><button class="btn btn-secondary right-btn" style="width:100%;">Right</button></div>
+										<div class="col-6" ><button class="btn btn-secondary left-btn mancontrol" style="width:100%;">Left</button></div>
+										<div class="col-6" ><button class="btn btn-secondary right-btn mancontrol" style="width:100%;">Right</button></div>
 									</div>
 									<div class="row justify-content-center" style="margin:1%;">
-										<div class="col-6"><button class="btn btn-secondary back-btn" style="width:100%;">Backwards</button></div>
+										<div class="col-6"><button class="btn btn-secondary back-btn mancontrol" style="width:100%;">Backwards</button></div>
 									</div>
 									<div class="row justify-content-center"style="margin:5%;">
-										<button class="btn btn-danger stop-btn" style="width:100%">STOP</button>
+										<button class="btn btn-danger stop-btn mancontrol" style="width:100%">STOP</button>
 									</div>
 								</div>
 							</div>
@@ -332,17 +335,17 @@ if(!isset($_SESSION['loggedin'])){
 						<div class="col-6"><button class="btn btn-secondary forward-btn" style="width:100%;">Forward</button></div>
 					</div>	
 					<div class="row justify-content-center" style="margin:1%;">
-						<div class="col-6" ><button class="btn btn-secondary left-btn"  style="width:100%;">Left</button></div>
-						<div class="col-6" ><button class="btn btn-secondary right-btn"  style="width:100%;">Right</button></div>
+						<div class="col-6" ><button class="btn btn-secondary left-btn mancontrol"  style="width:100%;">Left</button></div>
+						<div class="col-6" ><button class="btn btn-secondary right-btn mancontrol "  style="width:100%;">Right</button></div>
 					</div>
 					<div class="row justify-content-center" style="margin:1%;">
-						<div class="col-6"><button class="btn btn-secondary back-btn"  style="width:100%;">Backwards</button></div>
+						<div class="col-6"><button class="btn btn-secondary back-btn mancontrol"  style="width:100%;">Backwards</button></div>
 					</div>
 					<div class="row justify-content-center"style="margin:5%;">
-						<button class="btn btn-danger stop-btn" style="width:100%">STOP</button>
+						<button class="btn btn-danger stop-btn mancontrol" style="width:100%">STOP</button>
 					</div>
 					<div class="row justify-content-center"style="margin:5%;">
-						<button class="btn" data-toggle="collapse" href="#manualcontrol">Manual Control</button>
+						<button class="btn mancontrol" data-toggle="collapse" href="#manualcontrol">Manual Control</button>
 					</div>
 					<div class="row justify-content-center">
 						<div class="collapse" id="manualcontrol">
@@ -366,9 +369,9 @@ if(!isset($_SESSION['loggedin'])){
 				<div class="col-12 col-md-8">
 					<div class="row justify-content-center" style="padding-left:5% ; ">
 						<div class="col-12 text-center">
-							<button class="btn btn-secondary" id="auto-btn" style="margin:1%;">Autopilot</button>
-							<button class="btn btn-secondary" id="shutdown-btn" style="margin:1%;">Shutdown Server</button>
-							<button class="btn btn-secondary" id="safety-btn" style="margin:1%;">Safety ON/OFF</button>
+							<button class="btn btn-secondary mancontrol" id="auto-btn" style="margin:1%;">Autopilot</button>
+							<button class="btn btn-secondary mancontrol" id="shutdown-btn" style="margin:1%;">Shutdown Server</button>
+							<button class="btn btn-secondary mancontrol" id="safety-btn" style="margin:1%;">Safety ON/OFF</button>
 						</div>
 					</div>
 				</div>
@@ -387,18 +390,33 @@ if(!isset($_SESSION['loggedin'])){
 		
 		<!-- Navigation and mapping Div -->
 		<div id="div-nav">
-			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Navigation</h2></div></div>
+			<div class="row justify-content-center" style="margin:1%;"><div class="col-12 text-center"><h2>Mapping and Navigation</h2></div></div>
 			<div class="row justify-content-center no-gutters">
 				<div class="col-12 col-md-8" id="mapdiv" style=" width:100%;">
+					<div class="row justify-content-center" style="z-index:-1; position:absolute; left:0; top:0; width:100%; margin-top:3%;"><div class="col-12 text-center"><h3>Please Select a Map</h3></div></div>
 					<canvas id="MapCanvas1" style="position:absolute; left:0; top:0;"></canvas>
 					<canvas id="MapCanvas2" style="z-index:1; position:absolute; left:0; top:0;"></canvas>
 					<canvas id="MapCanvas3" style="z-index:2; position:absolute; left:0; top:0;"></canvas>
-				
 				</div>
 				<div class="col-12 col-md-4" style="padding:3%;" ;>
-					<div class="row" style="margin-top:5% ;"><button class="btn btn-success" id="go-btn" style="margin-top:5% ; width:100%;">Go to Location on Map!</button></div>
-					<div class="row" style="margin-top:5% ;"><button class="btn btn-primary" id="new-map-btn" style="margin-top:5%; width:100%;" data-toggle="modal" data-target="#newmap-div">Map New Floor</button></div>
-					<div class="row justify-content-center no-gutters" style="margin-top:5% ; width:100%;">
+					<div class="row">
+						<div class="card card-body">
+							<div class="card-title text-center"><h5>Map Selection</h5></div>
+							<form style="width:100%">
+								<select id="map_names_drop" class="form-control">
+								</select>
+								<button class="btn" type="button" id="change-map" style="margin-top:5% ; width:100%;">Change Map</button>
+							</form>
+						</div>
+					</div>
+					<div class="row card card-body " style="margin-top:5% ;">
+						<button class="btn btn-success" id="go-btn" style="margin-top:5% ; width:100%;">Go to Location on Map!</button>
+					</div>
+					<div class="row card card-body" style="margin-top:5% ;">
+							<div class="card-title text-center"><h5>New Map Creation</h5></div>
+						<button class="btn btn-primary" id="new-map-btn" style="margin-top:5%; width:100%;" data-toggle="modal" data-target="#newmap-div">Map New Floor</button>
+					</div>
+					<!-- <div class="row justify-content-center no-gutters" style="margin-top:5% ; width:100%;">
 						<div class="col-8">
 							<div class="form-group" style=" width:100%; ">
 								<select id="input" class="form-control"  >
@@ -412,7 +430,7 @@ if(!isset($_SESSION['loggedin'])){
 							</div>
 						</div>
 						<div class="col-4"><button class="btn" style=" width:100%; margin-left:5%;">GO!</button></div>
-					</div>
+					</div> -->
 					<div class="row justify-content-center"></div>
 				</div>		
 			</div>

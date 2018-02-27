@@ -1,15 +1,16 @@
 <?php
 include("connect.php");
 
-
 $connection = mysqli_connect($database_host,$dbuser,$dbpassword,"map_data") ; 
+
+$image_id = $_GET["a"] ; 
 
 if(!$connection){
         die(mysqli_connect_errno());
     }
 
 $table = 1 ; 
-$query = "SELECT * FROM `".$table."`" ; 
+$query = "SELECT * FROM `".$image_id."`" ; 
 $information = mysqli_query($connection, $query) or die(mysqli_error($connection));
 
 $xarray = Array() ;
