@@ -46,6 +46,9 @@ Servo rightWheelServo;
 //
 // Global variables
 //
+
+volatile int timeout = 0 ; 
+
 //Common to both battery sensors
 float sensitivity = 100.0 / 500.0; //100mA per 500mV = 0.2
 float Vref = 1500; // Output voltage with no current: ~ 1500mV or 1.5V
@@ -54,6 +57,7 @@ float time = 0.0;
 //for ACS712 Battery Current 1 sensor
 int sensorValue = 0; // value read from the carrier board
 int sample = 0;
+
 float totalCharge1 = 0.0;
 float averageAmps1 = 0.0;
 float ampSeconds1 = 0.0;
@@ -197,6 +201,8 @@ ISR (TIMER2_COMPA_vect) {
   sei(); //Re-enable all interrupts
 
   if (timercount >= 49) {
+
+  timeout++ ; 
 
   leftError = desiredLeftPIDCount - leftSensorPIDCount;
   rightError = desiredRightPIDCount - rightSensorPIDCount;
@@ -458,7 +464,7 @@ void stopMoving () {
 void loop() {
 
   if (Serial.available() >= 1) {
-
+    timeout = 0 ; 
     startByte = Serial.read();
 
     if (startByte == '$'){    
@@ -487,6 +493,8 @@ void loop() {
       Serial.println("INVALID COMMAND");
     }
 
+  }else if(timeout == 20){ // if there has been no command for 20 PID iterations(20 x 0.1 seconds) stop robot
+    moveRobot(0, 0)
   }
 
 }

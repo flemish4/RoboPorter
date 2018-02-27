@@ -376,6 +376,7 @@ class motorDataThread(MultiThreadBase):
         self.pulses = ["",""]
         self.obs = False
         self.smoothBrake = True
+        self.time_between_send = 1 # time between sending commands to arduino in seconds.
 
     def run(self):
         global speedVector
@@ -389,34 +390,37 @@ class motorDataThread(MultiThreadBase):
         logging.info("Starting %s", self.name)
         while not exitFlag.value:
             self.loopStartFlag()
+            
+            if lastSent != speedVector:
+                last_time_sent = self.time_between_send
             if obstruction:
-                if autoPilot and self.obs:
-                    if lastSent != [0, 0]:  # ie still moving
-                        # pause motion
-                        logging.info("Obstacle Detected. Path needs to be recalculated")
-                        speechQueue.put("Obstacle Detected. Path needs to be recalculated")
-                        self.send_serial_data([0, 0])
-                    # else:
-                    #     while obstruction:
-                    #         time.sleep(0.1)
-                    #     speechQueue.put("Obstacle removed. Proceeding to destination")
-                    #     logging.info("Obstacle removed. Proceeding to destination")
-                    #     self.send_serial_data(speedVector)
-                elif autoPilot:
-                    logging.info("autopilot command to motor")
-                    if lastSent != [0, 0]:  # ie still moving
-                        # pause motion
-                        logging.info("Obstacle Detected. Waiting for it to go away")
-                        speechQueue.put("Obstacle Detected. Waiting for it to go away")
-                        self.send_serial_data([0, 0])
-                    else:
-                        while obstruction and autoPilot and not exitFlag.value:
-                            time.sleep(0.1)
-                        if not obstruction and autoPilot and not exitFlag.value:
-                            speechQueue.put("Obstacle removed. Proceeding to destination")
-                            logging.info("Obstacle removed. Proceeding to destination")
-                            self.send_serial_data(speedVector)
-                elif safetyOn: #if not autopilot and the safety is on
+                # if autoPilot and self.obs:
+                #     if lastSent != [0, 0]:  # ie still moving
+                #         # pause motion
+                #         logging.info("Obstacle Detected. Path needs to be recalculated")
+                #         speechQueue.put("Obstacle Detected. Path needs to be recalculated")
+                #         self.send_serial_data([0, 0])
+                #     # else:
+                #     #     while obstruction:
+                #     #         time.sleep(0.1)
+                #     #     speechQueue.put("Obstacle removed. Proceeding to destination")
+                #     #     logging.info("Obstacle removed. Proceeding to destination")
+                #     #     self.send_serial_data(speedVector)
+                # elif autoPilot:
+                #     logging.info("autopilot command to motor")
+                #     if lastSent != [0, 0]:  # ie still moving
+                #         # pause motion
+                #         logging.info("Obstacle Detected. Waiting for it to go away")
+                #         speechQueue.put("Obstacle Detected. Waiting for it to go away")
+                #         self.send_serial_data([0, 0])
+                #     else:
+                #         while obstruction and autoPilot and not exitFlag.value:
+                #             time.sleep(0.1)
+                #         if not obstruction and autoPilot and not exitFlag.value:
+                #             speechQueue.put("Obstacle removed. Proceeding to destination")
+                #             logging.info("Obstacle removed. Proceeding to destination")
+                #             self.send_serial_data(speedVector)
+                if safetyOn: #if not autopilot and the safety is on
                     if lastSent != [0, 0]:
                         logging.debug("Setting Speed Vector")
                         with threadLock:
@@ -427,22 +431,22 @@ class motorDataThread(MultiThreadBase):
                     logging.warning("Obstacle Detected But Safety OFF...") #give a warning, but dont do anything to stop
                     self.send_serial_data(speedVector)
             
-            elif self.smoothBrake and usCaution:
-                # print "smooth braking"
-                if lastSent != [0, 0]:
-                    logging.info("Setting smooth speed")
-                    with threadLock:
-                        if lastCommand == "f":
-                            speedVector = [min(maxSpeeds[2:3]),min(maxSpeeds[2:3])]
-                            dataReady = False
-                        elif lastCommand == "b":
-                            speedVector = [min(maxSpeeds[6:7]),min(maxSpeeds[6:7])]
-                            dataReady = False
-                        else:
-                            logging.warning("Smooth Braking is not valid for rotation")
-                    self.send_serial_data(speedVector)
+            # elif self.smoothBrake and usCaution:
+            #     # print "smooth braking"
+            #     if lastSent != [0, 0]:
+            #         logging.info("Setting smooth speed")
+            #         with threadLock:
+            #             if lastCommand == "f":
+            #                 speedVector = [min(maxSpeeds[2:3]),min(maxSpeeds[2:3])]
+            #                 dataReady = False
+            #             elif lastCommand == "b":
+            #                 speedVector = [min(maxSpeeds[6:7]),min(maxSpeeds[6:7])]
+            #                 dataReady = False
+            #             else:
+            #                 logging.warning("Smooth Braking is not valid for rotation")
+            #         self.send_serial_data(speedVector)
 
-            elif dataReady and (lastSent != speedVector): #no obstruction and the new command is different to the last command
+            elif last_time_sent >= time_between_send:
                 logging.debug("Data Ready")
                 logging.info("Data Ready")
                 try:
@@ -491,8 +495,13 @@ class motorDataThread(MultiThreadBase):
                                 dataReady = False
                         self.send_serial_data(speedVector)
 
+
+            # elif dataReady and (lastSent != speedVector): #no obstruction and the new command is different to the last command
+                
+
                 except Exception as e:
                     logging.error("%s", str(e))
+
 
             # READ FROM ARDUINO?
             if MotorConn.inWaiting() > 0:
@@ -510,6 +519,7 @@ class motorDataThread(MultiThreadBase):
                 # self.read_serial_data()
             else:
                 time.sleep(0.001)
+                last_time_sent += 0.001 
                 # self.loopEndFlag()
                 # self.loopRunTime()
 
@@ -926,9 +936,7 @@ def cmdToDestination(inputCommand):
 if __name__ == '__main__':
 
     multiprocessing.freeze_support()
-
     mpManager = multiprocessing.Manager()
-
     wheelSpeeds = mpManager.list([0, 0])
     porterLocation_Global = mpManager.list([3250, 4600])  # set location to "undefined"
     porterLocation_Local = mpManager.list([0, 0])
