@@ -11,11 +11,21 @@ const int analogIn2Pin = A1; // VO of ACS712 current sensor2 goes to pin A1 on A
 const int analogIn3Pin = A2; // VO of ACS715 current sensor1 goes to pin A2 on Arduino
 const int analogIn4Pin = A3; // VO of ACS715 current sensor2 goes to pin A3 on Arduino
 
-const byte leftSensorPin_I  = 2;
-const byte rightSensorPin_I = 3;
+// const byte leftSensorPin_A  = 2;
+// const byte rightSensorPin_A = 3;
+// const byte leftSensorPin_B = 4 ; 
+// const byte rightSensorPin_B = 5 ; 
 
-const byte leftPWMPin_O  = 10;
-const byte rightPWMPin_O = 9;
+// const byte leftPWMPin_O  = 10;
+// const byte rightPWMPin_O = 9;
+
+const byte leftSensorPin_A  = 3;
+const byte rightSensorPin_A = 2;
+const byte leftSensorPin_B = 5 ; 
+const byte rightSensorPin_B = 4 ; 
+
+const byte leftPWMPin_O  = 9;
+const byte rightPWMPin_O = 10;
 
 //
 // Constants
@@ -128,8 +138,8 @@ int rightCurrent;
 void setup() {
 
   // Set up hardware interrupts
-  attachInterrupt(digitalPinToInterrupt(leftSensorPin_I) , leftSensorISR , RISING);
-  attachInterrupt(digitalPinToInterrupt(rightSensorPin_I), rightSensorISR, RISING);
+  attachInterrupt(digitalPinToInterrupt(leftSensorPin_A) , leftSensorISR , RISING);
+  attachInterrupt(digitalPinToInterrupt(rightSensorPin_A), rightSensorISR, RISING);
 
   // Set up timer interrupt
   TCCR2A = 0;
@@ -158,7 +168,7 @@ void setup() {
 //
 
 void leftSensorISR () {
-  if(digitalRead(4) == digitalRead(2)) {
+  if(leftSensorPin_B == leftSensorPin_A) {
     leftSensorPIDCount --;
     leftSensorDistanceCount --;
   } else {
@@ -168,7 +178,7 @@ void leftSensorISR () {
 }
 
 void rightSensorISR () {
-  if(digitalRead(5) == digitalRead(3)) {
+  if(rightSensorPin_B == rightSensorPin_A) {
     rightSensorPIDCount ++;
     rightSensorDistanceCount ++;
   } else {
@@ -338,7 +348,7 @@ void BatteryCurrentSensor2() {
   sensorValue1 = 0;
 }
 //1st Motor Current Sensor
-  void MotorCurrentSensor1() {
+void MotorCurrentSensor1() {
   // read the analog in value:
   for (int i = 0; i < avgSamples; i++)
   {
@@ -415,11 +425,11 @@ void moveRobot (int left, int right) {
  desiredRightPIDCount = (right / (float)60) * pulsesPerRevolution / (float)(1000 / pidPeriod);
 
 
-      Serial.print(" - Left count is: ");
-      Serial.print(desiredLeftPIDCount);
+      //Serial.print(" - Left count is: ");
+      //Serial.print(desiredLeftPIDCount);
 //      
-      Serial.print(" Right count is: ");
-      Serial.println(desiredRightPIDCount);
+      //Serial.print(" Right count is: ");
+      //Serial.println(desiredRightPIDCount);
 
 }
 
