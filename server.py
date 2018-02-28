@@ -376,7 +376,7 @@ class motorDataThread(MultiThreadBase):
         self.pulses = ["",""]
         self.obs = False
         self.smoothBrake = True
-        self.time_between_send = 1 # time between sending commands to arduino in seconds.
+        self.time_between_send = 1 # time between sending commands to arduino in
 
     def run(self):
         global speedVector
@@ -390,9 +390,7 @@ class motorDataThread(MultiThreadBase):
         logging.info("Starting %s", self.name)
         while not exitFlag.value:
             self.loopStartFlag()
-            
-            if lastSent != speedVector:
-                last_time_sent = self.time_between_send
+
             if obstruction:
                 # if autoPilot and self.obs:
                 #     if lastSent != [0, 0]:  # ie still moving
@@ -446,7 +444,7 @@ class motorDataThread(MultiThreadBase):
             #                 logging.warning("Smooth Braking is not valid for rotation")
             #         self.send_serial_data(speedVector)
 
-            elif last_time_sent >= time_between_send:
+            elif (last_time_sent >= time_between_send) or (lastSent !=speedVector):
                 logging.debug("Data Ready")
                 logging.info("Data Ready")
                 try:
@@ -827,8 +825,25 @@ class datafromUI(MultiThreadBase):
                 self.clientconnect()
             if self.clientconnect:
                 try:
-                    dataInput = self.clientConnection.recv(1024)
 
+                    # dataInputJson = self.clientConnection.recv(1024)
+                    # dataInput = JSON.loads(dataInputJson) 
+
+                    # if (dataInput['Type'] == "UserCommand"):
+                    #     print "User Command"
+                    #     speedVector[0] = dataInput['Left']
+                    #     speedVector[1] = dataInput['Right']
+                    # elif (dataInput['Type'] == "MappingCommand"):
+                    #     print "Mapping Command"
+                    # elif (dataInput['Type'] == "NavigationCommand"):
+                    #     print "Navigation Command" 
+                    # elif (dataInput['Type'] == "MiscCommand"):
+                    #     print "Misc Command" 
+                    # else:
+                    #     print "Error"
+                        
+                        
+                    dataInput = self.clientConnection.recv(1024)
                     if (dataInput[0] == "f" or dataInput[0] == "b" or dataInput[0] == "r" \
                                 or dataInput[0] == "l" or dataInput[0] == "x" or dataInput[0] == "m") and not autoPilot: #simple commands
                         logging.info("Valid Command")
@@ -1022,11 +1037,7 @@ if __name__ == '__main__':
 
     # Main Control Loop
     while sysRunning: #while the main loop is not in shutdown mode...
-        logging.debug("System is running")
-        cmdExpecting = True
-        print ("Motor commands are expecting...")
-        while cmdExpecting:
-            time.sleep(0.5)
+        time.sleep(0.5)
             
     with threadLock:
         lastCommand = "x"

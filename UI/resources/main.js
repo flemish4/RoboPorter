@@ -8,6 +8,7 @@ $(document).ready(function(){
     $("#MapCanvas1").hide() ;
     $("#MapCanvas2").hide() ;
     $("#MapCanvas3").hide() ;
+    $("#nav_command_sent").hide() ;
 
     //variables for WASD control
     var keycommandsent = null ; 
@@ -72,6 +73,8 @@ $(document).ready(function(){
     debug_context2.fillStyle="blue" ; //ultrasonic bar color
 
     
+
+    //Timer and time interval definitions
     setTimeout(() => { // Manages the connection timeout modal. After 21 seconds it fades in an alert saying no connection is available
         $("#connecting").fadeOut(1000, function(){
             $('#noconnection').fadeIn(1000) ;
@@ -91,7 +94,7 @@ $(document).ready(function(){
     },1000);
 
 
-    // Function for refreshing dropdown list with list of maps
+    // Function definitions
     function map_names(){
         $.ajax({
             type:'POST',
@@ -105,6 +108,52 @@ $(document).ready(function(){
             });
         })
     }
+
+    function misccommand(command,setting,value){
+        var json = {
+            'Type' : 'MiscCommand', 
+            'Command' : command ,
+            'Setting': setting ,
+            'Value': value ,
+            }
+        var jsonsting = JSON.stringify(json) ;
+        alert(jsonsting) ; 
+    }
+
+    function usercommand(leftspeed,rightspeed){
+        var json = {
+            'Type' : 'UserCommand', 
+            'Left' : leftspeed ,
+            'Right' : rightspeed ,
+            }
+
+        var jsonsting = JSON.stringify(json) ;
+        alert(jsonsting) ; 
+        //s.send(jsonstring)
+    }
+
+    function mappingcommand(command,name,mapid){
+        var json = {
+            'Type' : 'MappingCommand', 
+            'MapName' : name, 
+            'TableName' : mapid,   
+            }
+        var jsonsting = JSON.stringify(json) ;
+        alert(jsonsting) ; 
+        //s.send(jsonstring)
+    }
+
+    function navigationcommand(command,X,Y){
+        var json = {
+            'Type' : 'NavigationCommand', 
+            'X' : X, 
+            'Y' : Y, 
+            }
+        var jsonsting = JSON.stringify(json) ;
+        alert(jsonsting) ; 
+        //s.send(jsonstring)
+    }
+
 
     //Manages socket send and recieve
     s.onopen = function(e) {}
@@ -299,18 +348,22 @@ $(document).ready(function(){
 
     //The following commands deal with manual control buttons
     $('.left-btn').click(function(){
+        usercommand(-20,20) ;
         s.send("l")
     });
 
     $('.right-btn').click(function(){
+        usercommand(20,-20) ;
         s.send("r")
     });
 
     $('.forward-btn').click(function(){
+        usercommand(20,20) ;
         s.send("f")
     });
 
     $('.back-btn').click(function(){
+        usercommand(-20,-20) ;
         s.send("b")
     });
 
@@ -319,16 +372,26 @@ $(document).ready(function(){
     });
 
     $('.stop-btn').click(function(){
+        usercommand(0,0)
         s.send("x")
     });
 
     $('#safety-btn').click(function(){
+        misccommand("s", 0, 0)
         s.send("s")
+    });
+
+    $('#shutdown-btn').click(function(){
+        misccommand("x", 0, 0)
+        s.send("x")
     });
 
     $('#man-control-send').click(function(){
         var left = $("#left-motor-amount").val()
         var right = $("#right-motor-amount").val()
+
+        usercommand(left,right) ;
+        
         s.send("m"+left+","+right)
     });
 
@@ -415,6 +478,7 @@ $(document).ready(function(){
         context2.fillRect(x-5,y-5,10,10) ;
         realx = Math.round(x*scale) ;
         realy = Math.round(y*scale) ; 
+        $("#nav_command_sent").fadeOut() ; 
     });
 
     $("#mapdiv").mousemove(function(e){
@@ -428,7 +492,10 @@ $(document).ready(function(){
 
     $("#go-btn").click(function(){
         if(realx != null){
-            alert("Sent") ;
+            var command = "Navigation,"+realx+","+realy+"" ;
+            //s.send()
+            $("#nav_command_sent").fadeIn() ; 
+            alert(command) ;
         }
         else{
             alert("Please click a location on the Map")
@@ -439,7 +506,6 @@ $(document).ready(function(){
         var dropdowndata = {
             'name' : $("#map_names_drop").val(),   
             }
-
         $.ajax({
             type:'POST',
             url:'php/name_to_id.php',
@@ -450,7 +516,9 @@ $(document).ready(function(){
                 $("#MapCanvas2").show() ;
                 $("#MapCanvas3").show() ;
                 div_width = $('#mapdiv').width() ; 
-        
+
+                realx = null ;
+                realy = null ;
                 canvas1.width = div_width ; 
                 canvas2.width = div_width ; 
                 canvas3.width = div_width ; 
@@ -471,7 +539,7 @@ $(document).ready(function(){
                 context1.rect(-0.5,-0.5,div_width+0.5,new_height+0.5);
                 context1.stroke();
             };
-            var imagesrc = "php/map_generation.php?a="+msg
+            var imagesrc = "php/map_generation.php?ID="+msg
             imageObj.src = imagesrc;
         })
 
@@ -480,10 +548,8 @@ $(document).ready(function(){
     });
     
 
-
-
     // The following code handles changing and creating users
-     // When the new user form is submited. Run this function:
+    // When the new user form is submited. Run this function:
     $("#new_user").submit(function(e){
         e.preventDefault(); // Prevents any default form functions from happening
         if(!$("#current_password_input").val()){
