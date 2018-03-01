@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 # Map size, scale
-MAP_SIZE_PIXELS          = 800
-MAP_SIZE_METERS          =  32
+MAP_SIZE_METERS          = 100 # 32
+MAP_SIZE_PIXELS          = MAP_SIZE_METERS * 10 #800
 
 from breezyslam.algorithms import Deterministic_SLAM, RMHC_SLAM
 
