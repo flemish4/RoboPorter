@@ -113,15 +113,7 @@ maxSpeeds = [0, 0, 0, 0, 0, 0, 0, 0]
 
 ##--Multi-Threading/Muti-processing
 global threadLock #lock to be used when changing global variables
-global speechQueue #Queue holding sentences to be spoken
-global pulsesQueue #Queue holding the measured wheel encoder pulses
-global serverFeedbackQueue
-global nodeQueue
 threadLock = threading.Lock()
-speechQueue = multiprocessing.Queue()
-pulsesQueue = multiprocessing.Queue()
-serverFeedbackQueue = multiprocessing.Queue()
-nodeQueue = multiprocessing.Queue()
 threads = [] #Array holding information on the currently running threads
 processes = [] #Array holding information on the currently running Processes
 
@@ -135,6 +127,12 @@ global avoidingObstacle
 avoidingObstacle = False
 global AHRSmode
 AHRSmode = "wheel"
+
+# Command Queue
+
+global commandqueue 
+commandqueue = Queue.Queue()
+
 
 # -Porter Localisation
 global porterLocation_Global #vector holding global location [x,y] in cm
@@ -377,6 +375,7 @@ class motorDataThread(MultiThreadBase):
         self.obs = False
         self.smoothBrake = True
         self.time_between_send = 1 # time between sending commands to arduino in
+        self.last_time_sent = 0
 
     def run(self):
         global speedVector
@@ -384,7 +383,6 @@ class motorDataThread(MultiThreadBase):
         global dataReady
         global USConn1
         global obstruction
-        global pulsesQueue
         global system_status
 
         logging.info("Starting %s", self.name)
@@ -396,12 +394,12 @@ class motorDataThread(MultiThreadBase):
                 #     if lastSent != [0, 0]:  # ie still moving
                 #         # pause motion
                 #         logging.info("Obstacle Detected. Path needs to be recalculated")
-                #         speechQueue.put("Obstacle Detected. Path needs to be recalculated")
+                #        
                 #         self.send_serial_data([0, 0])
                 #     # else:
                 #     #     while obstruction:
                 #     #         time.sleep(0.1)
-                #     #     speechQueue.put("Obstacle removed. Proceeding to destination")
+                #     #     
                 #     #     logging.info("Obstacle removed. Proceeding to destination")
                 #     #     self.send_serial_data(speedVector)
                 # elif autoPilot:
@@ -409,13 +407,12 @@ class motorDataThread(MultiThreadBase):
                 #     if lastSent != [0, 0]:  # ie still moving
                 #         # pause motion
                 #         logging.info("Obstacle Detected. Waiting for it to go away")
-                #         speechQueue.put("Obstacle Detected. Waiting for it to go away")
                 #         self.send_serial_data([0, 0])
                 #     else:
                 #         while obstruction and autoPilot and not exitFlag.value:
                 #             time.sleep(0.1)
                 #         if not obstruction and autoPilot and not exitFlag.value:
-                #             speechQueue.put("Obstacle removed. Proceeding to destination")
+                #             
                 #             logging.info("Obstacle removed. Proceeding to destination")
                 #             self.send_serial_data(speedVector)
                 if safetyOn: #if not autopilot and the safety is on
@@ -444,7 +441,7 @@ class motorDataThread(MultiThreadBase):
             #                 logging.warning("Smooth Braking is not valid for rotation")
             #         self.send_serial_data(speedVector)
 
-            elif (last_time_sent >= time_between_send) or (lastSent !=speedVector):
+            elif (self.last_time_sent >= self.time_between_send) or (lastSent !=speedVector):
                 logging.debug("Data Ready")
                 logging.info("Data Ready")
                 try:
@@ -507,9 +504,6 @@ class motorDataThread(MultiThreadBase):
                 self.inputBuf = MotorConn.readline()
                 self.inputBuf = self.inputBuf.rstrip("\r\n")
                 self.pulses = self.inputBuf.split(",")
-                pulsesQueue.put(self.pulses)
-                #pulsesQueue.get()
-                #pulsesQueue.task_done()
                 #logging.info("data from motor read")
 
             if self.profiling:
@@ -517,7 +511,7 @@ class motorDataThread(MultiThreadBase):
                 # self.read_serial_data()
             else:
                 time.sleep(0.001)
-                last_time_sent += 0.001 
+                self.last_time_sent += 0.001 
                 # self.loopEndFlag()
                 # self.loopRunTime()
 
@@ -700,7 +694,7 @@ class usDataThread(MultiThreadBase):
 
         if safetyOn:
             try:
-                if (speedVector(0)> 0 ) and (speedVector(1) > 0)):
+                if (speedVector(0)> 0 ) and (speedVector(1) > 0):
                     if (int(USAvgDistances[2]) < USThresholds[0]) or (int(USAvgDistances[3]) < USThresholds[0]):
                         logging.warning("FRONT TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
@@ -718,7 +712,7 @@ class usDataThread(MultiThreadBase):
                     else:
                         usCaution = False
 
-                elif (speedVector(0) < 0) and (speedVector(1) < 0 )):
+                elif (speedVector(0) < 0) and (speedVector(1) < 0 ):
                     if (int(USAvgDistances[6]) < USThresholds[2]) or (int(USAvgDistances[7]) < USThresholds[2]):
                         logging.warning("BACK TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
@@ -778,10 +772,12 @@ class datafromUI(MultiThreadBase):
         self.RecieveServer = False
         self.clientconnect = False
 
+
     def startServer(self):
         logging.info("Setting up sockets...")
         try:
             PORT = 5002
+            HOST = ''
             # create a socket to establish a server
             logging.debug("Binding recieveing Socket")
             self.ServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -799,17 +795,17 @@ class datafromUI(MultiThreadBase):
             logging.debug("Sleeping...")
             time.sleep(5)
 
-    def clientconnect(self):
+    def userconnect(self):
         try:
             logging.info("Ready for a new client to connect...")
-            clientConnection, address = self.ServerSocket.accept()
-            logging.info('Connected by %s', address)
-            print 'Connected by', address
+            self.clientConnection, self.address = self.ServerSocket.accept()
+            logging.info('Connected by %s', self.address)
+            print 'Connected by', self.address
 
             # send welcome message
             print ("Sending welcome message...")
-            clientConnection.send('Connection ack')
-            dataInput = clientConnection.recv(1024)
+            self.clientConnection.send('Connection ack')
+            dataInput = self.clientConnection.recv(1024)
             print ("Client says - " + dataInput)
             dataInput = ""
             self.clientconnect = True
@@ -817,67 +813,68 @@ class datafromUI(MultiThreadBase):
             logging.error("%s", str(e))
 
     def run(self):
+        global lastCommand
+        global sysRunning
+        global safetyOn
         logging.info("Starting %s", self.name)
         while not exitFlag.value:
             if not self.RecieveServer:
                 self.startServer()
             if self.RecieveServer and not self.clientconnect:
-                self.clientconnect()
+                self.userconnect()
             if self.clientconnect:
-                try:
-
-                    # dataInputJson = self.clientConnection.recv(1024)
-                    # dataInput = JSON.loads(dataInputJson) 
-
-                    # if (dataInput['Type'] == "UserCommand"):
-                    #     print "User Command"
-                    #     speedVector[0] = dataInput['Left']
-                    #     speedVector[1] = dataInput['Right']
-                    # elif (dataInput['Type'] == "MappingCommand"):
-                    #     print "Mapping Command"
-                    # elif (dataInput['Type'] == "NavigationCommand"):
-                    #     print "Navigation Command" 
-                    # elif (dataInput['Type'] == "MiscCommand"):
-                    #     print "Misc Command" 
-                    # else:
-                    #     print "Error"
-                        
-                        
-                    dataInput = self.clientConnection.recv(1024)
-                    if (dataInput[0] == "f" or dataInput[0] == "b" or dataInput[0] == "r" \
-                                or dataInput[0] == "l" or dataInput[0] == "x" or dataInput[0] == "m") and not autoPilot: #simple commands
-                        logging.info("Valid Command")
-                        system_status = "Manual Control"
-                        with threadLock:
-                            lastCommand = dataInput[0]
-                            speedVector = cmdToSpeeds(dataInput)
-                            setSpeedVector = copy.deepcopy(speedVector)
-                            dataReady = True
-
-                            if lastCommand == "m":
-                                logging.info("MANUAL OVERRIDE!\n")
-
-                    elif dataInput[0] == "s" and not autoPilot: #Toggle safety
-                        if safetyOn:
-                            safetyOn = False
-                        else:#if safety is off...turn it on
-                            safetyOn = True
-                        system_status = "Manual Control"
-                        dataInput = ""
-                        if dataReady != False:
-                            with threadLock:
-                                dataReady = False
-                    
-                    elif dataInput == "q": #initiate system shutdown
-                        cmdExpecting = False
+                #try:
+                dataInputJson = self.clientConnection.recv(1024)
+                dataInputTidied = dataInputJson.split("$",1) # this code is to remove any random characters sent by acident with the socket connection
+                print "Command Recieved = " + dataInputTidied[0]
+                dataInput = json.loads(dataInputTidied[0]) 
+                if (dataInput['Type'] == "MiscCommand"):
+                    if dataInput['Command'] == "x":
+                        lastCommand = "x"
                         sysRunning = False
-                    else:
-                        if dataReady != False:
-                            with threadLock:
-                                dataReady = False
-                        logging.info("Invalid Command")    
-                except:
-                    print "Error" 
+                        commandqueue.put("Close")
+                    elif dataInput['Command'] == "c":
+                        pass  #Add code to cancel loop
+                    elif dataInput['Command'] == "s":
+                        safetyOn = not safetyOn ; 
+                else:
+                    commandqueue.put(dataInput)
+                          
+                    # dataInput = self.clientConnection.recv(1024)
+                    # if (dataInput[0] == "f" or dataInput[0] == "b" or dataInput[0] == "r" \
+                    #             or dataInput[0] == "l" or dataInput[0] == "x" or dataInput[0] == "m") and not autoPilot: #simple commands
+                    #     logging.info("Valid Command")
+                    #     system_status = "Manual Control"
+                    #     with threadLock:
+                    #         lastCommand = dataInput[0]
+                    #         speedVector = cmdToSpeeds(dataInput)
+                    #         setSpeedVector = copy.deepcopy(speedVector)
+                    #         dataReady = True
+
+                    #         if lastCommand == "m":
+                    #             logging.info("MANUAL OVERRIDE!\n")
+
+                    # elif dataInput[0] == "s" and not autoPilot: #Toggle safety
+                    #     if safetyOn:
+                    #         safetyOn = False
+                    #     else:#if safety is off...turn it on
+                    #         safetyOn = True
+                    #     system_status = "Manual Control"
+                    #     dataInput = ""
+                    #     if dataReady != False:
+                    #         with threadLock:
+                    #             dataReady = False
+                    
+                    # elif dataInput == "q": #initiate system shutdown
+                    #     cmdExpecting = False
+                    #     sysRunning = False
+                    # else:
+                    #     if dataReady != False:
+                    #         with threadLock:
+                    #             dataReady = False
+                    #     logging.info("Invalid Command")    
+                # except:
+                #     print "Error" 
 
 def cmdToSpeeds(inputCommand): #convert commands to speed vectors for manual control
     mSpeed = 0
@@ -964,7 +961,9 @@ if __name__ == '__main__':
     try:
         logging.info("Trying to Run Recieve Thread")
         recieveChannel = datafromUI(6, "Recieve Data ")
+        recieveChannel.daemon = True
         recieveChannel.start()
+        
         threads.append(recieveChannel)
         logging.info('Recieve Thread Running - %s', str(recieveChannel))
         logging.info("Running Recieve Server")
@@ -974,11 +973,13 @@ if __name__ == '__main__':
         logging.error("%s", str(e))
 
 
-    #Try to strat thread to send data from UI
+    #Try to start thread to send data from UI
     try:
         logging.info("Trying to Run Debug Server")
         debugChannel = debugThread(3, "Debug Thread")
+        debugChannel.daemon = True
         debugChannel.start()
+        
         threads.append(debugChannel)
         logging.info('Debug Thread Running - %s', str(debugChannel))
         logging.info("Running Debug Server")
@@ -1001,7 +1002,9 @@ if __name__ == '__main__':
 
             logging.info('Connected to Motors %s', str(MotorConn))
             serialThread = motorDataThread(4, "Motor thread")
+            serialThread.daemon = True
             serialThread.start()
+            
             threads.append(serialThread)
             logging.info('Motor Thread Running - %s', str(serialThread))
 
@@ -1025,41 +1028,53 @@ if __name__ == '__main__':
                 USConn1 = serial.Serial('COM3', 9600)
 
             USthread = usDataThread(5, "Ultrasonic thread")
+            USthread.daemon = True
             USthread.start()
+            
             threads.append(USthread)
             logging.info('Ultrasonic Thread Running - %s', str(USthread))
-            # speechQueue.put("Ultrasonic Sensors Connected")
+            
         except Exception as e:
             print ('Unable to establish serial comms to US device')
             logging.error("%s", str(e))
             # USConnected = False
 
 
+
+
     # Main Control Loop
     while sysRunning: #while the main loop is not in shutdown mode...
-        time.sleep(0.5)
-            
+        currentcommand = commandqueue.get()
+        if currentcommand["Type"] == "UserCommand":
+            print "Running a User Command"
+        elif currentcommand["Type"] == "MappingCommand":
+            print "Running a Mapping Command"
+        elif currentcommand["Type"] == "NavigationCommand":
+            print "Running a Navigation Command"
+        else:
+            pass
+
     with threadLock:
         lastCommand = "x"
         speedVector = [0, 0]
         dataReady = True
 
-    exitFlag.value = True #instruct all the threads to close
+    #exitFlag.value = True #instruct all the threads to close
 
-    if not localCtrl:
-        logging.info("Shutting down the server at %s...", HOST)
-        s.close()
-    else:
-        logging.info("Shutting Down")
+    # if not localCtrl:
+    #     logging.info("Shutting down the server at %s...", HOST)
+    #     s.close()
+    # else:
+    #     logging.info("Shutting Down")
 
-    logging.info("Waiting for threads to close...")
-    for t in threads:
-        logging.info("Closing %s thread", t)
-        t.join()
+    # logging.info("Waiting for threads to close...")
+    # for t in threads:
+    #     logging.info("Closing %s thread", t)
+    #     t.join()
 
-    for p in processes:
-        logging.info("Closing %s process", p)
-        p.join()
+    # for p in processes:
+    #     logging.info("Closing %s process", p)
+    #     p.join()
 
     # print "processes = " + str(processes)
     # print "Threads = " + str(threads)

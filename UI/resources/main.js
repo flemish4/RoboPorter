@@ -116,8 +116,8 @@ $(document).ready(function(){
             'Setting': setting ,
             'Value': value ,
             }
-        var jsonsting = JSON.stringify(json) ;
-        alert(jsonsting) ; 
+        var jsonstring = JSON.stringify(json) ;
+        s.send(jsonstring+"$") 
     }
 
     function usercommand(leftspeed,rightspeed){
@@ -127,9 +127,8 @@ $(document).ready(function(){
             'Right' : rightspeed ,
             }
 
-        var jsonsting = JSON.stringify(json) ;
-        alert(jsonsting) ; 
-        //s.send(jsonstring)
+        var jsonstring = JSON.stringify(json) ;
+        s.send(jsonstring+"$")
     }
 
     function mappingcommand(command,name,mapid){
@@ -138,9 +137,8 @@ $(document).ready(function(){
             'MapName' : name, 
             'TableName' : mapid,   
             }
-        var jsonsting = JSON.stringify(json) ;
-        alert(jsonsting) ; 
-        //s.send(jsonstring)
+        var jsonstring = JSON.stringify(json) ;
+        s.send(jsonstring+"$")
     }
 
     function navigationcommand(command,X,Y){
@@ -149,9 +147,8 @@ $(document).ready(function(){
             'X' : X, 
             'Y' : Y, 
             }
-        var jsonsting = JSON.stringify(json) ;
-        alert(jsonsting) ; 
-        //s.send(jsonstring)
+        var jsonstring = JSON.stringify(json) ; 
+        s.send(jsonstring+"$")
     }
 
 
@@ -211,8 +208,8 @@ $(document).ready(function(){
             num_debug_sent = parseInt(data["Debug Data Sent"],10) ; 
 
             $("#current-status").html(data["System Status"]) ; 
-
-            $("#battery-width").width(parseInt(data["Battery"]),10) ;
+            var batterywidth = parseInt(data["Battery"],10)+"%" ; 
+            $("#battery-width").width(batterywidth) ;
             $("#battery-percentage").html(data["Battery"]) ; 
 
             // Change colour of safety button to indicate active or not active 
@@ -359,31 +356,31 @@ $(document).ready(function(){
 
     $('.forward-btn').click(function(){
         usercommand(20,20) ;
-        s.send("f")
+
     });
 
     $('.back-btn').click(function(){
         usercommand(-20,-20) ;
-        s.send("b")
+       
     });
 
     $('#auto-btn').click(function(){
-        s.send("a")
+        
     });
 
     $('.stop-btn').click(function(){
         usercommand(0,0)
-        s.send("x")
+        
     });
 
     $('#safety-btn').click(function(){
         misccommand("s", 0, 0)
-        s.send("s")
+        
     });
 
     $('#shutdown-btn').click(function(){
         misccommand("x", 0, 0)
-        s.send("x")
+        
     });
 
     $('#man-control-send').click(function(){
@@ -392,7 +389,7 @@ $(document).ready(function(){
 
         usercommand(left,right) ;
         
-        s.send("m"+left+","+right)
+        //s.send("m"+left+","+right)
     });
 
 
