@@ -1,7 +1,7 @@
 <?php
 include("connect.php");
 
-$connection = mysqli_connect($database_host,$dbuser,$dbpassword,"map_data") ; 
+$connection = mysqli_connect($database_host,$dbuser,$dbpassword,$database) ; 
 
 $name = $_POST["name"] ; 
 

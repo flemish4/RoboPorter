@@ -2,5 +2,5 @@
 $database_host = "localhost" ; 
 $dbuser = "admin" ; 
 $dbpassword = "password" ;
-$database = "project" ; 
+$database = "roboporter" ; 
 ?>

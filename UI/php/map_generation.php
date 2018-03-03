@@ -1,15 +1,14 @@
 <?php
 include("connect.php");
 
-$connection = mysqli_connect($database_host,$dbuser,$dbpassword,"map_data") ; 
+$connection = mysqli_connect($database_host,$dbuser,$dbpassword,$database) ; 
 
-$image_id = $_GET["a"] ; 
+$image_id = $_GET["ID"] ; 
 
 if(!$connection){
         die(mysqli_connect_errno());
     }
 
-$table = 1 ; 
 $query = "SELECT * FROM `".$image_id."`" ; 
 $information = mysqli_query($connection, $query) or die(mysqli_error($connection));
 
@@ -20,9 +19,7 @@ while($row = mysqli_fetch_array($information,MYSQLI_ASSOC)){
     $yarray[] = $row['Y'] ; 
 }
 
-
 $image = imagecreate(max($xarray),max($yarray)) ;
-
 $background = imagecolorallocate($image,255,255,255) ;
 $foreground = imagecolorallocate($image,0,0,0) ;
 

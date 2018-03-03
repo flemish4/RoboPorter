@@ -3,7 +3,7 @@ include("connect.php");
 
 $row = "" ; 
 
-$connection = mysqli_connect($database_host,$dbuser,$dbpassword,"map_data") ; 
+$connection = mysqli_connect($database_host,$dbuser,$dbpassword,$database) ; 
 
 $query = "SELECT * FROM names" ;
 
