@@ -4,10 +4,6 @@ include("connect.php");
 
 $connection = mysqli_connect($database_host,$dbuser,$dbpassword,$database) ; 
 
-if(!$connection){
-        die(mysqli_connect_errno());
-    }
-
 $query = "SELECT * FROM temp" ; 
 
 $information = mysqli_query($connection, $query) or die(mysqli_error($connection));

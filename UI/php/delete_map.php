@@ -3,22 +3,18 @@ include("connect.php");
 
 $connection = mysqli_connect($database_host,$dbuser,$dbpassword,$database) ; 
 
-$image_id = $_GET["ID"] ; 
+$image_id = $_POST["name"] ; 
 
 if(!$connection){
         die(mysqli_connect_errno());
     }
 
-$query = "SELECT * FROM `".$image_id."`" ; 
+$query = "DROP TABLE `".$image_id."`" ; 
 
 $information = mysqli_query($connection, $query) or die(mysqli_error($connection));
 
-$row = mysqli_fetch_array($information,MYSQLI_ASSOC);
+$query = "DELETE FROM names WHERE Filename = '$image_id'" ; 
 
-$img = base64_decode($row['data']) ;
-
-header('Content-Type:image/jpeg');
-
-echo $img ; 
+$information = mysqli_query($connection, $query) or die(mysqli_error($connection));
 
 ?>

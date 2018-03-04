@@ -28,6 +28,9 @@ if ($numrows == 1){
     $query = "INSERT `$filename` SELECT * FROM temp" ; 
     $information = mysqli_query($connection, $query) or die(mysqli_error($connection));
 
+    $query = "UPDATE temp SET data = 0 WHERE type = 'image'" ; 
+    $information = mysqli_query($connection, $query) or die(mysqli_error($connection));
+
     echo "Success" ; 
 }
 
