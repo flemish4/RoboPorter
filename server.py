@@ -24,6 +24,8 @@ import datetime
 import copy
 import cv2
 import json
+import MySQLdb 
+import base64
 
 #import zbar
 #import time
@@ -84,6 +86,11 @@ setSpeedVector = [0,0]
 lastSent = [0, 0]
 
 dataReady = False
+
+
+##-- MYSQL DB variables
+global connection
+global cursor
 
 ##--Serial Connections
 global MotorConn #serial handle for the motor controller
@@ -940,12 +947,33 @@ def cmdToDestination(inputCommand):
         logging.error("Invalid destination format")
         return porterLocation_Global[0],porterLocation_Global[1]
 
+# Sends Maps to the temporary table in the database
+def send_map(map_to_send):
+    img_string = cv2.imencode('.jpg',map_to_send)[1].tostring()
+    img_string = base64.b64encode(img_string)
+    query = "UPDATE temp SET data = '%s' WHERE type = 'image'" %img_string
+    cursor.execute(query)
+
+#Retrieve map from database
+def recieve_map(filename):
+    query = "SELECT data FROM `%u` WHERE type = 'image'" %filename
+    cursor.execute(query)
+    result = cursor.fetchone() ; 
+    img_string = base64.b64decode(result[0])
+    nparray = numpy.fromstring(img_string,numpy.uint8) ; 
+    image = cv2.imdecode(nparray, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+    return image
+
 
 ######################################################
 ######################################################
 ######Start of the Main Thread!
 
 if __name__ == '__main__':
+
+    #Connect to map database
+    connection = MySQLdb.connect(host='192.168.0.1',db='roboporter',user='admin',passwd='password', port=3306)
+    cursor = connection.cursor()
 
     multiprocessing.freeze_support()
     mpManager = multiprocessing.Manager()
@@ -1040,8 +1068,6 @@ if __name__ == '__main__':
             # USConnected = False
 
 
-
-
     # Main Control Loop
     while sysRunning: #while the main loop is not in shutdown mode...
         currentcommand = commandqueue.get()
@@ -1050,6 +1076,7 @@ if __name__ == '__main__':
         elif currentcommand["Type"] == "MappingCommand":
             print "Running a Mapping Command"
         elif currentcommand["Type"] == "NavigationCommand":
+            recieve_map(currentcommand["Map_Filename"])
             print "Running a Navigation Command"
         else:
             pass
