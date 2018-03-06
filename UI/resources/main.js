@@ -43,6 +43,7 @@ $(document).ready(function () {
     var div_width;
     var wh_ratio;
     var new_height;
+    var current_map ; 
 
 
     // Code below handles Debug Canvas
@@ -78,7 +79,7 @@ $(document).ready(function () {
     debug_context2.fillStyle = "blue"; //ultrasonic bar color
 
     //Timer and time interval definitions
-    setTimeout(() => { // Manages the connection timeout modal. After 21 seconds it fades in an alert saying no connection is available
+    setTimeout(function() { // Manages the connection timeout modal. After 21 seconds it fades in an alert saying no connection is available
         $("#connecting").fadeOut(1000, function () {
             $('#noconnection').fadeIn(1000);
             $('#pagereloadconn').prop('disabled', false); // Toggles the availability of the button
@@ -133,7 +134,7 @@ $(document).ready(function () {
         s.send(jsonstring + "$")
     }
 
-    function mappingcommand(command, name, mapid) {
+    function mappingcommand(name, mapid) {
         var json = {
             'Type': 'MappingCommand',
             'MapName': name,
@@ -143,11 +144,12 @@ $(document).ready(function () {
         s.send(jsonstring + "$")
     }
 
-    function navigationcommand(command, X, Y) {
+    function navigationcommand(X, Y, map) {
         var json = {
             'Type': 'NavigationCommand',
             'X': X,
             'Y': Y,
+            'Map_Filename' : map,
         }
         var jsonstring = JSON.stringify(json);
         s.send(jsonstring + "$")
@@ -162,7 +164,7 @@ $(document).ready(function () {
             $("#delete-map-options").html("");
             var num_maps = msg.split(",");
             $.each(num_maps, function (i, value) {
-                $("#delete-map-options").append("<input type='radio' name='deleteradio' value='" + value + "'>  <label>" + value + "</label><br>");
+                $("#delete-map-options").append(" <div class='form-check'><label class='form-check-label'><input class='form-check-input' type='radio' name='deleteradio' value='" + value + "'>" + value + "</label></div>");
             });
         })
 
@@ -280,28 +282,28 @@ $(document).ready(function () {
                     if (lastcommand != "f") {
                         $("#up-key").addClass("red");
                         lastcommand = "f";
-                        s.send("f");
+                        usercommand(20, 20);
                     }
                     break;
                 case 65:
                     if (lastcommand != "l") {
                         $("#left-key").addClass("red");
                         s.send("l");
-                        lastcommand = "l";
+                        usercommand(-20, 20);
                     }
                     break;
                 case 83:
                     if (lastcommand != "b") {
                         $("#down-key").addClass("red");
                         s.send("b");
-                        lastcommand = "b";
+                        usercommand(-20, -20);
                     }
                     break;
                 case 68:
                     if (lastcommand != "r") {
                         $("#right-key").addClass("red");
                         s.send("r");
-                        lastcommand = "r";
+                        usercommand(20, -20);
                     }
                     break;
             }
@@ -317,19 +319,19 @@ $(document).ready(function () {
             switch (keycode) {
                 case 87:
                     $("#up-key").removeClass("red");
-                    s.send("x");
+                    usercommand(0, 0);
                     break;
                 case 65:
                     $("#left-key").removeClass("red");
-                    s.send("x");
+                    usercommand(0, 0);
                     break;
                 case 83:
                     $("#down-key").removeClass("red");
-                    s.send("x");
+                    usercommand(0, 0);
                     break;
                 case 68:
                     $("#right-key").removeClass("red");
-                    s.send("x");
+                    usercommand(0, 0);
                     break;
             }
             lastcommand = "x";
@@ -341,7 +343,7 @@ $(document).ready(function () {
     // makes sure the last command sent from the keyboard modal is stop
     $("#keyclose").click(function () {
         if (keycommandsent != null) {
-            s.send("x");
+            usercommand(0, 0);
             keycommandsent = null;
         };
 
@@ -367,26 +369,21 @@ $(document).ready(function () {
     //The following commands deal with manual control buttons
     $('.left-btn').click(function () {
         usercommand(-20, 20);
-        s.send("l")
     });
 
     $('.right-btn').click(function () {
         usercommand(20, -20);
-        s.send("r")
     });
 
     $('.forward-btn').click(function () {
         usercommand(20, 20);
-
     });
 
     $('.back-btn').click(function () {
         usercommand(-20, -20);
-
     });
 
     $('#auto-btn').click(function () {
-
     });
 
     $('.stop-btn').click(function () {
@@ -418,6 +415,7 @@ $(document).ready(function () {
     $("#navbar-toggle-id").click(function () {
         $('#navbarNav').toggle("collapse");
     })
+
 
     // The following JQuery Commands are for Showing and Hiding The Content when a link is clicked
     $("#link-home").click(function () {
@@ -510,17 +508,28 @@ $(document).ready(function () {
 
     $("#go-btn").click(function () {
         if (realx != null) {
-            var command = "Navigation," + realx + "," + realy + "";
-            //s.send()
-            $("#nav_command_sent").fadeIn();
-            alert(command);
+            var data = {
+                'name': current_map,
+            }
+            $.ajax({
+                type: 'POST',
+                url: 'php/name_to_id.php',
+                data: data,
+            }).done(function (msg) {
+                navigationcommand(realx,realy,parseInt(msg)) ; 
+                $("#nav_command_sent").fadeIn();
+
+
+            });
+            
         }
         else {
             alert("Please click a location on the Map")
         }
     });
 
-    $("#change-map").click(function () {
+    $("#map_names_drop").change(function () {
+        current_map = $("#map_names_drop").val()
         var dropdowndata = {
             'name': $("#map_names_drop").val(),
         }
@@ -551,6 +560,7 @@ $(document).ready(function () {
 
                 context1.drawImage(imageObj, 0.5, 0.5, div_width, new_height);
 
+                
                 context1.beginPath(); // draw border around debug canvas
                 context1.lineWidth = borderwidth;
                 context1.strokeStyle = "black";
@@ -588,6 +598,8 @@ $(document).ready(function () {
         $("#map-saving-error").hide();
         $("#map-saving-success").hide();
         clearInterval(map_reload);
+        var link = "/php/map_generation_temp.php?" + (new Date().getTime()) // Forces a reload not from the cache
+        $("#final_map").attr("src", link);
         $(this).parent().parent().fadeOut(function () {
             $("#map-4").fadeIn();
         })
@@ -648,7 +660,8 @@ $(document).ready(function () {
                 type: 'POST',
                 url: 'php/delete_map.php',
                 data: data,
-            }).done(function (msg) {
+            }).done(function (msg2) {
+                alert(msg2) ;
                 delete_map_radio();
                 map_names();
             });
@@ -657,8 +670,6 @@ $(document).ready(function () {
         });
 
     })
-
-
 
     // The following code handles changing and creating users
     // When the new user form is submited. Run this function:

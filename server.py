@@ -80,10 +80,11 @@ global speedVector #demanded wheel speeds (left, right)
 global dataReady #boolean to let the threads know that data is ready to be sent to the motors
 global wheelSpeeds #measured wheel speeds
 
+
 lastCommand = ""
 speedVector = [0, 0]
 setSpeedVector = [0,0]
-lastSent = [0, 0]
+
 
 dataReady = False
 
@@ -140,7 +141,6 @@ AHRSmode = "wheel"
 global commandqueue 
 commandqueue = Queue.Queue()
 
-
 # -Porter Localisation
 global porterLocation_Global #vector holding global location [x,y] in cm
 global porterLocation_Local #vector holding local location [x,y] in cm
@@ -176,6 +176,10 @@ global h_scores
 h_scores = [0.,0.,0.,0.] 
 global system_status
 system_status = "Awaiting Commands"
+global motordata
+motordata = 0 
+
+#lastSent = [0, 0]
 
 def setExitFlag(status):
     global exitFlag
@@ -259,14 +263,15 @@ class debugThread(MultiThreadBase):
 
     def run(self):
         logging.info("Starting %s", self.name)
-        while not exitFlag.value:
+        while not exitFlag.value:#
+            debuginfo = 0 
             self.loopStartFlag()
             if not self.debugServer:
                 self.runServer()
             if self.debugServer and not self.debugClient:
                 self.waitForClient()
             if self.debugClient:
-                try:  
+                try:
                     debuginfo = {
                         'Type':'DebugData', # Data Type
                         'US1': str(USAvgDistances[0]) , # Ultrasonic Distances
@@ -284,7 +289,13 @@ class debugThread(MultiThreadBase):
                         'Debug Data Sent':str(self.loopsdone), # is a way of visually checking the debug is still updating. Will increment 1 each time an update is sent 
                         'System Status': str(system_status),
                         'Battery': str("50")
+                        # 'Left Pulses' : str(motordata[1]),
+                        # 'Right Pulses' : str(motordata[2]),
+                        # 'Battery Current 1' : str(motordata[3])
                     }
+                except:
+                    pass
+                try:
                     datatosend = json.dumps(debuginfo)
                     self.clientConnection.send(datatosend)
                     self.loopsdone += 1 #increment loops done by 1
@@ -381,9 +392,7 @@ class motorDataThread(MultiThreadBase):
         self.pulses = ["",""]
         self.obs = False
         self.smoothBrake = True
-        self.time_between_send = 1 # time between sending commands to arduino in
-        self.last_time_sent = 0
-
+         
     def run(self):
         global speedVector
         global threadLock
@@ -391,11 +400,18 @@ class motorDataThread(MultiThreadBase):
         global USConn1
         global obstruction
         global system_status
-
+        global motordata
+        global motortest
+        global lastSent
+        lastSent = [0,0]
+        global last_time_sent
+        last_time_sent = 0
+        global text_file
         logging.info("Starting %s", self.name)
+        
         while not exitFlag.value:
             self.loopStartFlag()
-
+         
             if obstruction:
                 # if autoPilot and self.obs:
                 #     if lastSent != [0, 0]:  # ie still moving
@@ -432,23 +448,11 @@ class motorDataThread(MultiThreadBase):
                 elif lastSent != speedVector: #otherwise...
                     logging.warning("Obstacle Detected But Safety OFF...") #give a warning, but dont do anything to stop
                     self.send_serial_data(speedVector)
-            
-            # elif self.smoothBrake and usCaution:
-            #     # print "smooth braking"
-            #     if lastSent != [0, 0]:
-            #         logging.info("Setting smooth speed")
-            #         with threadLock:
-            #             if lastCommand == "f":
-            #                 speedVector = [min(maxSpeeds[2:3]),min(maxSpeeds[2:3])]
-            #                 dataReady = False
-            #             elif lastCommand == "b":
-            #                 speedVector = [min(maxSpeeds[6:7]),min(maxSpeeds[6:7])]
-            #                 dataReady = False
-            #             else:
-            #                 logging.warning("Smooth Braking is not valid for rotation")
-            #         self.send_serial_data(speedVector)
 
-            elif (self.last_time_sent >= self.time_between_send) or (lastSent !=speedVector):
+            elif (speedVector != lastSent) or (last_time_sent >= 1):
+                last_time_sent = 0 
+                # (self.last_time_sent >= self.time_between_send)
+                print "Sending Data"
                 logging.debug("Data Ready")
                 logging.info("Data Ready")
                 try:
@@ -496,39 +500,35 @@ class motorDataThread(MultiThreadBase):
                                 speedVector = [0, 0]
                                 dataReady = False
                         self.send_serial_data(speedVector)
-
-
-            # elif dataReady and (lastSent != speedVector): #no obstruction and the new command is different to the last command
-                
-
                 except Exception as e:
                     logging.error("%s", str(e))
-
-
-            # READ FROM ARDUINO?
+            
+            #READ FROM ARDUINO?
             if MotorConn.inWaiting() > 0:
-                #logging.info("data from motor available")
                 self.inputBuf = MotorConn.readline()
-                self.inputBuf = self.inputBuf.rstrip("\r\n")
-                self.pulses = self.inputBuf.split(",")
-                #logging.info("data from motor read")
-
-            if self.profiling:
-                time.sleep(0.1)
-                # self.read_serial_data()
-            else:
-                time.sleep(0.001)
-                self.last_time_sent += 0.001 
-                # self.loopEndFlag()
-                # self.loopRunTime()
-
-
+                try:
+                    if self.inputBuf[0] == "$":
+                        try:
+                            self.inputBuf = self.inputBuf.rstrip("\n")
+                            self.inputBuf = self.inputBuf.lstrip("$")                            
+                            self.inputBuf = self.inputBuf.rsplit(",")
+                            with threadLock:
+                                motordata = self.inputBuf 
+                        except Exception as e:
+                            logging.error("%s", str(e))
+                    elif self.inputBuf[0] == "%":
+                        print self.inputBuf
+                except:
+                    pass
+            time.sleep(0.001)
+            last_time_sent +=0.001
+        print "Exit"
         logging.info("Exiting")
 
     def send_serial_data(self, sendCommand):
         global lastSent
+        #print "Sending Speed Vector"
         logging.info("Sending Speed Vector - %s", str(sendCommand))
-
         if self.hexData: #construct the command to be sent.
             sendData = "$"
             if sendCommand[0] >= 0:
@@ -555,7 +555,7 @@ class motorDataThread(MultiThreadBase):
         try:
             MotorConn.write(sendData)
             logging.info("Successfully sent... - %s", str(sendData))
-            lastSent = sendCommand
+            lastSent = sendCommand[:]
             # time.sleep(10)
             # print MotorConn.read(MotorConn.inWaiting())
         except Exception as e:
@@ -701,7 +701,7 @@ class usDataThread(MultiThreadBase):
 
         if safetyOn:
             try:
-                if (speedVector(0)> 0 ) and (speedVector(1) > 0):
+                if (speedVector[0]> 0 ) and (speedVector[1] > 0):
                     if (int(USAvgDistances[2]) < USThresholds[0]) or (int(USAvgDistances[3]) < USThresholds[0]):
                         logging.warning("FRONT TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
@@ -719,7 +719,7 @@ class usDataThread(MultiThreadBase):
                     else:
                         usCaution = False
 
-                elif (speedVector(0) < 0) and (speedVector(1) < 0 ):
+                elif (speedVector[0] < 0) and (speedVector[1] < 0 ):
                     if (int(USAvgDistances[6]) < USThresholds[2]) or (int(USAvgDistances[7]) < USThresholds[2]):
                         logging.warning("BACK TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
@@ -737,7 +737,7 @@ class usDataThread(MultiThreadBase):
                     else:
                         usCaution = False
 
-                elif (speedVector(0)< 0 ) and (speedVector(1) > 0):
+                elif (speedVector[0]< 0 ) and (speedVector[1] > 0):
                     if (int(USAvgDistances[0]) < USThresholds[1]) or (int(USAvgDistances[1]) < USThresholds[1]):
                         logging.warning("LEFT SIDE TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
@@ -749,7 +749,7 @@ class usDataThread(MultiThreadBase):
                         with threadLock:
                             obstruction = False
 
-                elif (speedVector(0) > 0) and (speedVector(1) < 0) :
+                elif (speedVector[0] > 0) and (speedVector[1] < 0) :
                     if (int(USAvgDistances[5]) < USThresholds[1]) or (int(USAvgDistances[6]) < USThresholds[1]):
                         logging.warning("RIGHT SIDE TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
@@ -776,9 +776,10 @@ class datafromUI(MultiThreadBase):
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
         self.threadID = threadID
+        self.name = name
+        self.actionState = 0
         self.RecieveServer = False
         self.clientconnect = False
-
 
     def startServer(self):
         logging.info("Setting up sockets...")
@@ -830,22 +831,27 @@ class datafromUI(MultiThreadBase):
             if self.RecieveServer and not self.clientconnect:
                 self.userconnect()
             if self.clientconnect:
-                #try:
-                dataInputJson = self.clientConnection.recv(1024)
-                dataInputTidied = dataInputJson.split("$",1) # this code is to remove any random characters sent by acident with the socket connection
-                print "Command Recieved = " + dataInputTidied[0]
-                dataInput = json.loads(dataInputTidied[0]) 
-                if (dataInput['Type'] == "MiscCommand"):
-                    if dataInput['Command'] == "x":
-                        lastCommand = "x"
-                        sysRunning = False
-                        commandqueue.put("Close")
-                    elif dataInput['Command'] == "c":
-                        pass  #Add code to cancel loop
-                    elif dataInput['Command'] == "s":
-                        safetyOn = not safetyOn ; 
-                else:
-                    commandqueue.put(dataInput)
+                try:
+                    dataInputJson = self.clientConnection.recv(1024)
+                    dataInputTidied = dataInputJson.split("$",1) # this code is to remove any random characters sent by acident with the socket connection
+                    print "Command Recieved = " + dataInputTidied[0]
+                    dataInput = json.loads(dataInputTidied[0]) 
+                    if (dataInput['Type'] == "MiscCommand"):
+                        if dataInput['Command'] == "x":
+                            with threadLock:
+                                lastCommand = "x"
+                            sysRunning = False
+                            commandqueue.put("Close")
+                        elif dataInput['Command'] == "c":
+                            pass  #Add code to cancel loop
+                        elif dataInput['Command'] == "s":
+                            with threadlock:
+                                safetyOn = not safetyOn ; 
+                    else:
+                        commandqueue.put(dataInput)
+                except Exception as e:
+                    logging.error("%s", str(e))
+
                           
                     # dataInput = self.clientConnection.recv(1024)
                     # if (dataInput[0] == "f" or dataInput[0] == "b" or dataInput[0] == "r" \
@@ -989,7 +995,7 @@ if __name__ == '__main__':
     try:
         logging.info("Trying to Run Recieve Thread")
         recieveChannel = datafromUI(6, "Recieve Data ")
-        recieveChannel.daemon = True
+        #recieveChannel.daemon = True
         recieveChannel.start()
         
         threads.append(recieveChannel)
@@ -1005,7 +1011,7 @@ if __name__ == '__main__':
     try:
         logging.info("Trying to Run Debug Server")
         debugChannel = debugThread(3, "Debug Thread")
-        debugChannel.daemon = True
+        #debugChannel.daemon = True
         debugChannel.start()
         
         threads.append(debugChannel)
@@ -1024,13 +1030,13 @@ if __name__ == '__main__':
         logging.info("Trying to connect to motor controller")
         try: #try to connect
             if (platform == "linux") or (platform == "linux2"):
-                MotorConn = serial.Serial('/dev/ttyACM0', 19200)
+                MotorConn = serial.Serial('/dev/ttyACM0', 19200,timeout=5)
             elif (platform == "win32"):
                 MotorConn = serial.Serial('COM7', 19200)
 
             logging.info('Connected to Motors %s', str(MotorConn))
-            serialThread = motorDataThread(4, "Motor thread")
-            serialThread.daemon = True
+            serialThread = motorDataThread(14, "Motor thread")
+            #serialThread.daemon = True
             serialThread.start()
             
             threads.append(serialThread)
@@ -1056,7 +1062,7 @@ if __name__ == '__main__':
                 USConn1 = serial.Serial('COM3', 9600)
 
             USthread = usDataThread(5, "Ultrasonic thread")
-            USthread.daemon = True
+            #USthread.daemon = True
             USthread.start()
             
             threads.append(USthread)
@@ -1073,6 +1079,12 @@ if __name__ == '__main__':
         currentcommand = commandqueue.get()
         if currentcommand["Type"] == "UserCommand":
             print "Running a User Command"
+            with threadLock:
+                speedVector[0] = int(currentcommand["Left"])
+                speedVector[1] = int(currentcommand["Right"])
+                dataReady = True
+            print threading.activeCount()
+            #moto
         elif currentcommand["Type"] == "MappingCommand":
             print "Running a Mapping Command"
         elif currentcommand["Type"] == "NavigationCommand":
