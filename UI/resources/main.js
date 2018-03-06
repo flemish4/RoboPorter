@@ -19,6 +19,8 @@ $(document).ready(function () {
     var lastcommand;
     var map_reload;
 
+    var curr_status = 0; 
+
     //Variables for Error Modal that shows when conection to roboporter is lost
     var num_debug_sent = 0;
     var prev_debug_sent = 0;
@@ -123,9 +125,9 @@ $(document).ready(function () {
         s.send(jsonstring + "$")
     }
 
-    function usercommand(leftspeed, rightspeed) {
+    function userspeed(leftspeed, rightspeed) {
         var json = {
-            'Type': 'UserCommand',
+            'Type': 'UserSpeed',
             'Left': leftspeed,
             'Right': rightspeed,
         }
@@ -144,6 +146,14 @@ $(document).ready(function () {
         s.send(jsonstring + "$")
     }
 
+    function cancel() {
+        var json = {
+            'Type': 'Cancel',
+        }
+        var jsonstring = JSON.stringify(json);
+        s.send(jsonstring + "$")
+    }
+
     function navigationcommand(X, Y, map) {
         var json = {
             'Type': 'NavigationCommand',
@@ -153,6 +163,22 @@ $(document).ready(function () {
         }
         var jsonstring = JSON.stringify(json);
         s.send(jsonstring + "$")
+    }
+
+    function usercommand() {
+        var json = {
+            'Type': 'CancelEnterUserCommand',
+        }
+        var jsonstring = JSON.stringify(json);
+        s.send(jsonstring + "$")
+        
+        setTimeout(function() {
+            var json = {
+                'Type': 'UserCommand',
+            }
+            var jsonstring = JSON.stringify(json);
+            s.send(jsonstring + "$")
+          },500);
     }
 
     function delete_map_radio() {
@@ -230,7 +256,7 @@ $(document).ready(function () {
 
             num_debug_sent = parseInt(data["Debug Data Sent"], 10);
 
-            $("#current-status").html(data["System Status"]);
+            $(".current-status").html(data["System Status"]);
             var batterywidth = parseInt(data["Battery"], 10) + "%";
             $("#battery-width").width(batterywidth);
             $("#battery-percentage").html(data["Battery"]);
@@ -244,9 +270,13 @@ $(document).ready(function () {
                 $("#safety-btn").removeClass("btn-success");
                 $("#safety-btn").addClass("btn-secondary");
             }
-
+            curr_status = data["System Status"] ;
             if ((data["System Status"] == "Mapping") || (data["System Status"] == "Navigation")) {
                 $('.mancontrol').prop('disabled', true);
+            }
+
+            if(curr_status == "UserCommand"){ // If the mode switched to user command hide the div that alerts the user that the robot is not in user command mode
+                $("#usercontrol-modal").modal("hide") ;
             }
 
             //Print any remaining debug data to the debug data div
@@ -282,28 +312,28 @@ $(document).ready(function () {
                     if (lastcommand != "f") {
                         $("#up-key").addClass("red");
                         lastcommand = "f";
-                        usercommand(20, 20);
+                        userspeed(20, 20);
                     }
                     break;
                 case 65:
                     if (lastcommand != "l") {
                         $("#left-key").addClass("red");
                         s.send("l");
-                        usercommand(-20, 20);
+                        userspeed(-20, 20);
                     }
                     break;
                 case 83:
                     if (lastcommand != "b") {
                         $("#down-key").addClass("red");
                         s.send("b");
-                        usercommand(-20, -20);
+                        userspeed(-20, -20);
                     }
                     break;
                 case 68:
                     if (lastcommand != "r") {
                         $("#right-key").addClass("red");
                         s.send("r");
-                        usercommand(20, -20);
+                        userspeed(20, -20);
                     }
                     break;
             }
@@ -319,19 +349,19 @@ $(document).ready(function () {
             switch (keycode) {
                 case 87:
                     $("#up-key").removeClass("red");
-                    usercommand(0, 0);
+                    userspeed(0, 0);
                     break;
                 case 65:
                     $("#left-key").removeClass("red");
-                    usercommand(0, 0);
+                    userspeed(0, 0);
                     break;
                 case 83:
                     $("#down-key").removeClass("red");
-                    usercommand(0, 0);
+                    userspeed(0, 0);
                     break;
                 case 68:
                     $("#right-key").removeClass("red");
-                    usercommand(0, 0);
+                    userspeed(0, 0);
                     break;
             }
             lastcommand = "x";
@@ -343,7 +373,7 @@ $(document).ready(function () {
     // makes sure the last command sent from the keyboard modal is stop
     $("#keyclose").click(function () {
         if (keycommandsent != null) {
-            usercommand(0, 0);
+            userspeed(0, 0);
             keycommandsent = null;
         };
 
@@ -367,33 +397,36 @@ $(document).ready(function () {
 
 
     //The following commands deal with manual control buttons
+    $('#enter_user_mode').click(function(){
+        usercommand() ; 
+    })
+
     $('.left-btn').click(function () {
-        usercommand(-20, 20);
+        userspeed(-20, 20);
     });
 
     $('.right-btn').click(function () {
-        usercommand(20, -20);
+        userspeed(20, -20);
     });
 
     $('.forward-btn').click(function () {
-        usercommand(20, 20);
+        userspeed(20, 20);
     });
 
     $('.back-btn').click(function () {
-        usercommand(-20, -20);
+        userspeed(-20, -20);
     });
 
     $('#auto-btn').click(function () {
     });
 
     $('.stop-btn').click(function () {
-        usercommand(0, 0)
+        userspeed(0, 0)
 
     });
 
     $('#safety-btn').click(function () {
         misccommand("s", 0, 0)
-
     });
 
     $('#shutdown-btn').click(function () {
@@ -405,11 +438,10 @@ $(document).ready(function () {
         var left = $("#left-motor-amount").val()
         var right = $("#right-motor-amount").val()
 
-        usercommand(left, right);
+        userspeed(left, right);
 
         //s.send("m"+left+","+right)
     });
-
 
     // The following command colapses the nv bar when clicked
     $("#navbar-toggle-id").click(function () {
@@ -429,6 +461,13 @@ $(document).ready(function () {
     });
 
     $("#link-control").click(function () {
+        if((curr_status == "UserCommand") || (curr_status == "AwaitingCommands")){
+            alert("Hi")
+            $("#usercontrol-modal").modal("hide")
+        }else{
+            $("#usercontrol-modal").modal("show")
+            alert("Hi")
+        }
         $('div[id^="div-"]').hide();
         $('a[id^="link-"]').removeClass("active");
         $("#div-control").show();

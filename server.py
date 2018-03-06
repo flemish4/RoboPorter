@@ -141,6 +141,9 @@ AHRSmode = "wheel"
 global commandqueue 
 commandqueue = Queue.Queue()
 
+global speedsqueue 
+speedsqueue = Queue.Queue()
+
 # -Porter Localisation
 global porterLocation_Global #vector holding global location [x,y] in cm
 global porterLocation_Local #vector holding local location [x,y] in cm
@@ -175,7 +178,7 @@ US2_portAddr = ""
 global h_scores
 h_scores = [0.,0.,0.,0.] 
 global system_status
-system_status = "Awaiting Commands"
+system_status = "AwaitingCommands"
 global motordata
 motordata = 0 
 
@@ -517,12 +520,15 @@ class motorDataThread(MultiThreadBase):
                         except Exception as e:
                             logging.error("%s", str(e))
                     elif self.inputBuf[0] == "%":
-                        print self.inputBuf
-                except:
-                    pass
+                        try:
+                            self.inputBuf = self.inputBuf.lstrip("%") 
+                            print self.inputBuf
+                        except Exception as e:
+                            logging.error("%s", str(e))
+                except Exception as e:
+                    logging.error("%s", str(e))
             time.sleep(0.001)
             last_time_sent +=0.001
-        print "Exit"
         logging.info("Exiting")
 
     def send_serial_data(self, sendCommand):
@@ -847,6 +853,16 @@ class datafromUI(MultiThreadBase):
                         elif dataInput['Command'] == "s":
                             with threadlock:
                                 safetyOn = not safetyOn ; 
+                    elif dataInput['Type'] == "Cancel": # If the user wants to cancel the mapping or nav command and move onto the next item in the queue this is ran
+                        with threadLock:
+                            exitFlag = True
+                    elif dataInput['Type'] == "CancelEnterUserCommand": # When the user wants to enter a command immediatly it clears the queue. This is called straight before a switch to the User Control mode occurs
+                        with commandqueue.mutex:
+                            commandqueue.queue.clear()
+                        with threadLock:
+                            exitFlag = True
+                    elif(dataInput['Type'] == "UserSpeed"): # If the user sent a speed command it is added to the speed queue
+                        speedsqueue.put(dataInput)
                     else:
                         commandqueue.put(dataInput)
                 except Exception as e:
@@ -1076,20 +1092,40 @@ if __name__ == '__main__':
 
     # Main Control Loop
     while sysRunning: #while the main loop is not in shutdown mode...
+        time.sleep(1)
         currentcommand = commandqueue.get()
         if currentcommand["Type"] == "UserCommand":
-            print "Running a User Command"
             with threadLock:
-                speedVector[0] = int(currentcommand["Left"])
-                speedVector[1] = int(currentcommand["Right"])
-                dataReady = True
-            print threading.activeCount()
-            #moto
+                system_status = "UserCommand"
+            while not exitFlag
+                with commandqueue.mutex:
+                    speedsqueue.queue.clear()
+                currentspeed = speedsqueue.get()
+                with threadLock:
+                    speedVector[0] = int(currentspeed["Left"])
+                    speedVector[1] = int(currentspeed["Right"])
+            with threadLock:
+                exitFlag = False
+                system_status == "AwaitingCommands"
         elif currentcommand["Type"] == "MappingCommand":
             print "Running a Mapping Command"
+            with threadLock:
+                system_status = "MappingCommand"
+
+            #Mapping Code Goes Here
+
+            with threadLock:
+                system_status = "AwaitingCommands"
         elif currentcommand["Type"] == "NavigationCommand":
             recieve_map(currentcommand["Map_Filename"])
             print "Running a Navigation Command"
+            with threadLock:
+                system_status = "NavigationCommand"
+
+            #Navigation Code Goes Here
+
+            with threadLock:
+                system_status = "AwaitingCommands"
         else:
             pass
 
