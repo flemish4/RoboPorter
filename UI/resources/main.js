@@ -306,33 +306,33 @@ $(document).ready(function () {
 
     // detects keyboard input when the modal is shown
     $(document).keydown(function (e) {
-        if ($('#keyinput-modal').is(':visible') == true) {
+        if (($('#keyinput-modal').is(':visible') == true) || ($('#map-3').is(':visible') == true)) {
             var keycode = e.which;
             switch (keycode) {
                 case 87:
                     if (lastcommand != "f") {
-                        $("#up-key").addClass("red");
+                        $(".up-key").addClass("red");
                         lastcommand = "f"
                         userspeed(20, 20);
                     }
                     break;
                 case 65:
                     if (lastcommand != "l") {
-                        $("#left-key").addClass("red");
+                        $(".left-key").addClass("red");
                         userspeed(-20, 20);
                         lastcommand = "l"
                     }
                     break;
                 case 83:
                     if (lastcommand != "b") {
-                        $("#down-key").addClass("red");
+                        $(".down-key").addClass("red");
                         userspeed(-20, -20);
                         lastcommand = "b"
                     }
                     break;
                 case 68:
                     if (lastcommand != "r") {
-                        $("#right-key").addClass("red");
+                        $(".right-key").addClass("red");
                         userspeed(20, -20);
                         lastcommand = "r"
                     }
@@ -345,23 +345,23 @@ $(document).ready(function () {
 
     // detects keyboard input when the modal is shown
     $(document).keyup(function (e) {
-        if ($('#keyinput-modal').is(':visible') == true) {
+        if (($('#keyinput-modal').is(':visible') == true) || ($('#map-3').is(':visible') == true)) {
             var keycode = e.which;
             switch (keycode) {
                 case 87:
-                    $("#up-key").removeClass("red");
+                    $(".up-key").removeClass("red");
                     userspeed(0, 0);
                     break;
                 case 65:
-                    $("#left-key").removeClass("red");
+                    $(".left-key").removeClass("red");
                     userspeed(0, 0);
                     break;
                 case 83:
-                    $("#down-key").removeClass("red");
+                    $(".down-key").removeClass("red");
                     userspeed(0, 0);
                     break;
                 case 68:
-                    $("#right-key").removeClass("red");
+                    $(".right-key").removeClass("red");
                     userspeed(0, 0);
                     break;
             }
@@ -621,6 +621,12 @@ $(document).ready(function () {
     $("#Auto-map").click(function () {
         $("#map-1").fadeOut(function () {
             $("#map-2").fadeIn();
+        })
+    });
+
+    $("#Manual-map").click(function () {
+        $("#map-1").fadeOut(function () {
+            $("#map-3").fadeIn();
         })
     });
 
