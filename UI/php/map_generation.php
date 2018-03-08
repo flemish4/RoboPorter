@@ -9,7 +9,7 @@ if(!$connection){
         die(mysqli_connect_errno());
     }
 
-$query = "SELECT * FROM `".$image_id."`" ; 
+$query = "SELECT * FROM `".$image_id."` ORDER BY id DESC LIMIT 1" ; 
 
 $information = mysqli_query($connection, $query) or die(mysqli_error($connection));
 

@@ -985,12 +985,12 @@ def cmdToDestination(inputCommand):
 def send_map(map_to_send):
     img_string = cv2.imencode('.jpg',map_to_send)[1].tostring()
     img_string = base64.b64encode(img_string)
-    query = "UPDATE temp SET data = '%s' WHERE type = 'image'" %img_string
+    query = "INSERT INTO temp (data) VALUES ('%s')" %img_string
     cursor.execute(query)
 
 #Retrieve map from database
 def recieve_map(filename):
-    query = "SELECT data FROM `%u` WHERE type = 'image'" %filename
+    query = "SELECT data FROM `%u` ORDER BY id DESC LIMIT 1" %filename
     cursor.execute(query)
     result = cursor.fetchone() ; 
     img_string = base64.b64decode(result[0])

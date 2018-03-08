@@ -127,6 +127,17 @@ if(!isset($_SESSION['loggedin'])){
 							<div class="row justify-content-center">
 								<p>Image</p>
 							</div>
+							<div class="row justify-content-center" style="margin-top:1%;">
+								<span class="fas fa-caret-square-up fa-5x up-key" ></span>
+							</div>
+							<div class="row row justify-content-center">
+								<span class="fas fa-caret-square-left fa-5x left-key" style="margin-right:1% ;"></span>
+								<span class="fas fa-caret-square-down fa-5x down-key"></span>
+								<span class="fas fa-caret-square-right fa-5x right-key" style="margin-left:1% ;"></span>
+							</div>
+							<div class="row justify-content-center">
+								<input class="btn btn-danger stop-btn" value="Stop!" style="width:70%; margin-top:1%;" >
+							</div>
 							<div class="row justify-content-center">
 								<button class="btn btn-danger end-mapping">End Mapping</button>
 							</div>
@@ -303,12 +314,12 @@ if(!isset($_SESSION['loggedin'])){
 							<img width="70%" src="http://192.168.0.2:8080/?action=stream">
 						</div>
 						<div class="row justify-content-center" style="margin-top:1%;">
-							<span class="fas fa-caret-square-up fa-5x" id="up-key"></span>
+							<span class="fas fa-caret-square-up fa-5x up-key" ></span>
 						</div>
 						<div class="row row justify-content-center">
-							<span class="fas fa-caret-square-left fa-5x" style="margin-right:1% ;"id="left-key"></span>
-							<span class="fas fa-caret-square-down fa-5x"id="down-key"></span>
-							<span class="fas fa-caret-square-right fa-5x" style="margin-left:1% ;"id="right-key"></span>
+							<span class="fas fa-caret-square-left fa-5x left-key" style="margin-right:1% ;"></span>
+							<span class="fas fa-caret-square-down fa-5x down-key"></span>
+							<span class="fas fa-caret-square-right fa-5x right-key" style="margin-left:1% ;"></span>
 						</div>
 						<div class="row justify-content-center">
 							<input class="btn btn-danger stop-btn" value="Stop!" style="width:70%; margin-top:1%;" >
