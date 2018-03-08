@@ -67,6 +67,7 @@ global MAP_SIZE_PIXELS
 global globalWd
 global dxy
 global angle_delta
+global detailedMap
 angle_delta = 1
 globalWd = 0
 dxy = 0
@@ -82,6 +83,7 @@ encoderVectorAbs = (0,0)
 encoderVectorAbsReady = False
 lidarPolarList = []
 navMap = np.zeros(SLAMOffset)
+detailedMap = np.zeros(SLAMOffset)
 wheelError          = 0
 totalR          = 0
 totalWd          = 0
@@ -275,8 +277,8 @@ class porterSim() :
         self.lidarTotalNSamples = 360 #767
         self.lidarNSamples      = 18 #int(round(math.ceil(self.lidarTotalNSamples*self.lidarRpm*self.simFrameTime))) # This calculates the number of lidar samples to be taken each frame - it rounds up so the realRPM will be slightly higher than given 
         #self.lidarTotalNSamples = int(round(self.lidarNSamples * self.simFrameRate))
-        print self.lidarNSamples
-        print self.lidarTotalNSamples
+        #print self.lidarNSamples
+        #print self.lidarTotalNSamples
         self.porterAdded        = False # Has the porter been placed at the start of simRun
         self.simRunning         = False # Is the simulation running
         self.draw_on            = 0 # Is drawing enabled in mapBuilder
@@ -288,7 +290,7 @@ class porterSim() :
         with threadLock :
             exitFlag          = False # Is the current task stopping - allows variables to be reset when ending sim etc.
         
-        print "scale: " + str(self.scale) + "cm/p, tileW: " + str(self.tileW) + "p, tileRealW: " + str(self.tileRealW) + "cm, nTileX: " + str(self.nTileX) + ", nTileY: " + str(self.nTileY) + ", maxX: " + str(self.scale*self.tileW*self.nTileX/100) + "m, maxY: " + str(self.scale*self.tileW*self.nTileY/100) + "m" 
+        #print "scale: " + str(self.scale) + "cm/p, tileW: " + str(self.tileW) + "p, tileRealW: " + str(self.tileRealW) + "cm, nTileX: " + str(self.nTileX) + ", nTileY: " + str(self.nTileY) + ", maxX: " + str(self.scale*self.tileW*self.nTileX/100) + "m, maxY: " + str(self.scale*self.tileW*self.nTileY/100) + "m" 
         
         self.simClock           = pygame.time.Clock()
         self.genBlankMap()
@@ -598,6 +600,7 @@ class porterSim() :
         global lidarAngles
         global lidarAnglesList
         global lidarPolarList
+        global adjustedLidarStore
         #f = open("checkLidar.log", "a+")
         #f.write("New#########################\n")
         if lidarRun == "a":
@@ -609,7 +612,16 @@ class porterSim() :
                 lidarAngles = {}
                 lidarAnglesList = []
                 lidarPolarList = []
-            
+        elif lidarRun == "s" :
+            # Start 360 scan
+            self.lidarPos = -180
+            with threadLock :
+                lidarReady  = True
+                lidarMap    = set()
+                lidarAngles = {}
+                lidarAnglesList = []
+                lidarPolarList = []
+                adjustedLidarStore = []
         elif (len(lidarRun)>1) and (lidarRun[0] == "a") :
             # Get single sample
             with threadLock :
@@ -686,8 +698,6 @@ class porterSim() :
                 else : 
                     with threadLock :
                         #dataMap = set()
-                        print("lenStore: " + str(len(adjustedLidarStore)))
-                        print("lenStore: " + str(len(adjustedLidarStore[-self.lidarTotalNSamples-1:])))
                         adjustedLidarList = adjustedLidarStore[-self.lidarTotalNSamples-1:]
                         #with open("adjustLidar.log","a+") as f:
                         #    f.write("new\n" + str(adjustedLidarList) + "\n" + str(adjustedLidarStore)+"\n")
@@ -713,7 +723,6 @@ class porterSim() :
         self.calculatePorterPosition()
         self.adjustLidar()
         if SLAMRunning and adjustedLidarListReady:
-            print len(adjustedLidarList)
             SLAMObject.update(adjustedLidarList) #, (dxy*20, globalWd, 0.015 ))
             
             # update position
@@ -730,12 +739,12 @@ class porterSim() :
                 adjustedLidarListReady = False
 
             pathMap.updateMap()
-            print("NEW ------------------------ " )    
-            print("realPos: " + str(realPorterLocation))
-            print("SLAMPos: " + str((x,y)))
-            print("location: " + str(porterLocation))
-            print("orientat: " + str(porterOrientation))
-            print("orientun: " + str(porterOrientationUnConst))
+            #print("NEW ------------------------ " )    
+            #print("realPos: " + str(realPorterLocation))
+            #print("SLAMPos: " + str((x,y)))
+            #print("location: " + str(porterLocation))
+            #print("orientat: " + str(porterOrientation))
+            #print("orientun: " + str(porterOrientationUnConst))
             with open("runSLAM.log", 'a+') as f:
                 f.write(str(realPorterLocation) + "," + str((x,y)) + "," + str(porterLocation))
 
@@ -751,12 +760,10 @@ class porterSim() :
     def drawNavMap(self) :
         global navMap
         global threadLock
-        #print("Running drawNavMap")
-        #print(len(navMap))
         porterLocationInt = (int(round(porterLocation[0])), int(round(porterLocation[1])))
         with threadLock : 
-            tempMap = np.array(navMap)
-            
+            #tempMap = np.array(navMap)
+            tempMap = detailedMap
         for i in range(0,20) :
             for j in range(0,20) :
                 try:
@@ -772,24 +779,10 @@ class porterSim() :
                             tempMap[point[1]-3+i][point[0]-3+j] = 100
                         except :
                             pass
-        # tempMap[porterLocationInt[0]][porterLocationInt[1]] = 200
-        # tempMap[porterLocationInt[0]-1][porterLocationInt[1]-1] = 200
-        # tempMap[porterLocationInt[0]-1][porterLocationInt[1]] = 200
-        # tempMap[porterLocationInt[0]-1][porterLocationInt[1]+1] = 200
-        # tempMap[porterLocationInt[0]][porterLocationInt[1]-1] = 200
-        # tempMap[porterLocationInt[0]][porterLocationInt[1]+1] = 200
-        # tempMap[porterLocationInt[0]+1][porterLocationInt[1]-1] = 200
-        # tempMap[porterLocationInt[0]+1][porterLocationInt[1]] = 200
-        # tempMap[porterLocationInt[0]+1][porterLocationInt[1]+1] = 200
 
         imS = cv2.resize(tempMap, (900, 900)) 
         cv2.imshow('navMap', imS)
         cv2.waitKey(1)
-            # for i, row in enumerate(navMap) :
-                # for j, cell in enumerate(row) :
-                    # if cell != 0 :
-                        # print("cell: " + str(i) + ", " + str(j))
-                        # pygame.draw.circle(self.views["portermap"]["surface"], (0,0,255), (i/self.scale,j/self.scale), 5)
     
     def drawDataMap(self) :
         global dataMap
@@ -912,9 +905,7 @@ class porterSim() :
                     wheelError-=5
                 elif e.key == pygame.K_e:
                     wheelError=0
-        
-            print(wheelError)
-                
+                        
     def realMovePorter(self) :
         # May not need all of these
         global realPorterLocation
@@ -1012,37 +1003,27 @@ class porterSim() :
                 self.drawPorter(self.views["portermap"]["surface"], self.views["portermap"]["rect"], (porterLocation[0])/self.scale-(self.pixelPorterSize[0]/2),(porterLocation[1])/self.scale-(self.pixelPorterSize[1]/2), porterOrientation, self.porter["surface"])
 
             if self.simRunning : 
-                #print "running"
                 if threading.activeCount() == 1 :
                     print "stopping"
                     self.simRunning = False
                     exitFlag = True
                 else :
                     # user input
-                    #print("top")
                     self.movePorter(e)
-                    #print("1")
                     self.adjustError(e)
-                    #print("2")
                     
                     # real 
                     self.realMovePorter()
-                    #print("3")
                     
                     # threads
                     self.checkLidar()
-                    #print("4")
                     self.runSLAM()      
-                    #print("5")              
                     
                     # draw outcome
                     #self.drawLidarGrid()
                     self.drawDataMap()
-                    #print("6")
                     self.drawRealDataMap()
-                    #print("7")
                     self.drawNavMap()
-                    #print("8")
                 
             
             if self.simRunning : 
@@ -1190,7 +1171,7 @@ class pathMapClass() :
         self.SLAMScale               = 2 # 2
         self.mapGridResolution       = 10 #10 #cm how far apart are the grid nodes
         self.scaleAdjust             = float(self.SLAMScale)/self.mapGridResolution # 2/10 = 0.2 * the number of pixels
-        self.dilateAmount            = dilateAmount/self.mapGridResolution
+        self.dilateAmount            = dilateAmount
         self.wallSafetyDistance      = realPorterSize[0] / 2
         self.wallSafetyGridRadius    = int(math.ceil(self.wallSafetyDistance / self.mapGridResolution)*20)
         self.cornerPenaltyWeight     = 100
@@ -1230,62 +1211,12 @@ class pathMapClass() :
                 }                                
         with threadLock :        
             navMap                       = np.zeros([self.pathMapLimits["xMax"],self.pathMapLimits["yMax"]])
-        print(self.scaleAdjust)
-        print([self.pathMapLimits["xMax"],self.pathMapLimits["yMax"]])
-        print(np.zeros([self.pathMapLimits["xMax"],self.pathMapLimits["yMax"]]))
-        print(navMap)    
-        print("hi")    
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-        # # Find map limits
-        # self.pathMapLimits = {   "xMin" : 0,
-                            # "xMax" : 0,
-                            # "yMin" : 0,
-                            # "yMax" : 0,
-                        # }
-        # with threadLock :
-            # for point in lidarMapStore :
-                # if point[0] < self.pathMapLimits["xMin"] :
-                    # self.pathMapLimits["xMin"] = point[0]
-                # if point[0] > self.pathMapLimits["xMax"] :
-                    # self.pathMapLimits["xMax"] = point[0]
-                # if point[1] < self.pathMapLimits["yMin"] :
-                    # self.pathMapLimits["yMin"] = point[1]
-                # if point[1] > self.pathMapLimits["yMax"] :
-                    # self.pathMapLimits["yMax"] = point[1]
-        
-        # # Adjust max/mins for size of porter
-        # self.pathMapLimits["xMin"] = self.pathMapLimits["xMin"] - realPorterSize[0]*2
-        # self.pathMapLimits["xMax"] = self.pathMapLimits["xMax"] + realPorterSize[0]*2
-        # self.pathMapLimits["yMin"] = self.pathMapLimits["yMin"] - realPorterSize[1]*2
-        # self.pathMapLimits["yMax"] = self.pathMapLimits["yMax"] + realPorterSize[1]*2
-                    
-                    # # REVISIT : offset by realPorterSize*2 ??
-        # with threadLock :
-            # for point in lidarMapStore :
-                # xPoint = roundBase(point[0],self.mapGridResolution)
-                # yPoint = roundBase(point[1],self.mapGridResolution)
-                # for x in range(xPoint - self.wallSafetyGridRadius , xPoint + self.wallSafetyGridRadius , self.mapGridResolution) :
-                    # for y in range(yPoint - self.wallSafetyGridRadius , yPoint + self.wallSafetyGridRadius , self.mapGridResolution) :
-                        
-                        # self.wallMap.add((roundBase(x,self.mapGridResolution),roundBase(y,self.mapGridResolution)))
-
-        # with threadLock :
-            #      = self.wallMap
-    
     
     
     def updateMap(self) :
         global threadLock
         global navMap
+        global detailedMap
         global SLAMObject
         
         # Make array for SLAM map
@@ -1312,11 +1243,15 @@ class pathMapClass() :
         rows,cols = tempMap.shape
         M = cv2.getRotationMatrix2D((cols/2,rows/2),90,1)
         tempMap = cv2.warpAffine(tempMap,M,(cols,rows))
+        rows,cols = SLAMMap.shape
+        M = cv2.getRotationMatrix2D((cols/2,rows/2),90,1)
+        SLAMMap = cv2.warpAffine(SLAMMap,M,(cols,rows))
         #tempPathMap = cv2.resize(tempMap, (self.pathMapLimits["xMax"],self.pathMapLimits["yMax"]))
         #tempMap = cv2.transpose(tempMap)
 
         with threadLock :
             navMap = tempMap
+            detailedMap = SLAMMap
     
     
     def getNeighbors(self, id, dest) :
@@ -1351,23 +1286,19 @@ class pathMapClass() :
         
     def isWall(self, coord) :
         global navMap
-        # if coord in self.wallMap :
-            # return True
-        # else :
-            # return False
-        print("isWall? ----------")
+        #print("isWall? ----------")
         coord = (coord[1],coord[0])
-        print(coord)
+        #print(coord)
         if coord[0] < self.pathMapLimits["xMin"] or coord[0] > self.pathMapLimits["xMax"] or coord[1] < self.pathMapLimits["yMin"] or coord[1] > self.pathMapLimits["yMax"] :
             print("failed boundary test")
             return True
         
-        print(navMap[coord[0]][coord[1]])
+        #print(navMap[coord[0]][coord[1]])
         if navMap[coord[0]][coord[1]] < 127 :
-            print("valid")
+            #print("valid")
             return True
  
-        print("not equal to zero")
+        #print("not equal to zero")
         return False
         
     # Similar to lidar code
@@ -1609,13 +1540,13 @@ class simThreadBase(MultiThreadBase) :
         global speedVector
         global exitFlag
         global threadLock
-        print("in moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest))
+        #print("in moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest))
         f.write("\n\nin moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest) + "\n")
         origLocation = porterLocation
         desOrientation = constrainAngle360(self.getDesOrientation(origLocation, dest), porterOrientationUnConst + 180, porterOrientationUnConst - 180)
         destPID = (dest[0] + self.angleOffsetLookup[dest[2]][0]*100 , dest[1] + self.angleOffsetLookup[dest[2]][1]*100 , dest[2])
         
-        print("origOrientation: " + str(porterOrientation) + ", desOrientation: " + str(desOrientation))
+        #print("origOrientation: " + str(porterOrientation) + ", desOrientation: " + str(desOrientation))
         f.write("\torigOrientation: " + str(porterOrientation) + ", desOrientation: " + str(desOrientation) + "\n")
 
         # orientation is critical as any error will severely affect navigation
@@ -1653,10 +1584,8 @@ class simThreadBase(MultiThreadBase) :
             speed = min(maxSpeeds)
             f.write("\tspeed: " + str(speed) + "\n")
             
-            #print()
             f.write("\tporterOrientationUnConst: " + str(porterOrientationUnConst) + "\n")
             #print("desOrientation: " + str(desOrientation))
-            #print()
             f.write("\terror: " + str(porterOrientationUnConst-desOrientation) + "\n")
             f.write("\terrorconstr: " + str(constrainAngle360(porterOrientationUnConst-desOrientation,180,-180)) + "\n")
             orientationAdjust = constrainFloat(orientationPID.update(constrainAngle360(porterOrientationUnConst-desOrientation,180,-180)),1,-1)
@@ -1691,9 +1620,8 @@ class simThreadBase(MultiThreadBase) :
         global porterOrientation
         global porterOrientationUnConst
         global speedVector
-        print()
         f.write("\n\nin moveTurn, origAngle: " + str(porterOrientation) + ", angle: " + str(angle) + "\n")
-        print("\n\nin moveTurn, origAngle: " + str(porterOrientation) + ", angle: " + str(angle) + "\n")
+        #print("\n\nin moveTurn, origAngle: " + str(porterOrientation) + ", angle: " + str(angle) + "\n")
         
         origOrientation = porterOrientationUnConst
         maxSpeed = min(self.getMaxSpeeds())
@@ -1756,7 +1684,7 @@ class simThreadBase(MultiThreadBase) :
         #print("(porterOrientationUnConst-desOrientation)*sign: " + str((porterOrientationUnConst-desOrientation)*sign))
             
             
-        while not (desOrientation-porterOrientationUnConst)*sign < 0 :
+        while not (desOrientation-porterOrientationUnConst)*sign < 0  and not exitFlag:
             #print("porterOrientationUn: " + str(porterOrientationUnConst))
             #print("desOrientation: " + str(desOrientation))
             #print("(porterOrientationUnConst-desOrientation)*sign: " + str((porterOrientationUnConst-desOrientation)*sign))
@@ -1951,7 +1879,7 @@ class simThreadBase(MultiThreadBase) :
         navPath = [("end", current)]
         lastKeyNode = current
         #navPath.append(("moveTo", current))
-        while current in cameFrom.keys() :
+        while current in cameFrom.keys() and not exitFlag:
             previous = current
             current = cameFrom[current]
             if current[2] != previous[2] : # if the angle has changed
@@ -1974,20 +1902,33 @@ class simThreadBase(MultiThreadBase) :
         global porterLocation
         global speedVector
         global pathMap
+        global lidarRun
         f=open("nav.log", "w")    
         path = self.aStar((porterLocation[0],porterLocation[1],0), dest)
         f.write(str(path) +"\n")
         try :
             if len(path) > 1 :
                 for instruction in path :
+                    if exitFlag :
+                        break
                     if instruction[0] == "turn" :
+                        with threadLock :
+                            lidarRun = "s"
+                            
                         self.moveTurn(instruction[1], "onCentre", f)
+                        
+                        with threadLock :
+                            lidarRun = "a"
                     elif instruction[0] == "moveStraight" :
                         self.moveStraight(instruction[1], f)
                     elif instruction[0] == "moveTo" :
                         self.moveTo(instruction[1], f)
                     elif instruction[0] == "turnTo" :
+                        with threadLock :
+                            lidarRun = "s"
                         self.turnTo(instruction[1], "onCentre", f)
+                        with threadLock :
+                            lidarRun = "a"
         except TypeError :
             print("No path found")
         with threadLock :
@@ -1996,340 +1937,12 @@ class simThreadBase(MultiThreadBase) :
     
     
 class mappingThread(simThreadBase):
-    def simplifyLines (self, lines) :
-        # LOG
-        f = open("mapping.log", "w")
-
-        f.write("Lines: " + str(lines) + "\n")
-        ## Remove overlapping lines
-        newLines = {}
-        oldLines = set()
-        changes = False
-        while True :
-            for lineA in lines :
-                for lineB in lines :
-                    f.write("#######################START" + "\n")
-                    f.write("A: " + str(lineA) + "-a: " + str(lines[lineA]["angle"]) + ", to: " + str(lineB) + "-a: " + str(lines[lineB]["angle"]) + "\n")
-                    ## do not compare line with its self
-                    if lineA == lineB :
-                        f.write("Skipping - same" + "\n")
-                        continue
-                    ## if the lines are not ~ parallel skip
-                    dA0 = abs(lines[lineA]["angle"] - lines[lineB]["angle"])
-                    dA1 = abs(lines[lineA]["angle"] - lines[lineB]["angle"] - 180)
-                    dA2 = abs(lines[lineA]["angle"] - lines[lineB]["angle"] + 180)
-                    if ( dA0 > 2 ) and ( dA1 > 2 ) and ( dA2 > 2 ):
-                        f.write("Skipping - not parallel" + "\n")
-                        continue
-                    ## Find the longer and shorter lines
-                    if "length" in lines[lineA] :
-                        lenA = lines[lineA]["length"]
-                    else :
-                        lenA = getLength(lineA)
-                        lines[lineA]["length"] = lenA
-                        
-                    if "length" in lines[lineB] :
-                        lenB = lines[lineB]["length"]
-                    else :
-                        lenB = getLength(lineB)
-                        lines[lineB]["length"] = lenB
-                    
-                    if lenA >= lenB :
-                        longLine = lineA
-                        shortLine = lineB
-                    else :
-                        longLine = lineB
-                        shortLine = lineA
-                        
-                    a = lines[longLine]["angle"]
-                    ar = math.radians(a)
-                    f.write("Long: " + str(longLine) + ", short: " + str(shortLine) + "\n")
-                    ## Rotate the shorter line so that is is perfectly parallel 
-                    # Only do operation if they are are not already perfectly parallel
-                    if lines[shortLine]["angle"] != a :
-                        f.write("Not perfect" + "\n")
-                        f.write("LongA: " + str(a) + ", ShortA: " + str(lines[shortLine]["angle"]) + "\n")
-                        # Calculate difference in angle
-                        dA = math.radians(constrainAngle180(a - lines[shortLine]["angle"],180,0))
-                        # Calculate centre point (average)
-                        shortLineCentre = ((shortLine[0]+shortLine[2])/2,(shortLine[1]+shortLine[3])/2)
-                        f.write("Centre: " + str(shortLineCentre) + "\n")
-                        shiftedShortLine = rotate(shortLineCentre, shortLine[:2], dA) + rotate(shortLineCentre, shortLine[2:], dA) #origin, point, angle
-                        f.write("shiftedShortLine: " + str(shiftedShortLine) + "\n")
-                    else :
-                        shiftedShortLine = shortLine
-                    ## if the lines are not  close enough together - skip
-                    # Calculate distance between lines
-                    if a != 90 :
-                        # Solve y=mx+c twice and sub into abs(d-c)/sqrt(m**2+1) https://en.wikipedia.org/wiki/Distance_between_two_straight_lines
-                        m = math.tan(ar)
-                        dist = (longLine[1]-shiftedShortLine[1]+m*(shiftedShortLine[0]-longLine[0]))/math.sqrt(m**2+1)
-                    else : # lines are vertical - dist is just difference in x0
-                        dist = ((longLine[0]+longLine[2])-(shiftedShortLine[0]+shiftedShortLine[2]))/2
-                    if abs(dist) > 5 : # REVISIT : this number is adjustible depending on lidar results
-                        f.write("Skipping - distance > 5" + "\n")
-                        continue # lines are not close enough to remove or merge
-
-
-                    ## Translate the shorter line to overlap the longer line perfectly
-                    shiftedShortLine = (int(round(shortLine[0]+dist*math.sin(ar))),int(round(shortLine[1]+dist*math.cos(ar))),
-                               int(round(shortLine[2]+dist*math.sin(ar))),int(round(shortLine[3]+dist*math.cos(ar))))
-                    f.write("dist: " + str(dist) + "\n")
-                    f.write("angl: " + str(a))
-                    f.write("longLine:  " + str(longLine) + "\n")
-                    f.write("shortLine: " + str(shortLine) + "\n")
-                    f.write("shshtLine: " + str(shiftedShortLine) + "\n")
-                    
-                    ## Check that the two lines actually overlap
-                    if abs(a-90) < 45 : # if line is more vertical than horizontal then
-                        # set offset value to select y coordinates
-                        yOffset = 1
-                    else :
-                        # set offset value to select x coordinates
-                        yOffset = 0
-                    
-                    f.write("yOffset : " + str(yOffset) + "\n")
-                    # Find max and min values of (x or y depending on angle as above) the long Line
-                    if longLine[0+yOffset] > longLine[2+yOffset] :
-                        longMax = longLine[0+yOffset]
-                        longMin = longLine[2+yOffset]
-                    else :
-                        longMax = longLine[2+yOffset]
-                        longMin = longLine[0+yOffset]
-                        
-                    f.write("longMin: " + str(longMin) + ", longMax: " + str(longMax) + "\n")
-                    overlapTolerance = 50 # REVISIT : this is configurable - should not be greater than the minimum feature desired
-                    overlapTest = 0
-                    for coordOffset in [0,2] :
-                        # If that coordinate is between the two endpoints of longLine (or within tolerance)
-                        f.write("pos: " + str(coordOffset+yOffset) + ", shortVal: " + str(shiftedShortLine[coordOffset+yOffset]) + ", wTol: " + str(shiftedShortLine[coordOffset+yOffset]+overlapTolerance) + "\n")
-                        if shiftedShortLine[coordOffset+yOffset]+overlapTolerance>longMin \
-                            and shiftedShortLine[coordOffset+yOffset]-overlapTolerance<longMax :
-                            f.write("Overlap test true" + "\n")
-                            overlapTest += 1
-                            
-                    # Different types of overlap need different operations
-                    if overlapTest == 0 :
-                        # line does not overlap at all - do not merge
-                        f.write("No overlap - continue" + "\n")
-                        continue
-                    #elif overlapTest == 2 : # do not create a new line as longLine is what will be made
-                    elif overlapTest == 1 :
-                        # shortLine is overlaps but is not completely contained by long line
-                        # Find new line 
-                        f.write("Overlap partial" + "\n")
-                        ## Find the max ends and merge the lines
-                        # If line is not vertical - check min max X values to find longest line
-                        # Init
-                        min = (longLine[0],longLine[1])
-                        max = (longLine[0],longLine[1])
-                        coords = [tuple(longLine[2:]),tuple(shiftedShortLine[:2]),tuple(shiftedShortLine[2:])]
-                        f.write("coords: " + str(coords) + "\n")
-                        # If not vertical - check for x values
-                        if a != 90 :   
-                            # Check for max in min values in the other three coords
-                            for coord in coords :
-                                if coord[0] < min[0] :
-                                    min = coord
-                                if coord[0] > max[0] :
-                                    max = coord
-                        else :                           
-                            # Check for max in min values in the other three coords
-                            for coord in coords :
-                                if coord[1] < min[1] :
-                                    min = coord
-                                if coord[1] > max[1] :
-                                    max = coord
-                        
-                        # Construct new line segment from max and min coords
-                        newLine = (int(round(min[0])),int(round(min[1])),int(round(max[0])),int(round(max[1])))
-                        # If the new line is different to the longLine - remove old lines and create new
-                        if newLine != longLine :
-                            f.write("newLinell:" + str(newLine) + "\n")
-                            newLines[newLine] = {"angle" : a }
-                            oldLines.add(longLine)
-                            
-                    # At this point the short line should be removed regardless of any change to the larger line    
-                    oldLines.add(shortLine)
-                    break
-                        
-                
-                # If changes need to be made, break the loop, make the changes then start again
-                if len(oldLines) > 0 :
-                    break
-                    
-            if len(oldLines) > 0 :
-                # Remove old lines and add new
-                for oldLine in oldLines :
-                    lines.pop(oldLine)
-                lines.update(newLines)
-                oldLines = set()
-                newLines = {}
-            else :
-                # No new lines - must be complete
-                break
-        
-        f.write("Lines: " + str(lines) + "\n")
-        f.close()
-
-    # Modified from https://www.cdn.geeksforgeeks.org/check-if-two-given-line-segments-intersect/
-    # Given three colinear points p, q, r, the function checks if
-    # point q lies on line segment 'pr'
-    def onSegment(self, p, q, r) :
-        if  q[0] <= max(p[0], r[0]) and q[0] >= min(p[0], r[0]) and q[1] <= max(p[1], r[1]) and q[1] >= min(p[1], r[1]) :
-            return True
-     
-        return False
-     
-    # To find orientation of ordered triplet (p, q, r).
-    # The function returns following values
-    # 0 --> p, q and r are colinear
-    # 1 --> Clockwise
-    # 2 --> Counterclockwise
-    def orientation(self, p, q, r) :
-        # See https://www.geeksforgeeks.org/orientation-3-ordered-points/
-        # for details of below formula.
-        val = (q[1] - p[1]) * (r[0] - q[0]) - (q[0] - p[0]) * (r[1] - q[1])
-        if val == 0 :
-            return 0  # colinear
-        elif val > 0 :
-            return 1 # clockwise
-        else :
-            return 2 # counter clockwise
-    
-     
-    # The main function that returns true if line segment 'p1q1'
-    # and 'p2q2' intersect.
-    def doIntersect(self, lineA, lineB) :
-        # Convert format
-        p1 = lineA[:2]
-        q1 = lineA[2:]
-        p2 = lineB[:2]
-        q2 = lineB[2:]
-        
-        # Find the four orientations needed for general and
-        # special cases
-        o1 = self.orientation(p1, q1, p2)
-        o2 = self.orientation(p1, q1, q2)
-        o3 = self.orientation(p2, q2, p1)
-        o4 = self.orientation(p2, q2, q1) 
-        
-        # General case
-        if o1 != o2 and o3 != o4 :
-            return 1
-     
-        # Special Cases
-        # p1, q1 and p2 are colinear and p2 lies on segment p1q1
-        if o1 == 0 and self.onSegment(p1, p2, q1) :
-            return 2
-     
-        # p1, q1 and p2 are colinear and q2 lies on segment p1q1
-        if o2 == 0 and self.onSegment(p1, q2, q1) :
-            return 2
-     
-        # p2, q2 and p1 are colinear and p1 lies on segment p2q2
-        if o3 == 0 and self.onSegment(p2, p1, q2) :
-            return 2
-     
-         # p2, q2 and q1 are colinear and q1 lies on segment p2q2
-        if o4 == 0 and self.onSegment(p2, q1, q2) :
-            return 2
-     
-        return 0 # Doesn't fall in any of the above cases
-    
-    # https://stackoverflow.com/questions/20677795/how-do-i-compute-the-intersection-point-of-two-lines-in-python
-    def lineABC(self, line):
-        A = (line[1] - line[3])
-        B = (line[2] - line[0])
-        C = (line[0]*line[3] - line[2]*line[1])
-        return A, B, -C
-
-    def intersection(self, lineA, lineB):
-        L1 = self.lineABC(lineA)
-        L2 = self.lineABC(lineB)
-        D  = L1[0] * L2[1] - L1[1] * L2[0]
-        Dx = L1[2] * L2[1] - L1[1] * L2[2]
-        Dy = L1[0] * L2[2] - L1[2] * L2[0]
-        if D != 0:
-            x = int(round(float(Dx) / D))
-            y = int(round(float(Dy) / D))
-            return x,y
-        else:
-            return False
-    
-    
-    
-    def fixPathWall(self, walls, paths, safetyLen) :
-        (oldPaths, newPaths) = self.fixPathWallCore(walls, paths, safetyLen)
-        # Remove old paths and add new
-        for oldPath in oldPaths :
-            paths.pop(oldPath)
-        paths.update(newPaths)
-
-    
-    # Recursive function - finds all intersections of paths and walls and returns (pathsToRemove, newPaths)
-    # For each path finds first intersection with wall (if any)
-    # Creates new paths that do not intersect as well as list of old paths
-    # Calls this function on new paths to check for more intersections
-    def fixPathWallCore(self, walls, paths, safetyLen) :
-        ## Fix paths with collisions with walls
-        newPaths = {}
-        oldPaths = set()
-        changes = False
-        for path, pathData in paths.iteritems() :
-            for wall, wallData in walls.iteritems() :
-                #If no collision 
-                intersection = self.doIntersect(path, wall)
-                if intersection == 0 :
-                    continue
-                else : #elif intersection >= 1 : # overlap
-                    # Find intersection location
-                    x,y = self.intersection(path, wall)
-                    p1 = (path[0],path[1],x,y)
-                    p2 = (x,y,path[2],path[3])
-                    len1 = getLength(p1)
-                    len2 = getLength(p2)   
-                    a = pathData["angle"] 
-                    ar = math.radians(a) 
-                    if len1 > safetyLen :        
-                        shortX  = safetyLen * math.cos(ar)
-                        shortY  = safetyLen * math.sin(ar)
-                        if path[1] > path[3] :
-                            print("neg slope")
-                            shortY = - shortY
-                        p1 = (p1[0],p1[1],int(round(x-shortX)), int(round(y-shortY)))
-                        newPaths[p1] = {"angle" : a }
-                    if len2 > safetyLen :       
-                        shortX  = safetyLen * math.cos(ar)
-                        shortY  = safetyLen * math.sin(ar)
-                        if path[1] > path[3] :
-                            print("neg slope")
-                            shortY = - shortY
-                        p2 = (int(round(x+shortX)), int(round(y+shortY)),p2[2],p2[3])
-                        newPaths[p2] = {"angle" : a }
-                        
-                    oldPaths.add(path) 
-                    # This path has now been removed so don't check it against other walls
-                    break
-                                           
-        if len(oldPaths) > 0 :
-            # Check that new paths have no colissions 
-            (oldNewPaths, newNewPaths) = self.fixPathWallCore(walls, newPaths, safetyLen)
-            #Remove oldNewPaths and add newNewPaths
-            for oldNewPath in oldNewPaths :
-                newPaths.pop(oldNewPath)
-            newPaths.update(newNewPaths)
-            
-        return (oldPaths, newPaths)
-            
-    
     
     def getScanLocations(self) :
         global SLAMObject
         # Map size, scale
         MAP_SIZE_METERS          = 25 # 32
         MAP_SIZE_PIXELS          = MAP_SIZE_METERS * 50 #800
-        print("here")
         # Make array for SLAM map
         mapbytes = bytearray(MAP_SIZE_PIXELS * MAP_SIZE_PIXELS)
         
@@ -2343,7 +1956,9 @@ class mappingThread(simThreadBase):
         
         # Theshhold low to find the walls then dilate to expand the walls - used as mask to avoid scanning walls
         a, numpyMapThreshLow  = cv2.threshold(numpyMap,126,255,cv2.THRESH_BINARY) 
-        numpyMapThreshLow = cv2.dilate(cv2.bitwise_not(numpyMapThreshLow), np.ones((30, 30)))
+        # Make kernal for dilation
+        kernel = np.ones((pathMap.dilateAmount,pathMap.dilateAmount),np.uint8)
+        numpyMapThreshLow = cv2.dilate(cv2.bitwise_not(numpyMapThreshLow), kernel)
         cv2.imwrite('numpyMapThreshLow.jpg', numpyMapThreshLow)
         
         # Smooth image, threshold high to find clear areas, dilate to smooth lines, canny to find edges of clear area, dilate to smooth
@@ -2375,9 +1990,17 @@ class mappingThread(simThreadBase):
         keyPointTuples = []
         for keyPoint in keypoints  :
             keyPointTuples.append(keyPoint.pt)
-
+            
         return keyPointTuples
     
+    def sortLocations(self, locations) :
+        distances = []
+        for location in locations :
+            dist = (location[0] - porterLocation[0])**2 + (location[1] - porterLocation[1])**2
+            distances.append(dist)
+        
+        return [loc for _, loc in sorted(zip(distances,locations), key=lambda pair: pair[0])]
+
     
     def run(self):   
         # May not need all of these
@@ -2412,7 +2035,7 @@ class mappingThread(simThreadBase):
         global SLAMRunning
         
         # Create pathMap
-        pathMapTemp = pathMapClass(realPorterSize[0]*10)
+        pathMapTemp = pathMapClass(realPorterSize[0])
         with threadLock :
             pathMap = pathMapTemp
             
@@ -2421,17 +2044,25 @@ class mappingThread(simThreadBase):
             SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
             SLAMRunning = True
             lidarRun = "a"
-            lidarReady = False
         
-        time.sleep(10)
+        time.sleep(2)
         
         locations = self.getScanLocations()
-        
-        while len(locations) > 1 :
+        for loc in locations :
+            dataMap.add(loc)
+        while len(locations) > 1  and not exitFlag:
+            locations = self.sortLocations(locations)
+            print locations
+            self.goTo(locations[0])
+            time.sleep(2)
+            locations = self.getScanLocations()
             
         # print("Finished, waiting...")
         # while not exitFlag :
             # time.sleep(0.1)
+        cv2.waitKey(1)
+        cv2.destroyAllWindows()
+        cv2.waitKey(1)
         print "done"
 
 
@@ -2472,7 +2103,7 @@ class navigationThread(simThreadBase):
         #    wheelSpeeds = [0,0]
         
         # Create pathMap
-        pathMapTemp = pathMapClass(realPorterSize[0]*10)
+        pathMapTemp = pathMapClass(realPorterSize[0])
         with threadLock :
             pathMap = pathMapTemp
         
@@ -2480,7 +2111,6 @@ class navigationThread(simThreadBase):
             SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS)
             SLAMRunning = True
             lidarRun = "a"
-            lidarReady = False
         
         time.sleep(5)
 
@@ -2488,6 +2118,9 @@ class navigationThread(simThreadBase):
             
         self.goTo((900,600))
         
+        cv2.waitKey(1)
+        cv2.destroyAllWindows()
+        cv2.waitKey(1)
         print "done"
         
 if __name__ == "__main__" :
