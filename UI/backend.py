@@ -60,7 +60,7 @@ while connected3 == False:
         connected3 = False
     time.sleep(0.2)
 logging.info("Connected to Socket 3")
-
+s3.send("Hello")
 
 def pi_recv(): # Data from Control PI
     global s2

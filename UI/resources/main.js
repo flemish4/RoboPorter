@@ -271,6 +271,7 @@ $(document).ready(function () {
                 $("#safety-btn").addClass("btn-secondary");
             }
             curr_status = data["System Status"] ;
+            
             if ((data["System Status"] == "Mapping") || (data["System Status"] == "Navigation")) {
                 $('.mancontrol').prop('disabled', true);
             }
@@ -311,29 +312,29 @@ $(document).ready(function () {
                 case 87:
                     if (lastcommand != "f") {
                         $("#up-key").addClass("red");
-                        lastcommand = "f";
+                        lastcommand = "f"
                         userspeed(20, 20);
                     }
                     break;
                 case 65:
                     if (lastcommand != "l") {
                         $("#left-key").addClass("red");
-                        s.send("l");
                         userspeed(-20, 20);
+                        lastcommand = "l"
                     }
                     break;
                 case 83:
                     if (lastcommand != "b") {
                         $("#down-key").addClass("red");
-                        s.send("b");
                         userspeed(-20, -20);
+                        lastcommand = "b"
                     }
                     break;
                 case 68:
                     if (lastcommand != "r") {
                         $("#right-key").addClass("red");
-                        s.send("r");
                         userspeed(20, -20);
+                        lastcommand = "r"
                     }
                     break;
             }
@@ -461,7 +462,7 @@ $(document).ready(function () {
     });
 
     $("#link-control").click(function () {
-        if((curr_status == "UserCommand") || (curr_status == "AwaitingCommands")){
+        if(curr_status == "UserCommand"){
             alert("Hi")
             $("#usercontrol-modal").modal("hide")
         }else{
