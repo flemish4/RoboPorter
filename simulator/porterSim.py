@@ -2411,120 +2411,27 @@ class mappingThread(simThreadBase):
         global SLAMObject
         global SLAMRunning
         
-        
-        # Things you may want to do
-        #with threadLock :
-        #    speedVector = [50,100]
-        
-        #done = False
-        #while (not done) and (not exitFlag) :
-        
-        # Map size, scale
-        MAP_SIZE_METERS          = 25 # 32
-        MAP_SIZE_PIXELS          = MAP_SIZE_METERS * 50 #800
-        
+        # Create pathMap
+        pathMapTemp = pathMapClass(realPorterSize[0]*10)
+        with threadLock :
+            pathMap = pathMapTemp
+            
+        # start lidar
         with threadLock :
             SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
             SLAMRunning = True
             lidarRun = "a"
             lidarReady = False
         
-        time.sleep(2)
+        time.sleep(10)
         
-        with threadLock: 
-            speedVector = [10,20]
+        locations = self.getScanLocations()
         
-        time.sleep(5)
-        # Create a byte array to receive the computed maps
-        mapbytes = bytearray(MAP_SIZE_PIXELS * MAP_SIZE_PIXELS)
-        
-        # Get final map    
-        SLAMObject.getmap(mapbytes)
-                    
-        # Save map and trajectory as PGM file    
-        pgm_save('test1.pgm' , mapbytes, (MAP_SIZE_PIXELS, MAP_SIZE_PIXELS))
-        
-        
-        #keyPoints = self.getScanLocations()
-        #print(keyPoints)
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        # with threadLock: 
-            # speedVector = [20,20]
-        # time.sleep(15)
-        # with threadLock: 
-            # speedVector = [20,-20]
-        # time.sleep(4.9)
-        # with threadLock: 
-            # speedVector = [20,20]
-        # time.sleep(15)
-        # with threadLock: 
-            # speedVector = [20,-20]
-        # time.sleep(4.8)
-        #with threadLock: 
-        #    speedVector = [20,20]
-        time.sleep(5)
-        
-        
-        
-        
-        
-
-        
-        
-        
-        
-        # with threadLock:
-            # speedVector = [0,0]
-        # while not exitFlag :
-            # print(porterLocation)
-            # time.sleep(0.5)
+        while len(locations) > 1 :
             
-            # time.sleep(1)
-        
-        ### OUTPUT DATA FOR SLAM TESTING
-        # with threadLock :
-            # dataMap                 = set()
-        
-        
-        # scans = []
-        # dxy = 0
-        # dtheta = 0
-        # dt = 0
-        # with open("lidar.out", "w") as f :
-            # for i in range(0,25) :
-                # # Get lidar data -> lidarMap
-                # self.getLidar360()
-                # scan = ' '.join(map(str,map(int,[x*10 for x in lidarAnglesList])))
-                # scan = str(dxy) + " " + str(dtheta) + " " + str(dt) + " " + scan
-                # f.write(scan + "\n")
-                # print(totalR)
-                # timeA = time.time()
-                # xyA   = totalR
-                # thetaA= totalWd
-                # self.moveStraight(23)
-                # speedVector = [0,0]
-                # dxy = totalR - xyA
-                # dtheta = totalWd - thetaA
-                # dt = time.time() - timeA
-        
-        # speedVector = [0,0]
-        
-        print("Finished, waiting...")
-        while not exitFlag :
-            time.sleep(0.1)
+        # print("Finished, waiting...")
+        # while not exitFlag :
+            # time.sleep(0.1)
         print "done"
 
 
@@ -2564,12 +2471,6 @@ class navigationThread(simThreadBase):
         #    speedVector = [0,0]
         #    wheelSpeeds = [0,0]
         
-        #self.getLidar360()
-        # Store lidar data
-        #with threadLock :
-        #    lidarMapStore = lidarMap  
-          
-        #cv2.namedWindow("navMap", cv2.WINDOW_NORMAL)        # Create window with freedom of dimensions
         # Create pathMap
         pathMapTemp = pathMapClass(realPorterSize[0]*10)
         with threadLock :
@@ -2582,52 +2483,11 @@ class navigationThread(simThreadBase):
             lidarReady = False
         
         time.sleep(5)
-        
-        #with threadLock : 
-        #    speedVector = [0,20]
-        
-        #time.sleep(10)
-        #with threadLock : 
-        #    speedVector = [20,20]
-        
-        
-        #time.sleep(5)
-        # Create a byte array to receive the computed maps
-       # mapbytes = bytearray(MAP_SIZE_PIXELS * MAP_SIZE_PIXELS)
-        
-        # Get final map    
-        #SLAMObject.getmap(mapbytes)
-                    
-        # Save map and trajectory as PGM file    
-        #pgm_save('test1.pgm' , mapbytes, (MAP_SIZE_PIXELS, MAP_SIZE_PIXELS))
-        # Path find and navigate to destination
-        with threadLock :
-            dataMap.add((400,400))
-            
-            dataMap.add((800,400))
-            dataMap.add((810,400))
-            dataMap.add((790,400))
-            
-            
-            dataMap.add((400,800))
-            dataMap.add((400,820))
+
+
             
         self.goTo((900,600))
         
-            
-            
-            
-        
-        
-        # Things you may want to do
-        
-        #   if lidarReady :
-        #       lidarRun = "a"  
-        #while not exitFlag :
-        #    time.sleep(0.1)
-        #cv2.waitKey(1)
-        #cv2.destroyAllWindows()
-        #cv2.waitKey(1)
         print "done"
         
 if __name__ == "__main__" :
