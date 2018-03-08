@@ -182,6 +182,8 @@ system_status = "AwaitingCommands"
 global motordata
 motordata = 0 
 
+enduserloop = False
+
 #lastSent = [0, 0]
 
 def setExitFlag(status):
@@ -830,6 +832,9 @@ class datafromUI(MultiThreadBase):
         global lastCommand
         global sysRunning
         global safetyOn
+        global exitFlag
+        global threadLock
+        global enduserloop
         logging.info("Starting %s", self.name)
         while not exitFlag.value:
             if not self.RecieveServer:
@@ -848,20 +853,24 @@ class datafromUI(MultiThreadBase):
                                 lastCommand = "x"
                             sysRunning = False
                             commandqueue.put("Close")
-                        elif dataInput['Command'] == "c":
-                            pass  #Add code to cancel loop
                         elif dataInput['Command'] == "s":
-                            with threadlock:
+                            with threadLock:
                                 safetyOn = not safetyOn ; 
                     elif dataInput['Type'] == "Cancel": # If the user wants to cancel the mapping or nav command and move onto the next item in the queue this is ran
                         with threadLock:
-                            exitFlag = True
+                            enduserloop = True
+
+                        # add code to end loops
+
+
                     elif dataInput['Type'] == "CancelEnterUserCommand": # When the user wants to enter a command immediatly it clears the queue. This is called straight before a switch to the User Control mode occurs
                         with commandqueue.mutex:
                             commandqueue.queue.clear()
-                        with threadLock:
-                            exitFlag = True
+
+                        # add code to end loops
+
                     elif(dataInput['Type'] == "UserSpeed"): # If the user sent a speed command it is added to the speed queue
+                        print "UserSpeed"
                         speedsqueue.put(dataInput)
                     else:
                         commandqueue.put(dataInput)
@@ -1094,23 +1103,30 @@ if __name__ == '__main__':
     while sysRunning: #while the main loop is not in shutdown mode...
         time.sleep(1)
         currentcommand = commandqueue.get()
-        if currentcommand["Type"] == "UserCommand":
+        if currentcommand["Type"] == "UserCommand": 
             with threadLock:
                 system_status = "UserCommand"
-            while not exitFlag
-                with commandqueue.mutex:
-                    speedsqueue.queue.clear()
+            with commandqueue.mutex:
+                speedsqueue.queue.clear()
+            with threadLock:
+                enduserloop = False
+            while not enduserloop:
+
+                # Add new user code here and delete code below
+
                 currentspeed = speedsqueue.get()
                 with threadLock:
                     speedVector[0] = int(currentspeed["Left"])
                     speedVector[1] = int(currentspeed["Right"])
+
+                # Delete code above and replace with any new usermode code
+
             with threadLock:
-                exitFlag = False
                 system_status == "AwaitingCommands"
         elif currentcommand["Type"] == "MappingCommand":
             print "Running a Mapping Command"
             with threadLock:
-                system_status = "MappingCommand"
+                system_status = "Mapping"
 
             #Mapping Code Goes Here
 
@@ -1120,7 +1136,7 @@ if __name__ == '__main__':
             recieve_map(currentcommand["Map_Filename"])
             print "Running a Navigation Command"
             with threadLock:
-                system_status = "NavigationCommand"
+                system_status = "Navigation"
 
             #Navigation Code Goes Here
 

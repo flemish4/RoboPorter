@@ -497,7 +497,7 @@ void loop() {
       recNum = Serial.read();
       endByte = Serial.read();   
       
-      leftSerialSpeed = strtol(rightHex, &ptr, 16);
+      leftSerialSpeed = strtol(rightHex, &ptr, 16); // Issue with left turning right fixed by swapping variables 
       rightSerialSpeed = strtol(leftHex, &ptr, 16);
       if((leftSerialSpeed != prevleftSerialSpeed)||(rightSerialSpeed != prevrightSerialSpeed)){
         if (endByte == '\n'){
