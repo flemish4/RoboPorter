@@ -1004,7 +1004,9 @@ def recieve_map(filename):
 ######Start of the Main Thread!
 
 if __name__ == '__main__':
-
+    # Say Hello
+    print("Hello")
+    
     #Connect to map database
     connection = MySQLdb.connect(host='192.168.0.1',db='roboporter',user='admin',passwd='password', port=3306)
     cursor = connection.cursor()
