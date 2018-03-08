@@ -1518,6 +1518,8 @@ class simThreadBase(MultiThreadBase) :
             time.sleep(0.01)
             maxSpeeds = self.getMaxSpeeds()
             speed = min(maxSpeeds)
+            if speed == 0 :
+                return False
             #print(porterOrientation-desOrientation)
             orientationAdjust = orientationPID.update(porterOrientation-desOrientation)
             if (orientationAdjust != None) and (abs(orientationAdjust - prevOrientationAdjust)>0.0001) :
@@ -1582,6 +1584,8 @@ class simThreadBase(MultiThreadBase) :
             f.write("\tdesOrientation: " + str(desOrientation) + "\n")
             maxSpeeds = self.getMaxSpeeds()
             speed = min(maxSpeeds)
+            if speed == 0 :
+                return False
             f.write("\tspeed: " + str(speed) + "\n")
             
             f.write("\tporterOrientationUnConst: " + str(porterOrientationUnConst) + "\n")
@@ -1625,6 +1629,8 @@ class simThreadBase(MultiThreadBase) :
         
         origOrientation = porterOrientationUnConst
         maxSpeed = min(self.getMaxSpeeds())
+        if maxSpeed == 0 :
+            return False
         sign = 1 if angle > 0 else -1
         
         desOrientation = origOrientation + angle
@@ -1708,6 +1714,8 @@ class simThreadBase(MultiThreadBase) :
         angle = constrainAngle360(desOrientation - porterOrientation,180,-180)
         
         maxSpeed = min(self.getMaxSpeeds())
+        if maxSpeed == 0 :
+            return False
         sign = 1 if angle > 0 else -1
         
         if angle > 0 :        
@@ -1764,7 +1772,7 @@ class simThreadBase(MultiThreadBase) :
         
     
     # Modified from pseudocode on https://en.wikipedia.org/wiki/A*_search_algorithm#Pseudocode
-    def aStar(self, start, goal) :
+    def aStar(self, start, goal, timeout) :
         global pathMap
         global exitFlag
         global dataMap
@@ -1778,7 +1786,6 @@ class simThreadBase(MultiThreadBase) :
 
         with threadLock :
             dataMap = set()
-        
         
         # The set of nodes already evaluated
         closedSet = set()
@@ -1809,7 +1816,14 @@ class simThreadBase(MultiThreadBase) :
         # REVISIT : Is this actually used??
         fScore[start] = getLengthSquared(list(start)+list(goal)) #math.sqrt(( start[0] - goal[0] )**2 + ( start[1] - goal[1] )**2) # distance to dest #heuristic_cost_estimate(start, goal)
 
+        startTime = time.time()
         while (len(openSet) != 0) and (not exitFlag) :
+            # check timeout
+            timeElapsed = time.time() - startTime
+            if timeElapsed > timeout :
+                # stop aStar
+                return (False, self.reconstruct_path(cameFrom, current))
+                
             # current = the node in openSet having the lowest fScore[] value
             current = None
             for node in openSet :
@@ -1828,7 +1842,7 @@ class simThreadBase(MultiThreadBase) :
                 #with threadLock :
                 #    dataMap = set(path)
                 file.close()
-                return path
+                return (True,path)
 
             openSet.discard(current)
             closedSet.add(current)
@@ -1870,7 +1884,7 @@ class simThreadBase(MultiThreadBase) :
                 #file.write("fScore: " + str(fScore[neighbor]) + "\n")
 
         file.close()
-        return False
+        return (False, [])
 
     
     def reconstruct_path(self, cameFrom, current) :
@@ -1898,41 +1912,54 @@ class simThreadBase(MultiThreadBase) :
     
     
     # Uses A* and navigation algorithms to navigate to the given dest = [x, y]
-    def goTo(self, dest) :
+    def goTo(self, dest, timeout, goPartial) :
         global porterLocation
         global speedVector
         global pathMap
         global lidarRun
         f=open("nav.log", "w")    
-        path = self.aStar((porterLocation[0],porterLocation[1],0), dest)
-        f.write(str(path) +"\n")
-        try :
-            if len(path) > 1 :
-                for instruction in path :
-                    if exitFlag :
-                        break
-                    if instruction[0] == "turn" :
-                        with threadLock :
-                            lidarRun = "s"
+        while not exitFlag :
+            success, path = self.aStar((porterLocation[0],porterLocation[1],0), dest, timeout)
+            if not (success or goPartial) :
+                with threadLock :
+                    speedVector = [0,0]
+                return False
+            f.write(str(path) +"\n")
+            try :
+                if len(path) > 1 :
+                    for instruction in path :
+                        success = True
+                        if exitFlag :
+                            break
+                        if instruction[0] == "turn" :
+                            with threadLock :
+                                lidarRun = "s"
+                                
+                            success = self.moveTurn(instruction[1], "onCentre", f)
                             
-                        self.moveTurn(instruction[1], "onCentre", f)
+                            with threadLock :
+                                lidarRun = "a"
+                        elif instruction[0] == "moveStraight" :
+                            success = self.moveStraight(instruction[1], f)
+                        elif instruction[0] == "moveTo" :
+                            success = self.moveTo(instruction[1], f)
+                        elif instruction[0] == "turnTo" :
+                            with threadLock :
+                                lidarRun = "s"
+                            success = self.turnTo(instruction[1], "onCentre", f)
+                            with threadLock :
+                                lidarRun = "a"
                         
-                        with threadLock :
-                            lidarRun = "a"
-                    elif instruction[0] == "moveStraight" :
-                        self.moveStraight(instruction[1], f)
-                    elif instruction[0] == "moveTo" :
-                        self.moveTo(instruction[1], f)
-                    elif instruction[0] == "turnTo" :
-                        with threadLock :
-                            lidarRun = "s"
-                        self.turnTo(instruction[1], "onCentre", f)
-                        with threadLock :
-                            lidarRun = "a"
-        except TypeError :
-            print("No path found")
+                        if not success :
+                            break
+                        
+            except TypeError :
+                print("No path found")
+                with threadLock :
+                    speedVector = [0,0]
+                return False
         with threadLock :
-          speedVector = [0,0]
+            speedVector = [0,0]
         f.close()
     
     
@@ -2053,7 +2080,8 @@ class mappingThread(simThreadBase):
         while len(locations) > 1  and not exitFlag:
             locations = self.sortLocations(locations)
             print locations
-            self.goTo(locations[0])
+            success = self.goTo(locations[0], 20, True)
+            # REVISIT : If not success - blacklist the area?
             time.sleep(2)
             locations = self.getScanLocations()
             
@@ -2116,7 +2144,7 @@ class navigationThread(simThreadBase):
 
 
             
-        self.goTo((900,600))
+        self.goTo((900,600), 20, False)
         
         cv2.waitKey(1)
         cv2.destroyAllWindows()
