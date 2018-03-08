@@ -8,24 +8,27 @@
 #
 ###---Imports-------------------
 
-import socket
-import serial
-import struct
-import threading
+from bresenham import bresenham
+import MySQLdb 
 import Queue
-import time
-import numpy
-import random
-import pyttsx
-import math
-import multiprocessing
-import glob
-import datetime
+import base64
 import copy
 import cv2
+import datetime
+import glob
 import json
-import MySQLdb 
-import base64
+import math
+import multiprocessing
+import numpy as np
+import pickle
+import pyttsx
+import random 
+import serial
+import socket
+import struct
+import sys
+import threading
+import time
 
 #import zbar
 #import time
@@ -610,12 +613,12 @@ class usDataThread(MultiThreadBase):
         global stoppingDistance
         global maxSpeeds
 
-        #aMax = (2*numpy.pi*1000)/(60*0.12)
+        #aMax = (2*np.pi*1000)/(60*0.12)
         aMax = 872.664626 # Calculated from line above which was supplied by a previous group 
-        #radToRPM = 60/(2*numpy.pi)
+        #radToRPM = 60/(2*np.pi)
         for i in range(0,len(usData)):
             if int(usData[i]) >= stoppingDistance:
-                maxSpeeds[i] = int(numpy.sqrt(aMax*(((usData[i]/100) -(stoppingDistance/100)))))
+                maxSpeeds[i] = int(np.sqrt(aMax*(((usData[i]/100) -(stoppingDistance/100)))))
             else:
                 maxSpeeds[i] = 0
         #print "max speeds = " + str(maxSpeeds)
@@ -991,7 +994,7 @@ def recieve_map(filename):
     cursor.execute(query)
     result = cursor.fetchone() ; 
     img_string = base64.b64decode(result[0])
-    nparray = numpy.fromstring(img_string,numpy.uint8) ; 
+    nparray = np.fromstring(img_string,np.uint8) ; 
     image = cv2.imdecode(nparray, cv2.CV_LOAD_IMAGE_GRAYSCALE)
     return image
 
