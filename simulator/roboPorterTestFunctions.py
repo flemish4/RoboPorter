@@ -48,7 +48,7 @@ class roboPorterLaser(Laser):
     
     def __init__(self):
                         #scan_size, scan_rate_hz, detection_angle_degrees, distance_no_detection_mm, detection_margin=0, offset_mm=0
-        Laser.__init__(self, 259, 2, 360, 10000, 0, 0)
+        Laser.__init__(self, 360, 2, 360, 10000, 0, 0)
         
 # Class for MinesRover custom robot ------------------------------------------
 

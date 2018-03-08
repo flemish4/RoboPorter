@@ -63,10 +63,16 @@ global SLAMOffset
 global SLAMSimOffset
 global pathMap
 global MAP_SIZE_METERS
-global MAP_SIZE_PIXELS
+global MAP_SIZE_PIXELS        
+global globalWd
+global dxy
+global angle_delta
+angle_delta = 1
+globalWd = 0
+dxy = 0
 MAP_SIZE_METERS          = 25 # 32
 MAP_SIZE_PIXELS          = MAP_SIZE_METERS * 50 #800
-SLAMOffset = (12500,12500)
+SLAMOffset = (1250,1250)
 SLAMSimOffset = (0,0)
 SLAMRunning = False
 adjustedLidarStore = []
@@ -75,7 +81,7 @@ adjustedLidarListReady = False
 encoderVectorAbs = (0,0)
 encoderVectorAbsReady = False
 lidarPolarList = []
-navMap = []
+navMap = np.zeros(SLAMOffset)
 wheelError          = 0
 totalR          = 0
 totalWd          = 0
@@ -234,7 +240,7 @@ class porterSim() :
         pygame.init()
         pygame.font.init()  
         self.simSpeed           = 1 # Scale time 
-        self.simFrameTime       = 0.015 
+        self.simFrameTime       = 0.05 
         self.simFrameRate       = 1/self.simFrameTime*self.simSpeed
         self.scale              = 2 # 1pixel = 2cm
         self.wheelSpeedError    = 0.05
@@ -266,8 +272,11 @@ class porterSim() :
         self.runMode            = ""
         self.nextRunMode        = ""
         self.lidarRpm           = 1 #0.66 # This is approximate as per the calculation of self.lidarNSamples
-        self.lidarTotalNSamples = 260 #767
-        self.lidarNSamples      = int(round(math.ceil(767*self.lidarRpm*self.simFrameTime))) # This calculates the number of lidar samples to be taken each frame - it rounds up so the realRPM will be slightly higher than given 
+        self.lidarTotalNSamples = 360 #767
+        self.lidarNSamples      = 18 #int(round(math.ceil(self.lidarTotalNSamples*self.lidarRpm*self.simFrameTime))) # This calculates the number of lidar samples to be taken each frame - it rounds up so the realRPM will be slightly higher than given 
+        #self.lidarTotalNSamples = int(round(self.lidarNSamples * self.simFrameRate))
+        print self.lidarNSamples
+        print self.lidarTotalNSamples
         self.porterAdded        = False # Has the porter been placed at the start of simRun
         self.simRunning         = False # Is the simulation running
         self.draw_on            = 0 # Is drawing enabled in mapBuilder
@@ -589,6 +598,8 @@ class porterSim() :
         global lidarAngles
         global lidarAnglesList
         global lidarPolarList
+        #f = open("checkLidar.log", "a+")
+        #f.write("New#########################\n")
         if lidarRun == "a":
             # Start 360 scan
             self.lidarPos = -180
@@ -613,19 +624,21 @@ class porterSim() :
             
         if not lidarReady : # must have more samples to get in 360 scan
             # Angle delta
-            angle_delta = float(360) / self.lidarTotalNSamples
+            #angle_delta = float(360) / self.lidarTotalNSamples
             # Get 360 samples
-            endPos = int(round(self.lidarPos + self.lidarNSamples*angle_delta))
+            endPos = self.lidarPos + self.lidarNSamples*angle_delta # int(round(self.lidarPos + self.lidarNSamples*angle_delta))
             if endPos >= 180 :
                 endPos = 180
                 with threadLock :
                     lidarReady = True # REVISIT : this isn't right for real time
             
             for angle in np.arange(self.lidarPos,endPos, angle_delta) :
+                #f.write(str(angle) + "\n")
                 self.getLidarSample(angle)
         
             if lidarReady :
                 lidarPolarList.append("END")
+                #f.write("END\n")
                 with threadLock :
                     lidarRun = "a"
                 
@@ -636,7 +649,7 @@ class porterSim() :
         if lidarReady :
             with threadLock :
                 lidarRun = "a"
-    
+        #f.close()
                 
     def adjustLidar(self) :
         global encoderVectorAbs
@@ -665,15 +678,19 @@ class porterSim() :
                     # add motion i*distFraction
                     j = len(lidarData) - i # adjust samples to current position
                     #sampleXY = (sampleXY[0]+distFraction[0]*j,sampleXY[1]+distFraction[1]*j)
-                    dataMap.add((int(sampleXY[0]+porterLocation[0]), int(sampleXY[1]+porterLocation[1])))
+                    #dataMap.add((int(sampleXY[0]+porterLocation[0]), int(sampleXY[1]+porterLocation[1])))
                     # convert back to polar # REVISIT : ew square root
                     r = math.sqrt(sampleXY[0]**2 + sampleXY[1]**2)
                     # save to store
                     adjustedLidarStore.append(r*10)
                 else : 
                     with threadLock :
-                        dataMap = set()
-                        adjustedLidarList = adjustedLidarStore[-self.lidarTotalNSamples:-1]
+                        #dataMap = set()
+                        print("lenStore: " + str(len(adjustedLidarStore)))
+                        print("lenStore: " + str(len(adjustedLidarStore[-self.lidarTotalNSamples-1:])))
+                        adjustedLidarList = adjustedLidarStore[-self.lidarTotalNSamples-1:]
+                        #with open("adjustLidar.log","a+") as f:
+                        #    f.write("new\n" + str(adjustedLidarList) + "\n" + str(adjustedLidarStore)+"\n")
                         adjustedLidarStore = []
                         adjustedLidarListReady = True
             
@@ -696,7 +713,8 @@ class porterSim() :
         self.calculatePorterPosition()
         self.adjustLidar()
         if SLAMRunning and adjustedLidarListReady:
-            SLAMObject.update(adjustedLidarList)
+            print len(adjustedLidarList)
+            SLAMObject.update(adjustedLidarList) #, (dxy*20, globalWd, 0.015 ))
             
             # update position
             with threadLock: 
@@ -705,15 +723,22 @@ class porterSim() :
                 dOrientation         = constrainAngle360(newPorterOrientation-porterOrientation, 180, -180)
                 porterOrientationUnConst += dOrientation
                 porterOrientation = newPorterOrientation
-                xSim = ((y-SLAMOffset[1])/(25*0.5))+SLAMSimOffset[0]
-                ySim = -((x-SLAMOffset[0])/(25*0.5))+SLAMSimOffset[1]
+                xSim =  y/20#((y-SLAMOffset[1])/(25*0.5))+SLAMSimOffset[0]
+                ySim =  1250 -x/20#-((x-SLAMOffset[0])/(25*0.5))+SLAMSimOffset[1](12500*2 -
                 porterLocation = (xSim,ySim)
-                dataMap.add((int(round(xSim)),int(round(ySim))))
+                #dataMap.add((int(round(xSim)),int(round(ySim))))
                 adjustedLidarListReady = False
+
+            pathMap.updateMap()
             print("NEW ------------------------ " )    
+            print("realPos: " + str(realPorterLocation))
+            print("SLAMPos: " + str((x,y)))
             print("location: " + str(porterLocation))
             print("orientat: " + str(porterOrientation))
             print("orientun: " + str(porterOrientationUnConst))
+            with open("runSLAM.log", 'a+') as f:
+                f.write(str(realPorterLocation) + "," + str((x,y)) + "," + str(porterLocation))
+
             
      
     def drawLidarGrid(self) :
@@ -728,19 +753,51 @@ class porterSim() :
         global threadLock
         #print("Running drawNavMap")
         #print(len(navMap))
+        porterLocationInt = (int(round(porterLocation[0])), int(round(porterLocation[1])))
         with threadLock : 
-            for i, row in enumerate(navMap) :
-                for j, cell in enumerate(row) :
-                    if cell != 0 :
-                        print("cell: " + str(i) + ", " + str(j))
-                        pygame.draw.circle(self.views["portermap"]["surface"], (0,0,255), (i/self.scale,j/self.scale), 5)
+            tempMap = np.array(navMap)
+            
+        for i in range(0,20) :
+            for j in range(0,20) :
+                try:
+                    tempMap[porterLocationInt[1]-10+i][porterLocationInt[0]-10+j] = 200
+                except :
+                    pass
+                    
+        with threadLock:
+            for point in dataMap:
+                for i in range(0,6) :
+                    for j in range(0,6) :
+                        try:
+                            tempMap[point[1]-3+i][point[0]-3+j] = 100
+                        except :
+                            pass
+        # tempMap[porterLocationInt[0]][porterLocationInt[1]] = 200
+        # tempMap[porterLocationInt[0]-1][porterLocationInt[1]-1] = 200
+        # tempMap[porterLocationInt[0]-1][porterLocationInt[1]] = 200
+        # tempMap[porterLocationInt[0]-1][porterLocationInt[1]+1] = 200
+        # tempMap[porterLocationInt[0]][porterLocationInt[1]-1] = 200
+        # tempMap[porterLocationInt[0]][porterLocationInt[1]+1] = 200
+        # tempMap[porterLocationInt[0]+1][porterLocationInt[1]-1] = 200
+        # tempMap[porterLocationInt[0]+1][porterLocationInt[1]] = 200
+        # tempMap[porterLocationInt[0]+1][porterLocationInt[1]+1] = 200
+
+        imS = cv2.resize(tempMap, (900, 900)) 
+        cv2.imshow('navMap', imS)
+        cv2.waitKey(1)
+            # for i, row in enumerate(navMap) :
+                # for j, cell in enumerate(row) :
+                    # if cell != 0 :
+                        # print("cell: " + str(i) + ", " + str(j))
+                        # pygame.draw.circle(self.views["portermap"]["surface"], (0,0,255), (i/self.scale,j/self.scale), 5)
     
     def drawDataMap(self) :
         global dataMap
         global threadLock
-        with threadLock :
-            for point in dataMap :
-                pygame.draw.circle(self.views["portermap"]["surface"], (255,0,0), (point[0]/self.scale,point[1]/self.scale), 1)
+        pass
+        #with threadLock :
+            #for point in dataMap :
+                #pygame.draw.circle(self.views["portermap"]["surface"], (255,0,0), (point[0]/self.scale,point[1]/self.scale), 1)
     
     def drawRealDataMap(self) :
         global realDataMap
@@ -962,21 +1019,30 @@ class porterSim() :
                     exitFlag = True
                 else :
                     # user input
+                    #print("top")
                     self.movePorter(e)
+                    #print("1")
                     self.adjustError(e)
+                    #print("2")
                     
                     # real 
                     self.realMovePorter()
+                    #print("3")
                     
                     # threads
                     self.checkLidar()
-                    self.runSLAM()                    
+                    #print("4")
+                    self.runSLAM()      
+                    #print("5")              
                     
                     # draw outcome
-                    self.drawLidarGrid()
+                    #self.drawLidarGrid()
                     self.drawDataMap()
+                    #print("6")
                     self.drawRealDataMap()
+                    #print("7")
                     self.drawNavMap()
+                    #print("8")
                 
             
             if self.simRunning : 
@@ -1086,8 +1152,8 @@ class porterSim() :
                 #orientation = math.radians(realPorterOrientation - 90)
                 x   = porterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)
                 y   = porterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)
-                with threadLock :
-                    dataMap.add((int(round(x)),int(round(y))))
+                #with threadLock :
+                #    dataMap.add((int(round(x)),int(round(y))))
 
                 if (math.fabs(leftDelta - rightDelta) < 1.0e-6) : # basically going straight
                     new_x = x + leftDelta * math.cos(orientation);
@@ -1106,6 +1172,7 @@ class porterSim() :
                 
                 with threadLock :
                     encoderVectorAbs = (new_x - x, new_y -y)
+
                     porterLocation = (new_x + realPorterWheelOffsetY*math.cos(orientation),new_y + realPorterWheelOffsetY*math.sin(orientation))
                     porterOrientation = (math.degrees(new_heading) + 90)*0.5 + porterImuOrientation*0.5
                     porterOrientationUnConst = (math.degrees(new_headingUnConst) + 90) # + porterImuOrientation*0.5
@@ -1126,8 +1193,8 @@ class pathMapClass() :
         self.dilateAmount            = dilateAmount/self.mapGridResolution
         self.wallSafetyDistance      = realPorterSize[0] / 2
         self.wallSafetyGridRadius    = int(math.ceil(self.wallSafetyDistance / self.mapGridResolution)*20)
-        self.cornerPenaltyWeight     = 10
-        self.cornerAngleWeight       = 10
+        self.cornerPenaltyWeight     = 100
+        self.cornerAngleWeight       = 100
         self.angleOffsetLookup       = { 0 : [0,-1,0],
                                     1 : [1,-1,45],
                                     2 : [1,0,90],
@@ -1137,6 +1204,15 @@ class pathMapClass() :
                                     6 : [-1,0,270],
                                     7 : [-1,-1,315],
                                   }
+        # self.angleOffsetLookup       = { 0 : [0,1,0],
+                                    # 1 : [1,1,45],
+                                    # 2 : [1,0,90],
+                                    # 3 : [1,-1,135],
+                                    # 4 : [0,-1,180],
+                                    # 5 : [-1,-1,225],
+                                    # 6 : [-1,0,270],
+                                    # 7 : [-1,1,315],
+                                  # }
         self.angleWeight       =    {         
                                         0 : 0,
                                         1 : 1,
@@ -1148,9 +1224,9 @@ class pathMapClass() :
                                         7 : 1,
                                     }
         self.pathMapLimits = {  "xMin" : 0,
-                                "xMax" : int(MAP_SIZE_PIXELS*self.scaleAdjust), # May have to flip this
+                                "xMax" : int(MAP_SIZE_PIXELS-1), # May have to flip this
                                 "yMin" : 0,
-                                "yMax" : int(MAP_SIZE_PIXELS*self.scaleAdjust),
+                                "yMax" : int(MAP_SIZE_PIXELS-1),
                 }                                
         with threadLock :        
             navMap                       = np.zeros([self.pathMapLimits["xMax"],self.pathMapLimits["yMax"]])
@@ -1207,27 +1283,58 @@ class pathMapClass() :
     
     
     
-    def updateMap(self, SLAMMap) :
+    def updateMap(self) :
         global threadLock
         global navMap
+        global SLAMObject
         
+        # Make array for SLAM map
+        mapbytes = bytearray(MAP_SIZE_PIXELS * MAP_SIZE_PIXELS)
+        # Get SLAM map
+        SLAMObject.getmap(mapbytes)
+        # Convert map into numpy array
+        SLAMMap = np.frombuffer(mapbytes, dtype='B')
+        SLAMMap.shape =  (-1,MAP_SIZE_PIXELS)
+
+        # Transform SLAMMap - threshold to get walls,reduce size,  dilate to expand walls for safety
+        # threshold to find all areas that are walls
+        _,tempMap = cv2.threshold(SLAMMap,126,255,cv2.THRESH_BINARY)
+        # Invert to make walls white for dilation
+        tempMap = cv2.bitwise_not(tempMap)
+        # Make kernal for dilation
+        kernel = np.ones((self.dilateAmount,self.dilateAmount),np.uint8)
+        # Dilate to give safety margin to walls
+        tempMap = cv2.dilate(tempMap, kernel)
+        # Convert walls back to black 
+        tempMap = cv2.bitwise_not(tempMap)
+        # Resize to make pathfinding quicker
+        # Rotate map
+        rows,cols = tempMap.shape
+        M = cv2.getRotationMatrix2D((cols/2,rows/2),90,1)
+        tempMap = cv2.warpAffine(tempMap,M,(cols,rows))
+        #tempPathMap = cv2.resize(tempMap, (self.pathMapLimits["xMax"],self.pathMapLimits["yMax"]))
+        #tempMap = cv2.transpose(tempMap)
+
         with threadLock :
-            navMap = cv2.dilate(cv2.threshold(cv2.resize(SLAMMap, [self.pathMapLimits["xMax"],self.pathMapLimits["yMax"]]),10,255,cv2.THRESH_BINARY), self.dilateAmount)
+            navMap = tempMap
     
     
     def getNeighbors(self, id, dest) :
-        file = open("getNeighbors.log","w")
+        file = open("getNeighbors.log","a+")
         file.write("New#########################" + "\n")
         edges = {}
         x = id[0]
         y = id[1]
         a = id[2]
+        file.write("id: " + str(id) + "\n")
         # Add links to same node at different angles
         # Distance from this square to the destination
         for aLink in range(0,8) :
             # Calc the new cell location
             nx = x + self.angleOffsetLookup[aLink][0]*self.mapGridResolution
             ny = y + self.angleOffsetLookup[aLink][1]*self.mapGridResolution
+            file.write("n: " + str((nx,ny)) + "\n")
+            file.write("n: " + str(self.isWall((nx,ny))) + "\n")
         
             if not self.isWall((nx,ny)) :
                 # Calc distance to goal
@@ -1249,18 +1356,18 @@ class pathMapClass() :
         # else :
             # return False
         print("isWall? ----------")
-        coord = (coord[0]/10,coord[0]/10)
+        coord = (coord[1],coord[0])
         print(coord)
         if coord[0] < self.pathMapLimits["xMin"] or coord[0] > self.pathMapLimits["xMax"] or coord[1] < self.pathMapLimits["yMin"] or coord[1] > self.pathMapLimits["yMax"] :
             print("failed boundary test")
             return True
         
         print(navMap[coord[0]][coord[1]])
-        if navMap[coord[0]][coord[1]] != 0 :
-            print("not equal to zero")
+        if navMap[coord[0]][coord[1]] < 127 :
+            print("valid")
             return True
  
-        print("valid")
+        print("not equal to zero")
         return False
         
     # Similar to lidar code
@@ -1411,6 +1518,15 @@ class simThreadBase(MultiThreadBase) :
                                     6 : [-1,0,270],
                                     7 : [-1,-1,315],
                                   }
+        # self.angleOffsetLookup       = { 0 : [0,1,0],
+                                    # 1 : [1,1,45],
+                                    # 2 : [1,0,90],
+                                    # 3 : [1,-1,135],
+                                    # 4 : [0,-1,180],
+                                    # 5 : [-1,-1,225],
+                                    # 6 : [-1,0,270],
+                                    # 7 : [-1,1,315],
+                                  # }
         
         
     def getLidar360(self) :
@@ -1461,7 +1577,7 @@ class simThreadBase(MultiThreadBase) :
         # Stop when within Xcm of final destination OR when travelled distance
         orientationPID = PID(0.05, 0.1, 0)
         orientationPID.SetPoint=0
-        orientationPID.setSampleTime(0.01)
+        orientationPID.setSampleTime(0.05)
         # maintain porterOrientation whilst moving
         atDest = False 
         atObstacle = False
@@ -1543,7 +1659,7 @@ class simThreadBase(MultiThreadBase) :
             #print()
             f.write("\terror: " + str(porterOrientationUnConst-desOrientation) + "\n")
             f.write("\terrorconstr: " + str(constrainAngle360(porterOrientationUnConst-desOrientation,180,-180)) + "\n")
-            orientationAdjust = constrainFloat(orientationPID.update(constrainAngle360(porterOrientationUnConst-desOrientation,180,-180)),0.1,-0.1)
+            orientationAdjust = constrainFloat(orientationPID.update(constrainAngle360(porterOrientationUnConst-desOrientation,180,-180)),1,-1)
             f.write("\torientationAdjust: " + str(orientationAdjust) + "\n")
             
             #print("adjustment: " + str(orientationAdjust))
@@ -1846,8 +1962,8 @@ class simThreadBase(MultiThreadBase) :
                 
                 #navPath.append(("moveStraight", getLength([lastKeyNode[0],lastKeyNode[1], previous[0],previous[1]])))
                 navPath.append(("moveTo", lastKeyNode))
-                navPath.append(("turn", constrainAngle360((previous[2]-current[2])*45,180,-180)))
-                #navPath.append(("turnTo", ())
+                #navPath.append(("turn", constrainAngle360((previous[2]-current[2])*45,180,-180)))
+                navPath.append(("turnTo", previous))
                 lastKeyNode = current
         navPath.append(("start", current))
         return list(reversed(navPath))
@@ -2452,24 +2568,30 @@ class navigationThread(simThreadBase):
         # Store lidar data
         #with threadLock :
         #    lidarMapStore = lidarMap  
-  
+          
+        #cv2.namedWindow("navMap", cv2.WINDOW_NORMAL)        # Create window with freedom of dimensions
         # Create pathMap
-        pathMapTemp = pathMapClass(realPorterSize[0])
+        pathMapTemp = pathMapClass(realPorterSize[0]*10)
         with threadLock :
             pathMap = pathMapTemp
         
         with threadLock :
-            SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
+            SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS)
             SLAMRunning = True
             lidarRun = "a"
             lidarReady = False
         
-        time.sleep(1)
+        time.sleep(5)
         
         #with threadLock : 
+        #    speedVector = [0,20]
+        
+        #time.sleep(10)
+        #with threadLock : 
         #    speedVector = [20,20]
-            
-        time.sleep(5)
+        
+        
+        #time.sleep(5)
         # Create a byte array to receive the computed maps
        # mapbytes = bytearray(MAP_SIZE_PIXELS * MAP_SIZE_PIXELS)
         
@@ -2479,7 +2601,23 @@ class navigationThread(simThreadBase):
         # Save map and trajectory as PGM file    
         #pgm_save('test1.pgm' , mapbytes, (MAP_SIZE_PIXELS, MAP_SIZE_PIXELS))
         # Path find and navigate to destination
-        self.goTo((600,600))
+        with threadLock :
+            dataMap.add((400,400))
+            
+            dataMap.add((800,400))
+            dataMap.add((810,400))
+            dataMap.add((790,400))
+            
+            
+            dataMap.add((400,800))
+            dataMap.add((400,820))
+            
+        self.goTo((900,600))
+        
+            
+            
+            
+        
         
         # Things you may want to do
         
@@ -2487,6 +2625,9 @@ class navigationThread(simThreadBase):
         #       lidarRun = "a"  
         #while not exitFlag :
         #    time.sleep(0.1)
+        #cv2.waitKey(1)
+        #cv2.destroyAllWindows()
+        #cv2.waitKey(1)
         print "done"
         
 if __name__ == "__main__" :
