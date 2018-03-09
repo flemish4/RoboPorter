@@ -14,13 +14,10 @@ import Queue
 import base64
 import copy
 import cv2
-import datetime
 import glob
 import json
 import math
-import multiprocessing
 import numpy as np
-import pickle
 import pyttsx
 import random 
 import serial
@@ -29,17 +26,6 @@ import struct
 import sys
 import threading
 import time
-
-#import zbar
-#import time
-from PIL import Image
-
-try:
-    import zbar
-except Exception as e:
-    print str(e)
-
-#from vpLib import *
 
 from sys import platform
 #if on linux, import functions for IMU and ip
@@ -62,35 +48,20 @@ import logging.handlers
 logging.basicConfig( format='%(asctime)s - (%(threadName)s) %(levelname)s: %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p',
                     level=logging.INFO) #change the logging level here to change the display verbosity
 
-try:
-    import vpLib
-except Exception as e:
-     logging.error("Cant import vpLib")
-
+                    
 ###---Global Variables-------------
 
 ##--Setup
 
 US_Enable = True
 Motor_Enable = True
-Cam_Enable = True
 Speech_Enable = True
 Debug_Enable = True
 
 ##--Motor Commands
-global lastCommand #holds the last command that was sent to the motor controllers
 global speedVector #demanded wheel speeds (left, right)
-global dataReady #boolean to let the threads know that data is ready to be sent to the motors
-global wheelSpeeds #measured wheel speeds
 
-
-lastCommand = ""
 speedVector = [0, 0]
-setSpeedVector = [0,0]
-
-
-dataReady = False
-
 
 ##-- MYSQL DB variables
 global connection
@@ -122,22 +93,10 @@ stoppingDistance = 15
 UShosts = 2
 maxSpeeds = [0, 0, 0, 0, 0, 0, 0, 0]
 
-##--Multi-Threading/Muti-processing
+##--Threading
 global threadLock #lock to be used when changing global variables
 threadLock = threading.Lock()
 threads = [] #Array holding information on the currently running threads
-processes = [] #Array holding information on the currently running Processes
-
-
-##--Auto Pilot
-global autoPilot #Boolean for turning on/off autopilot
-autoPilot = False #autopilot turned off
-global pidEnable
-pidEnable = False
-global avoidingObstacle
-avoidingObstacle = False
-global AHRSmode
-AHRSmode = "wheel"
 
 # Command Queue
 
@@ -148,38 +107,15 @@ global speedsqueue
 speedsqueue = Queue.Queue()
 
 # -Porter Localisation
-global porterLocation_Global #vector holding global location [x,y] in cm
-global porterLocation_Local #vector holding local location [x,y] in cm
+global porterLocation #vector holding global location [x,y] in cm
 global porterOrientation #angle from north (between -180,180) in degrees
-global targetDestination  #Target location in global coordinates in cm
-global distanceToGoal #Distance to goal in cm
-global porterLocation_IMU
-global roaming
-global localised
-localised = multiprocessing.Value("b", True)
-roaming = multiprocessing.Value("b", False)
-targetDestination = [0,0]
-#porterLocation_Global = [3250,3500]
-porterOrientation = multiprocessing.Value('d',0.0)  # from north heading (in degrees?)
-distanceToGoal = 0
-orientationIMU = multiprocessing.Value("d", 0.0)
-orientationWheels = multiprocessing.Value("d", 0.0)
+porterOrientation = 0  # from north heading (in degrees?)
 
 ##-System State Variables
-localCtrl = True #Local control = commands sent through SSH not TCP/IP
 sysRunning = False #
 cmdExpecting = False #
-#exitFlag = False #set exitFlag = True initiate system shutdown
 dataInput = "" #Data string from the user (SSH/TCP)
-exitFlag = multiprocessing.Value('b', False) #multiprocessing Exit flag (can be combined with the others)
-global motor_portAddr
-global US1_portAddr
-global US2_portAddr
-motor_portAddr = ""
-US1_portAddr = ""
-US2_portAddr = ""
-global h_scores
-h_scores = [0.,0.,0.,0.] 
+exitFlag = False # system shutdown command
 global system_status
 system_status = "AwaitingCommands"
 global motordata
@@ -194,10 +130,9 @@ global rightpulse
 
 def setExitFlag(status):
     global exitFlag
-    global exitFlag
-
-    exitFlag = status
-    exitFlag.value = status
+    global threadLock
+    with threadLock :
+        exitFlag = status
 
 ###---Class Definitions
 
@@ -207,66 +142,12 @@ class MultiThreadBase(threading.Thread): #Parent class for threading
         self.threadID = threadID #Thread number
         self.name = name #Readable thread name
 
-        #thread loop performance profiling
-        self.avgRuntime = 0. #loop average runtime
-        self.startTime = 0. #loop start time
-        self.endTime = 0. #loop end time
-        self.avgCounter = 0 #number of loops
-        self.loopProfilingInterval = 10 #loop averaging interval
-        self.profiling = False #profiling state. set true in to calculate run times globally.
-            #if you want to profile a single thread, change this in the child thread
-            #Note - the system will run much slower when profiling
-            #STILL NOT FULLY IMPLEMENTED. DO NOT SET TO TRUE
-
-    def loopStartFlag(self): #run at the start of the loop
-        self.startTime = time.localtime() #record the start time of the loop
-
-    def loopEndFlag(self):
-        self.startTime = time.localtime()
-
-    def loopRunTime(self):
-        self.avgRuntime += ((self.endTime - self.startTime) - self.avgRuntime) / self.loopProfilingInterval
-        self.avgCounter += 1
-
-        if self.avgCounter == self.loopProfilingInterval:
-            # print (self.name + " Avg loop Runtime - " + str(self.avgRuntime))
-            logging.debug("Avg loop Runtime - %s", str(self.avgRuntime))
-            self.avgCounter = 0
-
-        score = []
-
-        for i in range(0, 4):
-            if distScore[i] != 0:
-                score.append(self.alpha * envScore[i] + self.beta / distScore[i])
-            else:
-                score.append(self.alpha * envScore[i] + 1)
-
-        #NO MOMENTUM BONUS FOR NOW
-        # if len(self.pathmemory) != 0:
-        #     print("momentum bonus in the ", self.pathmemory[len(self.pathmemory) - 1], "direction")
-        #     score[self.pathmemory[len(self.pathmemory) - 1]] = score[self.pathmemory[
-        #         len(self.pathmemory) - 1]] + self.momentumBonus
-        # else:
-        #     print('start of run, no momentum bonus')
-
-        self.bestScoreIndex = score.index(max(score))
-
-        print("heuristic score is " + str(score))
-        print("max heuristic score is " + str(max(score)) + " and its at " + str( self.bestScoreIndex))
-
-        return score
 
 class debugThread(MultiThreadBase):
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
-        self.avgRuntime = 0.
-        self.startTime = 0.
-        self.endTime = 0.
-        self.avgCounter = 0
-        self.loopProfilingInterval = 10
-        self.profiling = False
         self.loopsdone = 0
         self.debugServer = False
         self.debugClient = False
@@ -274,9 +155,8 @@ class debugThread(MultiThreadBase):
 
     def run(self):
         logging.info("Starting %s", self.name)
-        while not exitFlag.value:#
+        while not exitFlag:
             debuginfo = 0 
-            self.loopStartFlag()
             if not self.debugServer:
                 self.runServer()
             if self.debugServer and not self.debugClient:
@@ -304,7 +184,8 @@ class debugThread(MultiThreadBase):
                         'Right Pulses' : str(rightpulse)
                     }
                 except:
-                    pass
+                    logging.warning("%s", str(e))
+                    
                 try:
                     datatosend = json.dumps(debuginfo)
                     self.clientConnection.send(datatosend)
@@ -314,7 +195,7 @@ class debugThread(MultiThreadBase):
                 except Exception as e:
                     logging.error("%s", str(e))
                     self.debugClient = False
-                    # individual thread states
+                    # REVISIT : individual thread states - andrew question?
                     # Program log? for debuging?
 
     def waitForClient(self):
@@ -365,48 +246,18 @@ class debugThread(MultiThreadBase):
             logging.debug("Sleeping...")
             time.sleep(5)
 
-    def logOverNetwork(self):
-        rootLogger = logging.getLogger('')
-        rootLogger.setLevel(logging.DEBUG)
-        socketHandler = logging.handlers.SocketHandler('localhost',
-                                                       logging.handlers.DEFAULT_TCP_LOGGING_PORT)
-        # # don't bother with a formatter, since a socket handler sends the event as
-        # # an unformatted pickle
-        rootLogger.addHandler(socketHandler)
-        #
-        # # Now, we can log to the root logger, or any other logger. First the root...
-        # logging.info('Jackdaws love my big sphinx of quartz.')
-        #
-        # # Now, define a couple of other loggers which might represent areas in your
-        # # application:
-        #
-        # logger1 = logging.getLogger('myapp.area1')
-        # logger2 = logging.getLogger('myapp.area2')
-        #
-        # logger1.debug('Quick zephyrs blow, vexing daft Jim.')
-        # logger1.info('How quickly daft jumping zebras vex.')
-        # logger2.warning('Jail zesty vixen who grabbed pay from quack.')
-        # logger2.error('The five boxing wizards jump quickly.')
-
+            
 class motorDataThread(MultiThreadBase):
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
-        self.actionState = 0
-        self.profiling = False
-        self.oldVector = [0, 0]
         self.hexData = True
-        self.lastRandomCode = "R"
         self.inputBuf = ""
-        self.pulses = ["",""]
-        self.obs = False
-        self.smoothBrake = True
          
     def run(self):
         global speedVector
         global threadLock
-        global dataReady
         global USConn1
         global obstruction
         global system_status
@@ -421,101 +272,55 @@ class motorDataThread(MultiThreadBase):
         global leftpulse
         global rightpulse
         
-        while not exitFlag.value:
-            self.loopStartFlag()
-         
+        def checkMotorConn(self) :
+            if MotorConn.closed:
+                try:
+                    logging.info("Trying to open serial port")
+                    MotorConn.open()
+                except Exception as e:
+                    logging.error("%s", str(e))
+                finally:
+                    logging.info("No Motor Comms... Looping back to listening mode")
+
+        # Loop until told to stop
+        while not exitFlag:
+            # Check that motor arduino connection is good
+            self.checkMotorConn()
+            # If the ultrasonic sensors have detected an obstruction
             if obstruction:
-                # if autoPilot and self.obs:
-                #     if lastSent != [0, 0]:  # ie still moving
-                #         # pause motion
-                #         logging.info("Obstacle Detected. Path needs to be recalculated")
-                #        
-                #         self.send_serial_data([0, 0])
-                #     # else:
-                #     #     while obstruction:
-                #     #         time.sleep(0.1)
-                #     #     
-                #     #     logging.info("Obstacle removed. Proceeding to destination")
-                #     #     self.send_serial_data(speedVector)
-                # elif autoPilot:
-                #     logging.info("autopilot command to motor")
-                #     if lastSent != [0, 0]:  # ie still moving
-                #         # pause motion
-                #         logging.info("Obstacle Detected. Waiting for it to go away")
-                #         self.send_serial_data([0, 0])
-                #     else:
-                #         while obstruction and autoPilot and not exitFlag.value:
-                #             time.sleep(0.1)
-                #         if not obstruction and autoPilot and not exitFlag.value:
-                #             
-                #             logging.info("Obstacle removed. Proceeding to destination")
-                #             self.send_serial_data(speedVector)
-                if safetyOn: #if not autopilot and the safety is on
+                if safetyOn: #if the safety is on
                     if lastSent != [0, 0]:
                         logging.debug("Setting Speed Vector")
                         with threadLock:
                             speedVector = [0, 0]
-                            dataReady = False
-                        self.send_serial_data(speedVector)
                 elif lastSent != speedVector: #otherwise...
                     logging.warning("Obstacle Detected But Safety OFF...") #give a warning, but dont do anything to stop
+                
+                try:
                     self.send_serial_data(speedVector)
-
+                except Exception as e:
+                    self.checkMotorConn()
+                    
             elif (speedVector != lastSent) or (last_time_sent >= 1):
                 last_time_sent = 0 
-                # (self.last_time_sent >= self.time_between_send)
                 print "Sending Data"
                 logging.debug("Data Ready")
                 logging.info("Data Ready")
                 try:
-                    if not safetyOn:
-                        try:
-                            logging.info("Trying to send data no safety")
-                            self.send_serial_data(speedVector)
-                        except Exception as e:
-                            logging.error("%s", str(e))
-                            if MotorConn.closed:
-                                try:
-                                    logging.info("Trying to open serial port")
-                                    MotorConn.open()
-                                except Exception as e:
-                                    logging.error("%s", str(e))
-                                finally:
-                                    logging.info("No Motor Comms... Looping back to listening mode")
-                        finally:
-                            if dataReady != False:
-                                with threadLock:
-                                    dataReady = False
-                    elif (safetyOn and not USConn1.closed):
-                        try:
-                            logging.info("Trying to send data")
-                            self.send_serial_data(speedVector)
-                        except Exception as e:
-                            logging.error("%s", str(e))
-                            if MotorConn.closed:
-                                try:
-                                    logging.info("Trying to open serial port")
-                                    MotorConn.open()
-                                except Exception as e:
-                                    logging.error("%s", str(e))
-                                finally:
-                                    logging.info("No Motor Comms... Looping back to listening mode")
-                        finally:
-                            if dataReady != False:
-                                with threadLock:
-                                    dataReady = False
+                    if safetyOn:
+                        logging.info("Trying to send data")
                     else:
-                        logging.info("No ultrasonic Comms... HALTING")
-                        if speedVector != [0, 0]:
-                            logging.debug("Reseting Speed Vector")
-                            with threadLock:
-                                speedVector = [0, 0]
-                                dataReady = False
+                        logging.info("Trying to send data no safety")
+                    
+                    try:
                         self.send_serial_data(speedVector)
+                    except Exception as e:
+                        self.checkMotorConn()
+                        
                 except Exception as e:
                     logging.error("%s", str(e))
             
-            #READ FROM ARDUINO?
+            # Read from arduino
             if MotorConn.inWaiting() > 0:
                 self.inputBuf = MotorConn.readline()
                 try:
@@ -584,8 +389,8 @@ class motorDataThread(MultiThreadBase):
             # print MotorConn.read(MotorConn.inWaiting())
         except Exception as e:
             logging.error("Sending to Motor failed - %s", str(e))
-            # self.actionState = 4
 
+            
 class usDataThread(MultiThreadBase):
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
@@ -597,13 +402,10 @@ class usDataThread(MultiThreadBase):
         self.inputBuf1 = ""
         self.inputBuf2 = ""
         self.errorCount = 0
-        self.profiling = False
 
-        self.usHistory = 0
-        self.medFiltSize = 5
 
     def getUSvector1(self):
-        while not exitFlag.value:
+        while not exitFlag:
             try:
                 self.inputBuf1 = USConn1.readline()
                 self.inputBuf1 = self.inputBuf1.rstrip(",\n")
@@ -613,7 +415,7 @@ class usDataThread(MultiThreadBase):
                 logging.error("%s", e)
 
     def getUSvector2(self):
-        while not exitFlag.value:
+        while not exitFlag:
             try:
                 self.inputBuf2 = USConn2.readline()
                 self.inputBuf2 = self.inputBuf2.rstrip(',\n')
@@ -654,7 +456,7 @@ class usDataThread(MultiThreadBase):
         getUS2.daemon = True
         getUS2.start()
 
-        while not exitFlag.value:
+        while not exitFlag:
             try:
                 self.mAverage(11)
                 self.getMaxSpeeds(USAvgDistances)
@@ -690,12 +492,6 @@ class usDataThread(MultiThreadBase):
 
             self.US_safety_interrupt()
 
-            if self.profiling:
-                time.sleep(0.1)
-                self.loopEndFlag()
-                self.loopRunTime()
-            else:
-                time.sleep(0.01) # change to vary frequency of US data interupts 
 
         logging.info("Exiting")
 
@@ -709,29 +505,25 @@ class usDataThread(MultiThreadBase):
             with threadLock:
                 for i in range(0, len(USAvgDistances)):
                     USAvgDistances[i] += (int(rawUSdata[i]) - USAvgDistances[i])/n
-                if self.profiling:
-                    print ("\t" + self.name + " Avg Vector - " + str(USAvgDistances))
           
         #print USAvgDistances
         #logging.info(USAvgDistances) 
 
     def US_safety_interrupt(self):
         global USAvgDistances
-        global lastCommand
-        global dataReady
         global obstruction
         global threadLock
         global usCaution
 
         if safetyOn:
             try:
-                if (speedVector[0]> 0 ) and (speedVector[1] > 0):
+                # If heading forwards - check front USs for obstruction
+                if (speedVector[0] >= 0 ) and (speedVector[1] >= 0):
                     if (int(USAvgDistances[2]) < USThresholds[0]) or (int(USAvgDistances[3]) < USThresholds[0]):
                         logging.warning("FRONT TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
                             with threadLock:
                                 obstruction = True
-                        lastCommand = "" 
                         print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[2])) + ", " + str(int(USAvgDistances[2])))
                     elif obstruction != False:
                         with threadLock:
@@ -743,13 +535,13 @@ class usDataThread(MultiThreadBase):
                     else:
                         usCaution = False
 
+                # If heading backwards - check backwards USs for obstruction
                 elif (speedVector[0] < 0) and (speedVector[1] < 0 ):
                     if (int(USAvgDistances[6]) < USThresholds[2]) or (int(USAvgDistances[7]) < USThresholds[2]):
                         logging.warning("BACK TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
                             with threadLock:
                                 obstruction = True
-                        lastCommand = "" 
                         print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[6])) + ", " + str(int(USAvgDistances[7])) )
                     elif obstruction != False:
                         with threadLock:
@@ -761,33 +553,29 @@ class usDataThread(MultiThreadBase):
                     else:
                         usCaution = False
 
+                # If heading left - check left USs for obstruction
                 elif (speedVector[0]< 0 ) and (speedVector[1] > 0):
                     if (int(USAvgDistances[0]) < USThresholds[1]) or (int(USAvgDistances[1]) < USThresholds[1]):
                         logging.warning("LEFT SIDE TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
                             with threadLock:
                                 obstruction = True
-                        lastCommand = "" 
                         print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[0])) + ", " + str(int(USAvgDistances[1])))
                     elif obstruction != False:
                         with threadLock:
                             obstruction = False
 
+                # If heading right - check right USs for obstruction
                 elif (speedVector[0] > 0) and (speedVector[1] < 0) :
                     if (int(USAvgDistances[5]) < USThresholds[1]) or (int(USAvgDistances[6]) < USThresholds[1]):
                         logging.warning("RIGHT SIDE TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
                             with threadLock:
                                 obstruction = True
-                        lastCommand = "" 
                         print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[5])) + ", " + str(int(USAvgDistances[6])))
                     elif obstruction != False:
                         with threadLock:
                             obstruction = False
-                
-                elif lastCommand == "x":
-                    with threadLock:
-                        obstruction = False
 
 
             except Exception as e:
@@ -801,7 +589,6 @@ class datafromUI(MultiThreadBase):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
-        self.actionState = 0
         self.RecieveServer = False
         self.clientconnect = False
 
@@ -837,7 +624,7 @@ class datafromUI(MultiThreadBase):
             # send welcome message
             print ("Sending welcome message...")
             self.clientConnection.send('Connection ack')
-            dataInput = self.clientConnection.recv(1024)
+            dataInput = self.clientConnection.recv(1024) # REVISIT : is dataInput meant to be a global variable? if so it should be using threadLock and should have 'global dataInput\nglobal threadLock' in the function... but it isn't used outside this class so maybe it should be local?
             print ("Client says - " + dataInput)
             dataInput = ""
             self.clientconnect = True
@@ -845,14 +632,13 @@ class datafromUI(MultiThreadBase):
             logging.error("%s", str(e))
 
     def run(self):
-        global lastCommand
         global sysRunning
         global safetyOn
         global exitFlag
         global threadLock
         global enduserloop
         logging.info("Starting %s", self.name)
-        while not exitFlag.value:
+        while not exitFlag:
             if not self.RecieveServer:
                 self.startServer()
             if self.RecieveServer and not self.clientconnect:
@@ -865,8 +651,6 @@ class datafromUI(MultiThreadBase):
                     dataInput = json.loads(dataInputTidied[0]) 
                     if (dataInput['Type'] == "MiscCommand"):
                         if dataInput['Command'] == "x":
-                            with threadLock:
-                                lastCommand = "x"
                             sysRunning = False
                             commandqueue.put("Close")
                         elif dataInput['Command'] == "s":
@@ -883,116 +667,16 @@ class datafromUI(MultiThreadBase):
                         with commandqueue.mutex:
                             commandqueue.queue.clear()
 
-                        # add code to end loops
+                        # add code to end loops # REVISIT : Is this not above?
 
                     elif(dataInput['Type'] == "UserSpeed"): # If the user sent a speed command it is added to the speed queue
                         print "UserSpeed"
                         speedsqueue.put(dataInput)
-                    else:
+                    else: # REVISIT : Perhaps validate here
                         commandqueue.put(dataInput)
                 except Exception as e:
                     logging.error("%s", str(e))
 
-                          
-                    # dataInput = self.clientConnection.recv(1024)
-                    # if (dataInput[0] == "f" or dataInput[0] == "b" or dataInput[0] == "r" \
-                    #             or dataInput[0] == "l" or dataInput[0] == "x" or dataInput[0] == "m") and not autoPilot: #simple commands
-                    #     logging.info("Valid Command")
-                    #     system_status = "Manual Control"
-                    #     with threadLock:
-                    #         lastCommand = dataInput[0]
-                    #         speedVector = cmdToSpeeds(dataInput)
-                    #         setSpeedVector = copy.deepcopy(speedVector)
-                    #         dataReady = True
-
-                    #         if lastCommand == "m":
-                    #             logging.info("MANUAL OVERRIDE!\n")
-
-                    # elif dataInput[0] == "s" and not autoPilot: #Toggle safety
-                    #     if safetyOn:
-                    #         safetyOn = False
-                    #     else:#if safety is off...turn it on
-                    #         safetyOn = True
-                    #     system_status = "Manual Control"
-                    #     dataInput = ""
-                    #     if dataReady != False:
-                    #         with threadLock:
-                    #             dataReady = False
-                    
-                    # elif dataInput == "q": #initiate system shutdown
-                    #     cmdExpecting = False
-                    #     sysRunning = False
-                    # else:
-                    #     if dataReady != False:
-                    #         with threadLock:
-                    #             dataReady = False
-                    #     logging.info("Invalid Command")    
-                # except:
-                #     print "Error" 
-
-def cmdToSpeeds(inputCommand): #convert commands to speed vectors for manual control
-    mSpeed = 0
-    validateBuffer = (0, 0)
-    LMax = 100
-    RMax = 100
-    LMin = -100
-    RMin = -100
-
-    if inputCommand[0] == "x":
-        return 0, 0
-    elif inputCommand[0] == "m":
-        inputCommand.rstrip("\n")
-        validateBuffer = str(inputCommand[1:len(inputCommand)]).split(",")
-        validateBuffer[0] = int(validateBuffer[0])
-        validateBuffer[1] = int(validateBuffer[1])
-
-        if validateBuffer[0] > LMax:
-            validateBuffer[0] = LMax
-        elif validateBuffer[0] < LMin:
-            validateBuffer[0] = LMin
-
-        if validateBuffer[1] > RMax:
-            validateBuffer[1] = RMax
-        elif validateBuffer[1] < RMin:
-            validateBuffer[1] = RMin
-
-        return validateBuffer
-
-    if len(inputCommand) > 1:
-        try:
-            inputCommand.rstrip("\n")
-            mSpeed = int(inputCommand[1:len(inputCommand)])
-        except Exception as e:
-            logging.error("%s", e)
-            mSpeed = 0
-    else:
-        mSpeed = 20
-
-    if inputCommand[0] == "f":
-        return mSpeed, mSpeed  # Left, Right
-    elif inputCommand[0] == "b":
-        return -mSpeed, -mSpeed
-        logging.info("Converted to Speed")
-    elif inputCommand[0] == "r":
-        return (mSpeed-5), -(mSpeed-5)
-    elif inputCommand[0] == "l":
-        return -(mSpeed-5), (mSpeed-5)
-
-def cmdToDestination(inputCommand):
-    #validateBuffer = [0,0]
-    print "input command is " + str(inputCommand)
-    if len(inputCommand) > 4:
-        try:
-            inputCommand.rstrip("\n")
-            validateBuffer = str(inputCommand[1:len(inputCommand)]).split(",")
-            print "valdate Buffer is " + str(validateBuffer)
-            return int(validateBuffer[0]), int(validateBuffer[1])
-        except Exception as e:
-            logging.error("%s", e)
-            return porterLocation_Global[0],porterLocation_Global[1]
-    else:
-        logging.error("Invalid destination format")
-        return porterLocation_Global[0],porterLocation_Global[1]
 
 # Sends Maps to the temporary table in the database
 def send_map(map_to_send):
@@ -1001,6 +685,7 @@ def send_map(map_to_send):
     query = "INSERT INTO temp (data) VALUES ('%s')" %img_string
     cursor.execute(query)
 
+    
 #Retrieve map from database
 def recieve_map(filename):
     query = "SELECT data FROM `%u` ORDER BY id DESC LIMIT 1" %filename
@@ -1023,13 +708,6 @@ if __name__ == '__main__':
     #Connect to map database
     connection = MySQLdb.connect(host='192.168.0.1',db='roboporter',user='admin',passwd='password', port=3306)
     cursor = connection.cursor()
-
-    multiprocessing.freeze_support()
-    mpManager = multiprocessing.Manager()
-    wheelSpeeds = mpManager.list([0, 0])
-    porterLocation_Global = mpManager.list([3250, 4600])  # set location to "undefined"
-    porterLocation_Local = mpManager.list([0, 0])
-    porterLocation_IMU = mpManager.list([0,0])
 
     logging.info("Starting system...")
     sysRunning = True
@@ -1164,29 +842,15 @@ if __name__ == '__main__':
             pass
 
     with threadLock:
-        lastCommand = "x"
         speedVector = [0, 0]
-        dataReady = True
 
-    #exitFlag.value = True #instruct all the threads to close
+    exitFlag.value = True #instruct all the threads to close
 
-    # if not localCtrl:
-    #     logging.info("Shutting down the server at %s...", HOST)
-    #     s.close()
-    # else:
-    #     logging.info("Shutting Down")
 
-    # logging.info("Waiting for threads to close...")
-    # for t in threads:
-    #     logging.info("Closing %s thread", t)
-    #     t.join()
-
-    # for p in processes:
-    #     logging.info("Closing %s process", p)
-    #     p.join()
-
-    # print "processes = " + str(processes)
-    # print "Threads = " + str(threads)
+    logging.info("Waiting for threads to close...")
+    for t in threads:
+        logging.info("Closing %s thread", t)
+        t.join()
 
     logging.info("Exiting main Thread... BYEEEE")
 
