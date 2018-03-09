@@ -84,6 +84,8 @@ global stoppingDistance
 global maxSpeeds
 global usCaution
 global sysRunning
+global SLAMMaxSpeed
+SLAMMaxSpeed = 1000000000 # REVISIT: Set max SLAM speed
 USAvgDistances = [0, 0, 0, 0, 0, 0, 0, 0]
 obstruction = False
 usCaution = False
@@ -114,7 +116,6 @@ porterOrientation = 0  # from north heading (in degrees?)
 ##-System State Variables
 sysRunning = False #
 cmdExpecting = False #
-dataInput = "" #Data string from the user (SSH/TCP)
 exitFlag = False # system shutdown command
 global system_status
 system_status = "AwaitingCommands"
@@ -254,7 +255,17 @@ class motorDataThread(MultiThreadBase):
         self.name = name
         self.hexData = True
         self.inputBuf = ""
-         
+     
+     def checkMotorConn(self) :
+        if MotorConn.closed:
+            try:
+                logging.info("Trying to open serial port")
+                MotorConn.open()
+            except Exception as e:
+                logging.error("%s", str(e))
+            finally:
+                logging.info("No Motor Comms... Looping back to listening mode")
+
     def run(self):
         global speedVector
         global threadLock
@@ -271,17 +282,7 @@ class motorDataThread(MultiThreadBase):
         logging.info("Starting %s", self.name)
         global leftpulse
         global rightpulse
-        
-        def checkMotorConn(self) :
-            if MotorConn.closed:
-                try:
-                    logging.info("Trying to open serial port")
-                    MotorConn.open()
-                except Exception as e:
-                    logging.error("%s", str(e))
-                finally:
-                    logging.info("No Motor Comms... Looping back to listening mode")
-
+   
         # Loop until told to stop
         while not exitFlag:
             # Check that motor arduino connection is good
@@ -356,6 +357,7 @@ class motorDataThread(MultiThreadBase):
 
     def send_serial_data(self, sendCommand):
         global lastSent
+        global threadLock
         #print "Sending Speed Vector"
         logging.info("Sending Speed Vector - %s", str(sendCommand))
         if self.hexData: #construct the command to be sent.
@@ -384,7 +386,8 @@ class motorDataThread(MultiThreadBase):
         try:
             MotorConn.write(sendData)
             logging.info("Successfully sent... - %s", str(sendData))
-            lastSent = sendCommand[:]
+            with threadLock :
+                lastSent = sendCommand[:]
             # time.sleep(10)
             # print MotorConn.read(MotorConn.inWaiting())
         except Exception as e:
@@ -427,15 +430,20 @@ class usDataThread(MultiThreadBase):
     def getMaxSpeeds(self,usData):
         global stoppingDistance
         global maxSpeeds
-
+        global threadLock
+        tempMaxSpeeds [0,0,0,0,0,0,0,0]
         #aMax = (2*np.pi*1000)/(60*0.12)
         aMax = 872.664626 # Calculated from line above which was supplied by a previous group 
         #radToRPM = 60/(2*np.pi)
         for i in range(0,len(usData)):
             if int(usData[i]) >= stoppingDistance:
-                maxSpeeds[i] = int(np.sqrt(aMax*(((usData[i]/100) -(stoppingDistance/100)))))
+                tempMaxSpeeds[i] = min(int(np.sqrt(aMax*(((usData[i]/100) -(stoppingDistance/100))))), SLAMMaxSpeed)
             else:
-                maxSpeeds[i] = 0
+                tempMaxSpeeds[i] = 0
+        
+        
+        with threadLock :
+            maxSpeeds = tempMaxSpeeds
         #print "max speeds = " + str(maxSpeeds)
 
     def run(self):
@@ -584,6 +592,7 @@ class usDataThread(MultiThreadBase):
         else:
             obstruction = False
 
+            
 class datafromUI(MultiThreadBase):
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
@@ -660,14 +669,14 @@ class datafromUI(MultiThreadBase):
                         with threadLock:
                             enduserloop = True
 
-                        # add code to end loops
+                        # add code to end loops # REVISIT : Is this not above?
 
 
                     elif dataInput['Type'] == "CancelEnterUserCommand": # When the user wants to enter a command immediatly it clears the queue. This is called straight before a switch to the User Control mode occurs
                         with commandqueue.mutex:
                             commandqueue.queue.clear()
 
-                        # add code to end loops # REVISIT : Is this not above?
+                        # add code to end loops 
 
                     elif(dataInput['Type'] == "UserSpeed"): # If the user sent a speed command it is added to the speed queue
                         print "UserSpeed"
@@ -747,7 +756,6 @@ if __name__ == '__main__':
     logging.info("Trying to connect to serial devices")
 
     if Motor_Enable: 
-        dataInput = "" #Reset the variable
         logging.info("Trying to connect to motor controller")
         try: #try to connect
             if (platform == "linux") or (platform == "linux2"):
@@ -769,7 +777,6 @@ if __name__ == '__main__':
 
     # Setup serial conn to US controller
     if US_Enable: 
-        dataInput = ""
         logging.info("Trying to connect to Ultrasonic controller")
         try:
             if (platform == "linux") or (platform == "linux2"):
