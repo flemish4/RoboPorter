@@ -256,7 +256,7 @@ class motorDataThread(MultiThreadBase):
         self.hexData = True
         self.inputBuf = ""
      
-     def checkMotorConn(self) :
+    def checkMotorConn(self) :
         if MotorConn.closed:
             try:
                 logging.info("Trying to open serial port")
