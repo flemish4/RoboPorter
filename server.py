@@ -187,6 +187,9 @@ motordata = 0
 
 enduserloop = False
 
+global leftpulse
+global rightpulse
+
 #lastSent = [0, 0]
 
 def setExitFlag(status):
@@ -296,10 +299,9 @@ class debugThread(MultiThreadBase):
                         'Safety ON':str(safetyOn), # Is the Safety On
                         'Debug Data Sent':str(self.loopsdone), # is a way of visually checking the debug is still updating. Will increment 1 each time an update is sent 
                         'System Status': str(system_status),
-                        'Battery': str("50")
-                        # 'Left Pulses' : str(motordata[1]),
-                        # 'Right Pulses' : str(motordata[2]),
-                        # 'Battery Current 1' : str(motordata[3])
+                        'Battery': str("50"),
+                        'Left Pulses' : str(leftpulse),
+                        'Right Pulses' : str(rightpulse)
                     }
                 except:
                     pass
@@ -416,6 +418,8 @@ class motorDataThread(MultiThreadBase):
         last_time_sent = 0
         global text_file
         logging.info("Starting %s", self.name)
+        global leftpulse
+        global rightpulse
         
         while not exitFlag.value:
             self.loopStartFlag()
@@ -522,6 +526,15 @@ class motorDataThread(MultiThreadBase):
                             self.inputBuf = self.inputBuf.rsplit(",")
                             with threadLock:
                                 motordata = self.inputBuf 
+                        except Exception as e:
+                            logging.error("%s", str(e))
+                    elif self.inputBuf[0] == "&":
+                        try:
+                            self.inputBuf = self.inputBuf.lstrip("&") 
+                            self.inputBuf = self.inputBuf.rsplit(",")
+                            with threadLock:
+                                leftpulse = self.inputBuf[0]
+                                rightpulse = self.inputBuf[1]
                         except Exception as e:
                             logging.error("%s", str(e))
                     elif self.inputBuf[0] == "%":

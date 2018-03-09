@@ -235,6 +235,8 @@ ISR (TIMER2_COMPA_vect) {
     // leftCountString = String(abs(leftSensorDistanceCount), HEX);
     // rightCountString = String(abs(rightSensorDistanceCount), HEX);
 
+  Serial.print(String("&")+String(leftSensorDistanceCount)+","+String(rightSensorDistanceCount)) ; 
+
 
 
     // if (leftSensorDistanceCount >= 0) {
@@ -254,7 +256,6 @@ ISR (TIMER2_COMPA_vect) {
     // Serial.println(rightCountString);
     // Serial.print(",") ;
 
-    // Serial.print(current1) ;
 
 
     leftSensorDistanceCount = 0;
