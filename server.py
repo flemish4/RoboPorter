@@ -2133,7 +2133,7 @@ if __name__ == '__main__':
 
             #Navigation Code Goes Here
             navigationObj = navigationClass(2)
-            navigationObj.run((currentCommand["X"], currerntCommand["Y"]))
+            navigationObj.run((currentCommand["X"], currentCommand["Y"]))
 
             with threadLock:
                 system_status = "AwaitingCommands"
