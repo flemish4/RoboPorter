@@ -510,6 +510,7 @@ class porterSim() :
         porterRect.move_ip(x,y)
         s.blit(porter, porterRect) 
     
+    
     def checkPorterCollision(self) :
         global realCollision 
         global realPorterLocation
@@ -522,6 +523,7 @@ class porterSim() :
                 realCollision = False
 
         return realCollision
+        
         
     def checkPorterObstruction(self) :
         global realObstruction
@@ -707,8 +709,7 @@ class porterSim() :
 
             with threadLock :
                 encoderVectorAbsready = False
-        
-
+       
      
     def runSLAM(self):
         global adjustedLidarList
@@ -748,7 +749,6 @@ class porterSim() :
             with open("runSLAM.log", 'a+') as f:
                 f.write(str(realPorterLocation) + "," + str((x,y)) + "," + str(porterLocation))
 
-            
      
     def drawLidarGrid(self) :
         global lidarMap
@@ -756,6 +756,7 @@ class porterSim() :
         with threadLock : 
             for point in lidarMap :
                 pygame.draw.circle(self.views["portermap"]["surface"], self.black, (point[0]/self.scale,point[1]/self.scale), 1)
+    
     
     def drawNavMap(self) :
         global navMap
@@ -783,6 +784,7 @@ class porterSim() :
         imS = cv2.resize(tempMap, (900, 900)) 
         cv2.imshow('navMap', imS)
         cv2.waitKey(1)
+    
     
     def drawDataMap(self) :
         global dataMap
@@ -905,7 +907,8 @@ class porterSim() :
                     wheelError-=5
                 elif e.key == pygame.K_e:
                     wheelError=0
-                        
+           
+           
     def realMovePorter(self) :
         # May not need all of these
         global realPorterLocation
@@ -966,10 +969,7 @@ class porterSim() :
                 with threadLock :
                     wheelSpeeds = [0,0]
                     realWheelSpeeds = [0,0]
-                    
-
-
-                    
+                                
                     
     def runSim(self, e) :
         global porterLocation 
@@ -1284,6 +1284,7 @@ class pathMapClass() :
 
         return edges
         
+        
     def isWall(self, coord) :
         global navMap
         #print("isWall? ----------")
@@ -1300,6 +1301,7 @@ class pathMapClass() :
  
         #print("not equal to zero")
         return False
+        
         
     # Similar to lidar code
     # Check every cell along line given starting point, distance and angle
@@ -1325,6 +1327,7 @@ class pathMapClass() :
                 
         # After scanning all points the line must be valid
         return True
+        
         
     def getDataMap(self) :
         return self.wallMap
@@ -1434,9 +1437,6 @@ class PID:
 class simThreadBase(MultiThreadBase) :
     
     def __init__(self, threadID, name, simFrameTime, scale, pixelPorterSize):
-        threading.Thread.__init__(self)
-        self.threadID = threadID
-        self.name = name
         self.simFrameTime = simFrameTime
         self.scale = scale
         self.pixelPorterSize = pixelPorterSize
@@ -2020,6 +2020,7 @@ class mappingThread(simThreadBase):
             
         return keyPointTuples
     
+    
     def sortLocations(self, locations) :
         distances = []
         for location in locations :
@@ -2028,7 +2029,7 @@ class mappingThread(simThreadBase):
         
         return [loc for _, loc in sorted(zip(distances,locations), key=lambda pair: pair[0])]
 
-    
+   
     def run(self):   
         # May not need all of these
         global USAvgDistances
@@ -2092,7 +2093,6 @@ class mappingThread(simThreadBase):
         cv2.destroyAllWindows()
         cv2.waitKey(1)
         print "done"
-
 
     
 class navigationThread(simThreadBase):

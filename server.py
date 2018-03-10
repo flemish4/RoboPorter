@@ -26,6 +26,8 @@ import struct
 import sys
 import threading
 import time
+from breezyslam.algorithms import RMHC_SLAM
+from roboPorterTestFunctions import roboPorterLaser
 
 from sys import platform
 #if on linux, import functions for IMU and ip
@@ -57,7 +59,7 @@ US_Enable = True
 Motor_Enable = True
 Speech_Enable = True
 Debug_Enable = True
-
+Lidar_Enable = True
 ##--Motor Commands
 global speedVector #demanded wheel speeds (left, right)
 
@@ -71,6 +73,7 @@ global cursor
 global MotorConn #serial handle for the motor controller
 global USConn1 #serial handle for the Ultrasonic controller 1
 global USConn2 #serial handle for the Ultrasonic controller 2
+global lidarConn
 
 ##--Safety
 global safetyOn #Boolean for the state of the safety toggle (used only in manual control)
@@ -127,6 +130,65 @@ enduserloop = False
 global leftpulse
 global rightpulse
 
+
+# Lidar
+global numSamples
+numSamples = 237
+
+# Slam
+global runSLAM
+runSLAM = 237
+
+global lidarMap
+global realPorterSize
+global realPorterRadius
+global navMap
+global totalR
+global totalWd
+global encoderVectorAbs
+global encoderVectorAbsReady
+global lidarPolarList
+global adjustedLidarStore
+global adjustedLidarList
+global adjustedLidarListReady
+global SLAMObject
+global SLAMRunning
+global SLAMOffset
+global SLAMSimOffset
+global pathMap
+global MAP_SIZE_METERS
+global MAP_SIZE_PIXELS        
+global globalWd
+global dxy
+global angle_delta
+global detailedMap
+global pixelPorterSize
+angle_delta = 1
+globalWd = 0
+dxy = 0
+MAP_SIZE_METERS          = 25 # 32
+MAP_SIZE_PIXELS          = MAP_SIZE_METERS * 50 #800
+SLAMOffset = (1250,1250)
+SLAMSimOffset = (0,0)
+SLAMRunning = False
+adjustedLidarStore = []
+adjustedLidarList = []
+adjustedLidarListReady = False
+encoderVectorAbs = (0,0)
+encoderVectorAbsReady = False
+lidarPolarList = []
+navMap = np.zeros(SLAMOffset)
+detailedMap = np.zeros(SLAMOffset)
+totalR          = 0
+totalWd          = 0
+pathMap             = {}
+lidarRun            = ""
+realPorterSize      = (73,70)
+realPorterRadius    = math.sqrt(realPorterSize[0]**2+realPorterSize[1]**2)
+realPorterWheelOffsetY = realPorterSize[1]/4
+pixelPorterSize    = (realPorterSize[0]/2,realPorterSize[1]/2)
+
+
 #lastSent = [0, 0]
 
 def setExitFlag(status):
@@ -135,7 +197,49 @@ def setExitFlag(status):
     with threadLock :
         exitFlag = status
 
-###---Class Definitions
+        
+# Functions
+def constrainAngle360(angle, max, min) : # Library export
+    while angle >= max :
+        angle -= 360
+    while angle < min :
+        angle += 360
+    return angle
+  
+        
+def constrainFloat(d, max, min) :
+    if d >= max :
+        return max
+    if d < min :
+        return min
+    return d
+
+
+def roundBase(x, base):
+    return int(base * round(float(x)/base))
+
+        
+# Returns length of line given in format [x0, y0, x1, y1]
+def getLength(line) :
+    return math.sqrt((line[2]-line[0])**2+(line[3]-line[1])**2)   
+    
+    
+# Returns length^2 of line given in format [x0, y0, x1, y1]
+def getLengthSquared(line) : 
+    return (line[2]-line[0])**2+(line[3]-line[1])**2
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+###--- Thread defininitions
 
 class MultiThreadBase(threading.Thread): #Parent class for threading
     def __init__(self, threadID, name): #Class constructor
@@ -393,7 +497,7 @@ class motorDataThread(MultiThreadBase):
         except Exception as e:
             logging.error("Sending to Motor failed - %s", str(e))
 
-            
+        
 class usDataThread(MultiThreadBase):
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
@@ -686,7 +790,1155 @@ class datafromUI(MultiThreadBase):
                 except Exception as e:
                     logging.error("%s", str(e))
 
+            
+class lidarInterfaceThread(MultiThreadBase):
+    def __init__(self, threadID, name):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        self.sAngle  = 360 / numSamples
+        self.currentAngle  = 0
+         
+    def checkLidarConn(self) :
+        if lidarConn.closed:
+            try:
+                logging.info("Trying to open lidar port")
+                lidarConn.open()
+            except Exception as e:
+                logging.error("%s", str(e))
+            finally:
+                logging.info("No lidarConn Comms... Looping back to listening mode")
 
+    def run(self) :
+        global lidarRun
+        global threadLock
+        
+        self.currentAngle = 0
+        
+         # Loop until told to stop
+        while not exitFlag:
+            # Enact any user requests
+            if lidarRun == "a" :                
+                with threadLock :
+                    lidarRun = ""
+                try :
+                    LIDARConn.write("4\n") # run continuous
+                except Exception as e :
+                    logging.error("%s", str(e))
+                    self.checkLidarConn()
+            elif lidarRun == "s" :                
+                with threadLock :
+                    lidarRun = ""
+                try :
+                    LIDARConn.write("1\n") # stop!
+                except Exception as e :
+                    logging.error("%s", str(e))
+                    self.checkLidarConn()
+
+            # Read data from lidar 
+            input = LIDARConn.readline()[:-2]
+            if input == "$" :
+                logging.debug("First sample of LIDAR recieved")
+                self.currentAngle = 0
+            else :
+                # Attempt to convert to float - else set to 0
+                try :
+                    r = float(input)
+                except Exception as e:
+                    r = 0
+                    logging.warning("Invalid lidar sample ignored")
+                    
+                lidarPolarList.append({"angle": self.currentAngle, "dist" : r })
+                self.currentAngle += self.sAngle
+                
+            time.sleep(0.001)
+
+        # Turn off lidar on shutdown
+        try :
+            LIDARConn.write("4\n") # run continuous
+        except Exception as e :
+            logging.error("%s", str(e))
+            self.checkLidarConn()
+                    
+  
+class SLAMThread(MultiThreadBase):
+    def __init__(self, threadID, name):
+        threading.Thread.__init__(self)
+        self.threadID = threadID
+        self.name = name
+        
+    # REVISIT : THIS WILL NOT WORK - NEEDS UPDATING FOR REAL PORTER
+    def calculatePorterPosition(self) :
+        global porterLocation
+        global porterOrientation
+        global porterOrientationUnConst
+        global porterImuOrientation
+        global wheelSpeeds
+        global threadLock
+        global dataMap
+        global totalR
+        global totalWd
+        global encoderVectorAbs
+        global encoderVectorAbsReady
+        return ########################################################################################
+        encoderVectorAbsReady = True
+        if not realCollision :
+            if wheelSpeeds != [0,0] :                
+                leftDelta  = self.simFrameTime * wheelSpeeds[0]
+                rightDelta = self.simFrameTime * wheelSpeeds[1]
+                totalR += (leftDelta + rightDelta)
+                orientation = math.radians(porterOrientation - 90)
+                orientationUnconst = math.radians(porterOrientationUnConst - 90)
+                #orientation = math.radians(realPorterOrientation - 90)
+                x   = porterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)
+                y   = porterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)
+                #with threadLock :
+                #    dataMap.add((int(round(x)),int(round(y))))
+
+                if (math.fabs(leftDelta - rightDelta) < 1.0e-6) : # basically going straight
+                    new_x = x + leftDelta * math.cos(orientation);
+                    new_y = y + rightDelta * math.sin(orientation);
+                    new_heading = orientation;
+                    new_headingUnConst = orientationUnconst;
+                else :
+                    R = pixelPorterSize[0] * (leftDelta + rightDelta) / (2 * (rightDelta - leftDelta))
+                    wd = (rightDelta - leftDelta) / pixelPorterSize[0] ;
+                    new_x = x + R * math.sin(wd + orientation) - R * math.sin(orientation);
+                    new_y = y - R * math.cos(wd + orientation) + R * math.cos(orientation);
+                    
+                    totalWd += wd/ self.scale
+                    new_heading = orientation + wd/ self.scale;
+                    new_headingUnConst = orientationUnconst + wd/ self.scale;
+                
+                with threadLock :
+                    encoderVectorAbs = (new_x - x, new_y -y)
+
+                    porterLocation = (new_x + realPorterWheelOffsetY*math.cos(orientation),new_y + realPorterWheelOffsetY*math.sin(orientation))
+                    porterOrientation = (math.degrees(new_heading) + 90)*0.5 + porterImuOrientation*0.5
+                    porterOrientationUnConst = (math.degrees(new_headingUnConst) + 90) # + porterImuOrientation*0.5
+                    porterOrientation = constrainAngle360(porterOrientation, 180, -180)
+
+    # REVISIT : encoderVectorAbs needs to be created, work out real rotation times of lidar, 
+    def adjustLidar(self) :
+        global encoderVectorAbs
+        global encoderVectorAbsReady
+        global lidarPolarList
+        global adjustedLidarStore
+        global adjustedLidarList
+        global adjustedLidarListReady
+        global dataMap
+        if encoderVectorAbsReady and len(lidarPolarList) > 0 : # this should always be true at this point in simulation
+            # allows lidar to continue getting data during this function
+            with threadLock :
+                lidarData = list(lidarPolarList)
+                lidarPolarList = []
+        
+            # REVISIT : use actual time values in the real porter although it shouldn't generally make much difference...
+            sampleTime = self.simFrameTime / len(lidarData)
+            sampleTimeFraction = sampleTime / self.simFrameTime
+            distFraction = (encoderVectorAbs[0]*sampleTimeFraction,encoderVectorAbs[1]*sampleTimeFraction)
+            
+            for i, sample in enumerate(lidarData) :
+                # do calculations else if sample is end sample then push all stored calculated values into output and set ready 
+                if sample != "END" :
+                    # convert coordinate to x y 
+                    sampleXY = (sample["dist"]*math.cos(math.radians(sample["angle"]-90)),sample["dist"]*math.sin(math.radians(sample["angle"]-90)))
+                    # add motion i*distFraction
+                    j = len(lidarData) - i # adjust samples to current position
+                    #sampleXY = (sampleXY[0]+distFraction[0]*j,sampleXY[1]+distFraction[1]*j)
+                    #dataMap.add((int(sampleXY[0]+porterLocation[0]), int(sampleXY[1]+porterLocation[1])))
+                    # convert back to polar # REVISIT : ew square root
+                    r = math.sqrt(sampleXY[0]**2 + sampleXY[1]**2)
+                    # save to store
+                    adjustedLidarStore.append(r*10)
+                else : 
+                    with threadLock :
+                        #dataMap = set()
+                        adjustedLidarList = adjustedLidarStore[-self.lidarTotalNSamples-1:]
+                        #with open("adjustLidar.log","a+") as f:
+                        #    f.write("new\n" + str(adjustedLidarList) + "\n" + str(adjustedLidarStore)+"\n")
+                        adjustedLidarStore = []
+                        adjustedLidarListReady = True
+            
+
+            with threadLock :
+                encoderVectorAbsready = False
+
+                    
+    def run(self) :
+        global adjustedLidarList
+        global adjustedLidarListReady
+        global SLAMObject
+        global SLAMRunning
+        global porterLocation
+        global porterOrientation
+        global porterOrientationUnConst
+        global threadLock
+        global SLAMRunning
+        global runSLAM
+        global pathMap
+        
+        while not exitFlag :
+            if runSLAM == "start" :
+                with threadLock :
+                    SLAMRunning = True
+                    runSLAM = ""
+            elif runSLAM == "stop" :
+                with threadLock :
+                    SLAMRunning = False
+                    runSLAM = ""
+                  
+            if SLAMRunning :      
+                self.calculatePorterPosition()
+                self.adjustLidar()
+                if adjustedLidarListReady:
+                    SLAMObject.update(adjustedLidarList) #, (dxy*20, globalWd, 0.015 ))
+                    
+                    # update position
+                    with threadLock: 
+                        x, y, newPorterOrientation = SLAMObject.getpos()
+                        newPorterOrientation = constrainAngle360(newPorterOrientation, 180, -180)
+                        dOrientation         = constrainAngle360(newPorterOrientation-porterOrientation, 180, -180)
+                        porterOrientationUnConst += dOrientation
+                        porterOrientation = newPorterOrientation
+                        xSim =  y/20
+                        ySim =  SLAMOffset[0] - x/20
+                        porterLocation = (xSim,ySim)
+                        adjustedLidarListReady = False
+
+                    pathMap.updateMap()
+    
+# Class definitions 
+
+
+class pathMapClass() :
+    def __init__(self, dilateAmount) :
+        global realPorterSize
+        global threadLock
+        global navMap
+        global MAP_SIZE_PIXELS
+        self.wallMap = set()
+        self.SLAMScale               = 2 # 2
+        self.mapGridResolution       = 10 #10 #cm how far apart are the grid nodes
+        self.scaleAdjust             = float(self.SLAMScale)/self.mapGridResolution # 2/10 = 0.2 * the number of pixels
+        self.dilateAmount            = dilateAmount
+        self.wallSafetyDistance      = realPorterSize[0] / 2
+        self.wallSafetyGridRadius    = int(math.ceil(self.wallSafetyDistance / self.mapGridResolution)*20)
+        self.cornerPenaltyWeight     = 100
+        self.cornerAngleWeight       = 100
+        self.angleOffsetLookup       = { 0 : [0,-1,0],
+                                    1 : [1,-1,45],
+                                    2 : [1,0,90],
+                                    3 : [1,1,135],
+                                    4 : [0,1,180],
+                                    5 : [-1,1,225],
+                                    6 : [-1,0,270],
+                                    7 : [-1,-1,315],
+                                  }
+        self.angleWeight       =    {         
+                                        0 : 0,
+                                        1 : 1,
+                                        2 : 2,
+                                        3 : 3,
+                                        4 : 4,
+                                        5 : 3,
+                                        6 : 2,
+                                        7 : 1,
+                                    }
+        self.pathMapLimits = {  "xMin" : 0,
+                                "xMax" : int(MAP_SIZE_PIXELS-1), # May have to flip this
+                                "yMin" : 0,
+                                "yMax" : int(MAP_SIZE_PIXELS-1),
+                }                                
+        with threadLock :        
+            navMap                       = np.zeros([self.pathMapLimits["xMax"],self.pathMapLimits["yMax"]])
+    
+    
+    def updateMap(self) :
+        global threadLock
+        global navMap
+        global detailedMap
+        global SLAMObject
+        
+        # Make array for SLAM map
+        mapbytes = bytearray(MAP_SIZE_PIXELS * MAP_SIZE_PIXELS)
+        # Get SLAM map
+        SLAMObject.getmap(mapbytes)
+        # Convert map into numpy array
+        SLAMMap = np.frombuffer(mapbytes, dtype='B')
+        SLAMMap.shape =  (-1,MAP_SIZE_PIXELS)
+
+        # Transform SLAMMap - threshold to get walls,reduce size,  dilate to expand walls for safety
+        # threshold to find all areas that are walls
+        _,tempMap = cv2.threshold(SLAMMap,126,255,cv2.THRESH_BINARY)
+        # Invert to make walls white for dilation
+        tempMap = cv2.bitwise_not(tempMap)
+        # Make kernal for dilation
+        kernel = np.ones((self.dilateAmount,self.dilateAmount),np.uint8)
+        # Dilate to give safety margin to walls
+        tempMap = cv2.dilate(tempMap, kernel)
+        # Convert walls back to black 
+        tempMap = cv2.bitwise_not(tempMap)
+        # Resize to make pathfinding quicker
+        # Rotate map
+        rows,cols = tempMap.shape
+        M = cv2.getRotationMatrix2D((cols/2,rows/2),90,1)
+        tempMap = cv2.warpAffine(tempMap,M,(cols,rows))
+        rows,cols = SLAMMap.shape
+        M = cv2.getRotationMatrix2D((cols/2,rows/2),90,1)
+        SLAMMap = cv2.warpAffine(SLAMMap,M,(cols,rows))
+        #tempPathMap = cv2.resize(tempMap, (self.pathMapLimits["xMax"],self.pathMapLimits["yMax"]))
+        #tempMap = cv2.transpose(tempMap)
+
+        with threadLock :
+            navMap = tempMap
+            detailedMap = SLAMMap
+    
+    
+    def getNeighbors(self, id, dest) :
+        file = open("getNeighbors.log","a+")
+        file.write("New#########################" + "\n")
+        edges = {}
+        x = id[0]
+        y = id[1]
+        a = id[2]
+        file.write("id: " + str(id) + "\n")
+        # Add links to same node at different angles
+        # Distance from this square to the destination
+        for aLink in range(0,8) :
+            # Calc the new cell location
+            nx = x + self.angleOffsetLookup[aLink][0]*self.mapGridResolution
+            ny = y + self.angleOffsetLookup[aLink][1]*self.mapGridResolution
+            file.write("n: " + str((nx,ny)) + "\n")
+            file.write("n: " + str(self.isWall((nx,ny))) + "\n")
+        
+            if not self.isWall((nx,ny)) :
+                # Calc distance to goal
+                dist = getLengthSquared([dest[0],dest[1],nx,ny]) # math.sqrt(( dest[0] - nx )**2 + ( dest[1] - ny )**2)
+                # Calc distance between the two cells (weight)
+                weight = (abs(self.angleOffsetLookup[aLink][0])+abs(self.angleOffsetLookup[aLink][1]))*self.mapGridResolution #math.sqrt(( x - nx )**2 + ( y - ny )**2)
+                if aLink != a :
+                    weight += self.cornerPenaltyWeight + self.angleWeight[abs(aLink-a)]*self.cornerAngleWeight
+
+                edges[(nx, ny, aLink)] = {  "weight"     : weight,
+                                        "distToGoal" : dist}
+
+        return edges
+        
+        
+    def isWall(self, coord) :
+        global navMap
+        #print("isWall? ----------")
+        coord = (coord[1],coord[0])
+        #print(coord)
+        if coord[0] < self.pathMapLimits["xMin"] or coord[0] > self.pathMapLimits["xMax"] or coord[1] < self.pathMapLimits["yMin"] or coord[1] > self.pathMapLimits["yMax"] :
+            print("failed boundary test")
+            return True
+        
+        #print(navMap[coord[0]][coord[1]])
+        if navMap[coord[0]][coord[1]] < 127 :
+            #print("valid")
+            return True
+ 
+        #print("not equal to zero")
+        return False
+        
+        
+    # Similar to lidar code
+    # Check every cell along line given starting point, distance and angle
+    # Return true if there is no collsion or false if collision is detected
+    def checkLine(self, x0, y0, dist, angle) :
+        # Generate a list of points on line going from centre of porter out at angle given
+        linePoints = list()
+        # Absolute angle
+        a = constrainAngle360(angle, 360,0)
+        # End points of line 
+        xMax = x0 + int(round(dist*math.cos(math.radians(a))))
+        yMax = y0 + int(round(dist*math.sin(math.radians(a))))
+        # List of points along line
+        linePoints = list(bresenham(x0,y0,xMax, yMax))
+        linePoints = [(roundBase(point[0],self.mapGridResolution),roundBase(point[1],self.mapGridResolution)) for point in linePoints]
+        linePoints = set(linePoints)
+
+        # Find collision location
+        for point in linePoints :
+            if self.isWall(point) :
+                # If there os a collision then the line is not valid
+                return False
+                
+        # After scanning all points the line must be valid
+        return True
+        
+        
+    def getDataMap(self) :
+        return self.wallMap
+
+
+# https://github.com/ivmech/ivPID/blob/master/PID.py
+class PID:
+    """PID Controller
+    """
+
+    def __init__(self, P=0.2, I=0.0, D=0.0):
+
+        self.Kp = P
+        self.Ki = I
+        self.Kd = D
+
+        self.sample_time = 0.00
+        self.current_time = time.time()
+        self.last_time = self.current_time
+
+        self.clear()
+
+    def clear(self):
+        """Clears PID computations and coefficients"""
+        self.SetPoint = 0.0
+
+        self.PTerm = 0.0
+        self.ITerm = 0.0
+        self.DTerm = 0.0
+        self.last_error = 0.0
+
+        # Windup Guard
+        self.int_error = 0.0
+        self.windup_guard = 20.0
+
+        self.output = 0.0
+
+    def update(self, feedback_value):
+        """Calculates PID value for given reference feedback
+        .. math::
+            u(t) = K_p e(t) + K_i \int_{0}^{t} e(t)dt + K_d {de}/{dt}
+        .. figure:: images/pid_1.png
+           :align:   center
+           Test PID with Kp=1.2, Ki=1, Kd=0.001 (test_pid.py)
+        """
+        error = self.SetPoint - feedback_value
+        if error < 180 :
+            error = error
+        else :
+            error = error - 360
+
+        self.current_time = time.time()
+        delta_time = self.current_time - self.last_time
+        delta_error = error - self.last_error
+
+        if (delta_time >= self.sample_time):
+            self.PTerm = self.Kp * error
+            self.ITerm += error * delta_time
+
+            if (self.ITerm < -self.windup_guard):
+                self.ITerm = -self.windup_guard
+            elif (self.ITerm > self.windup_guard):
+                self.ITerm = self.windup_guard
+
+            self.DTerm = 0.0
+            if delta_time > 0:
+                self.DTerm = delta_error / delta_time
+
+            # Remember last time and last error for next calculation
+            self.last_time = self.current_time
+            self.last_error = error
+
+            self.output = self.PTerm + (self.Ki * self.ITerm) + (self.Kd * self.DTerm)
+            return self.output
+
+    def setKp(self, proportional_gain):
+        """Determines how aggressively the PID reacts to the current error with setting Proportional Gain"""
+        self.Kp = proportional_gain
+
+    def setKi(self, integral_gain):
+        """Determines how aggressively the PID reacts to the current error with setting Integral Gain"""
+        self.Ki = integral_gain
+
+    def setKd(self, derivative_gain):
+        """Determines how aggressively the PID reacts to the current error with setting Derivative Gain"""
+        self.Kd = derivative_gain
+
+    def setWindup(self, windup):
+        """Integral windup, also known as integrator windup or reset windup,
+        refers to the situation in a PID feedback controller where
+        a large change in setpoint occurs (say a positive change)
+        and the integral terms accumulates a significant error
+        during the rise (windup), thus overshooting and continuing
+        to increase as this accumulated error is unwound
+        (offset by errors in the other direction).
+        The specific problem is the excess overshooting.
+        """
+        self.windup_guard = windup
+
+    def setSampleTime(self, sample_time):
+        """PID that should be updated at a regular interval.
+        Based on a pre-determined sampe time, the PID decides if it should compute or return immediately.
+        """
+        self.sample_time = sample_time
+
+                    
+class controlClass() :
+    
+    def __init__(self, scale):
+        self.scale = scale
+        self.angleOffsetLookup       = { 0 : [0,-1,0],
+                                    1 : [1,-1,45],
+                                    2 : [1,0,90],
+                                    3 : [1,1,135],
+                                    4 : [0,1,180],
+                                    5 : [-1,1,225],
+                                    6 : [-1,0,270],
+                                    7 : [-1,-1,315],
+                                  }
+        # self.angleOffsetLookup       = { 0 : [0,1,0],
+                                    # 1 : [1,1,45],
+                                    # 2 : [1,0,90],
+                                    # 3 : [1,-1,135],
+                                    # 4 : [0,-1,180],
+                                    # 5 : [-1,-1,225],
+                                    # 6 : [-1,0,270],
+                                    # 7 : [-1,1,315],
+                                  # }
+        
+        
+    def getLidar360(self) :
+        global lidarReady
+        global threadLock
+        global lidarRun
+        global lidarReady
+        global exitFlag
+        
+        while (not lidarReady) and (not exitFlag):
+            time.sleep(0.1)
+
+        with threadLock :
+            lidarRun = "a"
+            lidarReady = False
+                
+        while (not lidarReady) and (not exitFlag):
+            time.sleep(0.1)
+
+    # REVISIT : this will need modification and mods elsewhere as this is not how it usually works
+    def getMaxSpeeds(self) :
+        return [20,20]
+        # REVISIT : STUB
+
+    def getDesOrientation(self, start, end) :
+        #print("getDesOrient: start: " + str(start) + ", end: " + str(end))
+        #print("orientation: " + str(constrainAngle360(-90-math.degrees(math.atan2(end[1] - start[1], end[0] - start[0])), 180, -180)))
+        return +90+math.degrees(math.atan2(end[1] - start[1], end[0] - start[0]))
+        
+        
+    # Maintains the orientation using a PID loop and moves a distance in that direction
+    # REVISIT : Could add adjustment to heading if off course
+    def moveStraight(self, distance) :
+        global porterLocation
+        global porterOrientation
+        global porterOrientationUnConst
+        global speedVector
+        global exitFlag
+        global threadLock
+        
+        origLocation = porterLocation
+        desOrientation = porterOrientation
+        # desLocation = [porterLocation[0] - distance * math.cos(math.radians(desOrientation+90)),
+                             # porterLocation[1] - distance * math.sin(math.radians(desOrientation+90))]
+
+        # orientation is critical as any error will severely affect navigation
+        # A PID loop will be used to adjust the speedVector to keep the orientation consistent
+        # Stop when within Xcm of final destination OR when travelled distance
+        orientationPID = PID(0.05, 0.1, 0)
+        orientationPID.SetPoint=0
+        orientationPID.setSampleTime(0.05)
+        # maintain porterOrientation whilst moving
+        atDest = False 
+        atObstacle = False
+        orientationAdjust = 0
+        prevOrientationAdjust = 9999999
+        while (not atDest) and (not atObstacle) and (not exitFlag):
+            time.sleep(0.01)
+            maxSpeeds = self.getMaxSpeeds()
+            speed = min(maxSpeeds)
+            if speed == 0 :
+                return False
+            #print(porterOrientation-desOrientation)
+            orientationAdjust = orientationPID.update(porterOrientation-desOrientation)
+            if (orientationAdjust != None) and (abs(orientationAdjust - prevOrientationAdjust)>0.0001) :
+                with threadLock :
+                    speedVector = [0.9*(1-orientationAdjust)*speed,0.9*(1+orientationAdjust)*speed]
+            distSq = (porterLocation[0]-origLocation[0])**2 + (porterLocation[1]-origLocation[1])**2
+
+            # until at destination                
+            if (distSq >= distance**2) :
+                atDest = True
+                
+        # final speed is the previous speed this must be dealt with later
+        return atDest        
+    # Maintains the orientation using a PID loop and moves a distance in that direction
+    # REVISIT : Could add adjustment to heading if off course
+    def moveTo(self, dest, f) :
+        global porterLocation
+        global porterOrientation
+        global porterOrientationUnConst
+        global speedVector
+        global exitFlag
+        global threadLock
+        #print("in moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest))
+        f.write("\n\nin moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest) + "\n")
+        origLocation = porterLocation
+        desOrientation = constrainAngle360(self.getDesOrientation(origLocation, dest), porterOrientationUnConst + 180, porterOrientationUnConst - 180)
+        destPID = (dest[0] + self.angleOffsetLookup[dest[2]][0]*100 , dest[1] + self.angleOffsetLookup[dest[2]][1]*100 , dest[2])
+        
+        #print("origOrientation: " + str(porterOrientation) + ", desOrientation: " + str(desOrientation))
+        f.write("\torigOrientation: " + str(porterOrientation) + ", desOrientation: " + str(desOrientation) + "\n")
+
+        # orientation is critical as any error will severely affect navigation
+        # A PID loop will be used to adjust the speedVector to keep the orientation consistent
+        # Stop when within Xcm of final destination OR when travelled distance
+        orientationPID = PID(0.05, 0.01, 0)
+        orientationPID.SetPoint=0
+        orientationPID.setSampleTime(0.01)
+        # Using angle of initial travel to determine whether final condition tests x or y values
+        if (abs(origLocation[0]-dest[0]) > abs(origLocation[1]-dest[1])) : # if line is more vertical than horizontal then # REVISIT : this check is not correct
+            # set offset value to select y coordinates
+            yOffset = 0
+        else :
+            # set offset value to select x coordinates
+            yOffset = 1
+        f.write("\tyOffset: " + str(yOffset) + "\n")
+
+        # Find whether final condition must be greater than or less than
+        if origLocation[yOffset] < dest[yOffset] : 
+            testSign = 1
+        else :
+            testSign = -1
+        f.write("\ttestSign: " + str(testSign) + "\n")
+        # maintain porterOrientation whilst moving
+        atDest = False 
+        atObstacle = False
+        orientationAdjust = 0
+        prevOrientationAdjust = 9999999
+        while (not atDest) and (not atObstacle) and (not exitFlag):
+            desOrientation = constrainAngle360(self.getDesOrientation(porterLocation, dest), porterOrientationUnConst + 180, porterOrientationUnConst - 180)
+            f.write("\tloop start" + "\n")
+            f.write("\tporterLocation: " + str(porterLocation) + "\n")
+            f.write("\tdesOrientation: " + str(desOrientation) + "\n")
+            maxSpeeds = self.getMaxSpeeds()
+            speed = min(maxSpeeds)
+            if speed == 0 :
+                return False
+            f.write("\tspeed: " + str(speed) + "\n")
+            
+            f.write("\tporterOrientationUnConst: " + str(porterOrientationUnConst) + "\n")
+            #print("desOrientation: " + str(desOrientation))
+            f.write("\terror: " + str(porterOrientationUnConst-desOrientation) + "\n")
+            f.write("\terrorconstr: " + str(constrainAngle360(porterOrientationUnConst-desOrientation,180,-180)) + "\n")
+            orientationAdjust = constrainFloat(orientationPID.update(constrainAngle360(porterOrientationUnConst-desOrientation,180,-180)),1,-1)
+            f.write("\torientationAdjust: " + str(orientationAdjust) + "\n")
+            
+            #print("adjustment: " + str(orientationAdjust))
+            if (orientationAdjust != None) and (abs(orientationAdjust - prevOrientationAdjust)>0.0001) :
+                with threadLock :
+                    speedVector = [max(0.9*(1-orientationAdjust)*speed, 0),min(0.9*(1+orientationAdjust)*speed, speed)]
+                    
+                f.write("\tspeedVector: " + str(speedVector) + "\n")
+            # until at destination  
+            #print("dest: " + str(dest) + ", current: " + str(porterLocation) + ", angle: " + str(porterOrientation))
+            # REVISIT : THIS SHOULD WORK BUT DOESN'T
+            
+            f.write("\tdest[yOffset]-porterLocation[yOffset])*testSign" + str((dest[yOffset]-porterLocation[yOffset])*testSign) + "\n")
+            #f.write( + "\n")
+            if (dest[yOffset]-porterLocation[yOffset])*testSign < 0 :
+            #if ((porterLocation[0]-dest[0])**2 + (porterLocation[1]-dest[1])**2) < 100 :
+                f.write("\tatDest" + "\n")
+                atDest = True
+            # wait
+            time.sleep(0.01)
+                
+        # final speed is the previous speed this must be dealt with later
+        return atDest
+        
+    # Positive angles will turn the robot clockwise and vice versa
+    # Type controls the point which remains still during the turn
+    def moveTurn(self, angle, type, f) :
+        global threadLock
+        global porterOrientation
+        global porterOrientationUnConst
+        global speedVector
+        f.write("\n\nin moveTurn, origAngle: " + str(porterOrientation) + ", angle: " + str(angle) + "\n")
+        #print("\n\nin moveTurn, origAngle: " + str(porterOrientation) + ", angle: " + str(angle) + "\n")
+        
+        origOrientation = porterOrientationUnConst
+        maxSpeed = min(self.getMaxSpeeds())
+        if maxSpeed == 0 :
+            return False
+        sign = 1 if angle > 0 else -1
+        
+        desOrientation = origOrientation + angle
+        # if angle > 0 :        
+            # # Calculate final porterOrientation
+            # desOrientation = constrainAngle360(porterOrientation+angle,origOrientation+180,origOrientation-180)
+        # else :
+            # # Calculate final porterOrientation
+            # desOrientation = constrainAngle360(porterOrientation-angle,origOrientation+180,origOrientation-180)
+
+        f.write("\tdesOrientation: " + str(desOrientation) + "\n")
+        if type == "onWheel" :
+            if angle > 0 :        
+                # Turning clockwise therefore right wheel is still
+                with threadLock : 
+                    speedVector = [0, maxSpeed]
+            else :
+                # Turning anti clockwise therefore left wheel is still
+                with threadLock : 
+                    speedVector = [maxSpeed,0]
+            
+        
+        if type == "onCentre" :
+            # Even speed from each wheel but opposite
+            with threadLock : 
+                speedVector = [maxSpeed*sign*-1,maxSpeed*sign]
+        
+        #if type == "onRadius" :
+        #    pass
+        
+        f.write("\tspeedVector: " + str(speedVector) + "\n")
+        # Wait for angle to have been turned
+        totalTurn = 0
+        prevOrientation = origOrientation
+        done = False
+        # while (not exitFlag) and (not done) :
+            # rot = porterOrientation - prevOrientation
+            # prevOrientation = porterOrientation
+            # if angle > 0 :
+                # # Must be turning clockwise
+                # if rot < 0 :
+                    # rot +=360
+                # totalTurn += rot
+                # if totalTurn >= angle :
+                    # done = True
+            # else :
+                # # Must be turning anticlockwise
+                # if rot > 0 :
+                    # rot -=360
+                # totalTurn += rot
+                # if totalTurn <= angle :
+                    # done = True
+                    
+            # time.sleep(0.005)
+        #print("porterOrientationUn: " + str(porterOrientationUnConst))
+        #print("desOrientation: " + str(desOrientation))
+        #print("(porterOrientationUnConst-desOrientation)*sign: " + str((porterOrientationUnConst-desOrientation)*sign))
+            
+            
+        while not (desOrientation-porterOrientationUnConst)*sign < 0  and not exitFlag:
+            #print("porterOrientationUn: " + str(porterOrientationUnConst))
+            #print("desOrientation: " + str(desOrientation))
+            #print("(porterOrientationUnConst-desOrientation)*sign: " + str((porterOrientationUnConst-desOrientation)*sign))
+            time.sleep(0.05)
+            
+        f.write("\tporterOrientation" + str(porterOrientation) + "\n")
+        f.write( "\tdone turn"+ "\n")
+            
+        return done    # Positive angles will turn the robot clockwise and vice versa
+        
+        
+    # Type controls the point which remains still during the turn
+    def turnTo(self, dest, type, f) :
+        global threadLock
+        global porterOrientation
+        global porterOrientationUnConst
+        global speedVector
+        
+        origOrientation = porterOrientation
+        desOrientation = self.getDesOrientation(porterLocation, dest)
+        angle = constrainAngle360(desOrientation - porterOrientation,180,-180)
+        
+        maxSpeed = min(self.getMaxSpeeds())
+        if maxSpeed == 0 :
+            return False
+        sign = 1 if angle > 0 else -1
+        
+        if angle > 0 :        
+            # Calculate final porterOrientation
+            desOrientation = constrainAngle360(porterOrientation+angle,origOrientation+720,origOrientation)
+        else :
+            # Calculate final porterOrientation
+            desOrientation = constrainAngle360(porterOrientation+angle,origOrientation+1,origOrientation-720)
+
+        if type == "onWheel" :
+            if angle > 0 :        
+                # Turning clockwise therefore right wheel is still
+                with threadLock : 
+                    speedVector = [0, maxSpeed]
+            else :
+                # Turning anti clockwise therefore left wheel is still
+                with threadLock : 
+                    speedVector = [maxSpeed,0]
+            
+        
+        if type == "onCentre" :
+            # Even speed from each wheel but opposite
+            with threadLock : 
+                speedVector = [maxSpeed*sign*-1,maxSpeed*sign]
+        
+        #if type == "onRadius" :
+        #    pass
+        
+        # Wait for angle to have been turned
+        totalTurn = 0
+        prevOrientation = origOrientation
+        done = False
+        while (not exitFlag) and (not done) :
+            rot = porterOrientation - prevOrientation
+            prevOrientation = porterOrientation
+            if angle > 0 :
+                # Must be turning clockwise
+                if rot < 0 :
+                    rot +=360
+                totalTurn += rot
+                if totalTurn >= angle :
+                    done = True
+            else :
+                # Must be turning anticlockwise
+                if rot > 0 :
+                    rot -=360
+                totalTurn += rot
+                if totalTurn <= angle :
+                    done = True
+                    
+            time.sleep(0.005)
+            
+        return done
+        
+    
+    # Modified from pseudocode on https://en.wikipedia.org/wiki/A*_search_algorithm#Pseudocode
+    def aStar(self, start, goal, timeout) :
+        global pathMap
+        global exitFlag
+        global dataMap
+        global threadLock
+        file = open("aStar.log", "w")
+        file.write("start: " + str(start) + ", goal: " + str(goal) + "\n")
+        
+        start = (roundBase(start[0],pathMap.mapGridResolution),roundBase(start[1],pathMap.mapGridResolution),start[2])
+        goal  = (roundBase(goal[0],pathMap.mapGridResolution),roundBase(goal[1],pathMap.mapGridResolution))
+        file.write("start: " + str(start) + ", goal: " + str(goal) + "\n")
+
+        with threadLock :
+            dataMap = set()
+        
+        # The set of nodes already evaluated
+        closedSet = set()
+
+        # The set of currently discovered nodes that are not evaluated yet.
+        # Initially, only the start node is known.
+        openSet = set()
+        openSet.add(start)
+
+        # For each node, which node it can most efficiently be reached from.
+        # If a node can be reached from many nodes, cameFrom will eventually contain the
+        # most efficient previous step.
+        cameFrom = {}
+
+        # For each node, the cost of getting from the start node to that node.
+        #map with default value of Infinity
+        gScore = {}
+        
+        # The cost of going from start to start is zero.
+        gScore[start] = 0
+
+        # For each node, the total cost of getting from the start node to the goal
+        # by passing by that node. That value is partly known, partly heuristic.
+        #map with default value of Infinity
+        fScore = {}
+        
+        # For the first node, that value is completely heuristic.
+        # REVISIT : Is this actually used??
+        fScore[start] = getLengthSquared(list(start)+list(goal)) #math.sqrt(( start[0] - goal[0] )**2 + ( start[1] - goal[1] )**2) # distance to dest #heuristic_cost_estimate(start, goal)
+
+        startTime = time.time()
+        while (len(openSet) != 0) and (not exitFlag) :
+            # check timeout
+            timeElapsed = time.time() - startTime
+            if timeElapsed > timeout :
+                # stop aStar
+                return (False, self.reconstruct_path(cameFrom, current))
+                
+            # current = the node in openSet having the lowest fScore[] value
+            current = None
+            for node in openSet :
+                f = fScore[node]
+                #file.write("openSet n: " + str(node) + ", f: " + str(f) + "\n")
+                if current == None :
+                    current = node 
+                    #file.write("new" + "\n")
+                elif f < fScore[current] :
+                    current = node
+                    #file.write("updated" + "\n")
+                                
+            file.write("Current node: " + str(current) + "\n")
+            if (current[0],current[1]) == goal :
+                path = self.reconstruct_path(cameFrom, current)
+                #with threadLock :
+                #    dataMap = set(path)
+                file.close()
+                return (True,path)
+
+            openSet.discard(current)
+            closedSet.add(current)
+            with threadLock :
+                dataMap = set()
+                for node in closedSet :
+                    dataMap.add((node[0],node[1]))
+            
+            neighbors = pathMap.getNeighbors(current, goal)
+            file.write("neighbors: " + str(neighbors) + "\n")
+            for neighbor, data in neighbors.iteritems() :
+                #file.write("Neighbor: " + str(neighbor) + "\n")
+                #file.write("closedSet: " + str(closedSet) + "\n")
+                if neighbor in closedSet :
+                    #file.write("Ignoring" + "\n")
+                    continue # Ignore the neighbor which is already evaluated.
+
+                if not (neighbor in openSet) : # Discover a new node
+                    #file.write("Adding" + "\n")
+                    openSet.add(neighbor)
+                
+                with threadLock :
+                    dataMap.add((neighbor[0],neighbor[1]))
+                    
+                # The distance from start to a neighbor
+                # the "dist_between" function may vary as per the solution requirements.
+                tentative_gScore = gScore[current] + data["weight"]
+                #file.write("tentative_gScor: " + str(tentative_gScore) + "\n")
+                if (neighbor in gScore) and (tentative_gScore >= gScore[neighbor]) :
+                    #file.write("Not better" + "\n")
+                    continue		# This is not a better path.
+                #file.write("Better" + "\n")
+                # This path is the best until now. Record it!
+                cameFrom[neighbor] = current
+                gScore[neighbor] = tentative_gScore
+                fScore[neighbor] = gScore[neighbor] + data["distToGoal"] 
+                #file.write("cameFrom: " + str(neighbor) + ", to: " + str(current) + "\n")
+                #file.write("gScore: " + str(tentative_gScore) + "\n")
+                #file.write("fScore: " + str(fScore[neighbor]) + "\n")
+
+        file.close()
+        return (False, [])
+
+    
+    def reconstruct_path(self, cameFrom, current) :
+        global pathMap
+        totalPath = [current]
+        navPath = [("end", current)]
+        lastKeyNode = current
+        #navPath.append(("moveTo", current))
+        while current in cameFrom.keys() and not exitFlag:
+            previous = current
+            current = cameFrom[current]
+            if current[2] != previous[2] : # if the angle has changed
+                # Append the end of the straight line, the turn and the start of the next
+                totalPath.append(previous)
+                totalPath.append((previous[0],previous[1],current[2]))
+                totalPath.append(current)
+                
+                #navPath.append(("moveStraight", getLength([lastKeyNode[0],lastKeyNode[1], previous[0],previous[1]])))
+                navPath.append(("moveTo", lastKeyNode))
+                #navPath.append(("turn", constrainAngle360((previous[2]-current[2])*45,180,-180)))
+                navPath.append(("turnTo", previous))
+                lastKeyNode = current
+        navPath.append(("start", current))
+        return list(reversed(navPath))
+    
+    
+    # Uses A* and navigation algorithms to navigate to the given dest = [x, y]
+    def goTo(self, dest, timeout, goPartial) :
+        global porterLocation
+        global speedVector
+        global pathMap
+        global lidarRun
+        f=open("nav.log", "w")    
+        while not exitFlag :
+            success, path = self.aStar((porterLocation[0],porterLocation[1],0), dest, timeout)
+            if not (success or goPartial) :
+                with threadLock :
+                    speedVector = [0,0]
+                return False
+            f.write(str(path) +"\n")
+            try :
+                if len(path) > 1 :
+                    for instruction in path :
+                        success = True
+                        if exitFlag :
+                            break
+                        if instruction[0] == "turn" :
+                            with threadLock :
+                                lidarRun = "s"
+                                
+                            success = self.moveTurn(instruction[1], "onCentre", f)
+                            
+                            with threadLock :
+                                lidarRun = "a"
+                        elif instruction[0] == "moveStraight" :
+                            success = self.moveStraight(instruction[1], f)
+                        elif instruction[0] == "moveTo" :
+                            success = self.moveTo(instruction[1], f)
+                        elif instruction[0] == "turnTo" :
+                            with threadLock :
+                                lidarRun = "s"
+                            success = self.turnTo(instruction[1], "onCentre", f)
+                            with threadLock :
+                                lidarRun = "a"
+                        
+                        if not success :
+                            break
+                        
+            except TypeError :
+                print("No path found")
+                with threadLock :
+                    speedVector = [0,0]
+                return False
+        with threadLock :
+            speedVector = [0,0]
+        f.close()
+    
+    
+class mappingClass(controlClass):
+    
+    def getScanLocations(self) :
+        global SLAMObject
+        # Map size, scale
+        MAP_SIZE_METERS          = 25 # 32
+        MAP_SIZE_PIXELS          = MAP_SIZE_METERS * 50 #800
+        # Make array for SLAM map
+        mapbytes = bytearray(MAP_SIZE_PIXELS * MAP_SIZE_PIXELS)
+        
+        # Get map from SLAM
+        SLAMObject.getmap(mapbytes)
+        
+        # Convert map into numpy array
+        numpyMap = np.frombuffer(mapbytes, dtype='B')
+        numpyMap.shape =  (-1,MAP_SIZE_PIXELS)
+        cv2.imwrite('numpyMapRaw.jpg', numpyMap)
+        
+        # Theshhold low to find the walls then dilate to expand the walls - used as mask to avoid scanning walls
+        a, numpyMapThreshLow  = cv2.threshold(numpyMap,126,255,cv2.THRESH_BINARY) 
+        # Make kernal for dilation
+        kernel = np.ones((pathMap.dilateAmount,pathMap.dilateAmount),np.uint8)
+        numpyMapThreshLow = cv2.dilate(cv2.bitwise_not(numpyMapThreshLow), kernel)
+        cv2.imwrite('numpyMapThreshLow.jpg', numpyMapThreshLow)
+        
+        # Smooth image, threshold high to find clear areas, dilate to smooth lines, canny to find edges of clear area, dilate to smooth
+        numpyMapThreshHigh = cv2.GaussianBlur(numpyMap, (5, 5), 2)
+        cv2.imwrite('numpyMapBlur.jpg', numpyMapThreshHigh)
+        b, numpyMapThreshHigh = cv2.threshold(numpyMapThreshHigh,128,255,cv2.THRESH_BINARY)
+        numpyMapThreshHigh = cv2.dilate(numpyMapThreshHigh, np.ones((2, 2)))
+        numpyMapThreshHigh = cv2.Canny(numpyMapThreshHigh,100,200)
+        numpyMapThreshHigh = cv2.dilate(numpyMapThreshHigh, np.ones((5, 5)))
+        cv2.imwrite('numpyMapThreshHigh.jpg', numpyMapThreshHigh)
+        
+        # Use walls as a mask over clear area edges
+        numpyMapThreshBand = numpyMapThreshHigh - numpyMapThreshLow
+        cv2.imwrite('numpyMapThreshBand.jpg', numpyMapThreshBand)
+        
+        # Setup SimpleBlobDetector parameters.
+        params = cv2.SimpleBlobDetector_Params()
+        params.blobColor = 255
+        params.minThreshold = 10;
+        params.maxThreshold = 255;
+        params.filterByArea = False
+        params.filterByCircularity = False
+        params.filterByConvexity = False
+        params.filterByInertia = False
+        # Set up the detector
+        detector = cv2.SimpleBlobDetector_create(params)
+        # Detect blobs.
+        keypoints = detector.detect(numpyMapThreshBand)        
+        keyPointTuples = []
+        for keyPoint in keypoints  :
+            keyPointTuples.append(keyPoint.pt)
+            
+        return keyPointTuples
+    
+    
+    def sortLocations(self, locations) :
+        distances = []
+        for location in locations :
+            dist = (location[0] - porterLocation[0])**2 + (location[1] - porterLocation[1])**2
+            distances.append(dist)
+        
+        return [loc for _, loc in sorted(zip(distances,locations), key=lambda pair: pair[0])]
+
+   
+    def run(self):   
+        # May not need all of these
+        global USAvgDistances
+        global wheelSpeeds
+        global obstruction
+        global maxSpeeds
+        global porterLocation #vector holding local location [x,y] in cm
+        global porterOrientation #angle from north (between -180,180) in degrees
+        global porterOrientationUnConst
+        global realPorterLocation # CHEATING ONLY
+        global realPorterOrientation # CHEATING ONLY
+        global realPorterSize
+        global lastCommand
+        global speedVector
+        global dataReady
+        global threadLock
+        global exitFlag
+        global USThreashholds
+        global stoppingDistance
+        global lidarReady
+        global lidarMap
+        global lidarAngles
+        global lidarRun    
+        global pathMap
+        global realPorterSize
+        global dataMap
+        global realPorterRadius
+        global totalR
+        global totalWd
+        global SLAMObject
+        global SLAMRunning
+                    
+        logging.info("Starting auto mapping...")
+        with threadLock :
+            SLAMRun = "start"
+            lidarRun = "a"
+        
+        time.sleep(5)
+        
+        locations = self.getScanLocations()
+        for loc in locations :
+            dataMap.add(loc)
+        while len(locations) > 1  and not exitFlag:
+            locations = self.sortLocations(locations)
+            success = self.goTo(locations[0], 20, True)
+            # REVISIT : If not success - blacklist the area?
+            time.sleep(2)
+            locations = self.getScanLocations()
+           
+        logging.info("Done auto mapping...") 
+
+    
+class navigationClass(controlClass):
+    def run(self, destination) :
+        global threadLock
+        global SLAMRun
+        global lidarRun
+        logging.info("Starting navigation...")
+        with threadLock :
+            SLAMRun = "start"
+            lidarRun = "a"
+        
+        time.sleep(5)
+
+        self.goTo(destination, 20, False)
+        
+        logging.info("Done navigation")
+        
+        
+        
 # Sends Maps to the temporary table in the database
 def send_map(map_to_send):
     img_string = cv2.imencode('.jpg',map_to_send)[1].tostring()
@@ -800,8 +2052,35 @@ if __name__ == '__main__':
             print ('Unable to establish serial comms to US device')
             logging.error("%s", str(e))
             # USConnected = False
+            
+            
+    # Setup serial conn to LidarInterface
+    if Lidar_Enable: 
+        logging.info("Trying to connect to LidarInterface")
+        try: #try to connect
+            if (platform == "linux") or (platform == "linux2"):
+                LidarConn = serial.Serial('/dev/ttyACM3', 2000000,timeout=5)
+            elif (platform == "win32"):
+                LidarConn = serial.Serial('COM5', 2000000)
+
+            logging.info('Connected to Lidar %s', str(LidarConn))
+            lidarThread = lidarInterfaceThread(20, "Lidar thread")
+            lidarThread.start()
+            
+            threads.append(lidarThread)
+            logging.info('Lidar Thread Running - %s', str(lidarThread))
+
+        except Exception as e: #if something goes wrong... tell the user
+            logging.error("Unable to establish lidar comms to port /dev/ttyACM3")
+            logging.error("%s", str(e))
 
 
+    # Create pathMap and SLAMObject
+    pathMapTemp = pathMapClass(realPorterSize[0])
+    with threadLock :
+        pathMap = pathMapTemp
+        SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
+            
     # Main Control Loop
     while sysRunning: #while the main loop is not in shutdown mode...
         time.sleep(1)
@@ -832,16 +2111,19 @@ if __name__ == '__main__':
                 system_status = "Mapping"
 
             #Mapping Code Goes Here
-
+            mappingObj = mappingClass(2)
+            mappingObj.run()
             with threadLock:
                 system_status = "AwaitingCommands"
-        elif currentcommand["Type"] == "NavigationCommand":
-            recieve_map(currentcommand["Map_Filename"])
+        elif currentcommand["Type"] == "NavigationCommand": # REVISIT : Where is the destination ?
+            recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
             print "Running a Navigation Command"
             with threadLock:
                 system_status = "Navigation"
 
             #Navigation Code Goes Here
+            navigationObj = navigationClass(2)
+            navigationObj.run(destination)
 
             with threadLock:
                 system_status = "AwaitingCommands"
