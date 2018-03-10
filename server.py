@@ -130,11 +130,29 @@ enduserloop = False
 
 global leftpulse
 global rightpulse
+global odomLeftPulse
+global odomRightPulse
+global LIDARLeftPulse
+global LIDARRightPulse
+leftpulse = 0
+rightpulse = 0
+odomLeftPulse = 0
+odomRightPulse = 0
+LIDARLeftPulse = 0
+LIDARRightPulse = 0
 
+# odometry
+global pulseDistConst
+# distance = number of pulses * ( diameter of wheels / number of divisions in encoder)
+pulseDistConst = 12 / 360 # REVISIT : this is a complete guess
 
 # Lidar
 global numSamples
+global lidarStartTime
+global lidarEndTime
 numSamples = 237
+lidarStartTime = 0
+lidarEndTime = 0
 
 # Slam
 global runSLAM
@@ -147,7 +165,6 @@ global navMap
 global totalR
 global totalWd
 global encoderVectorAbs
-global encoderVectorAbsReady
 global lidarPolarList
 global adjustedLidarStore
 global adjustedLidarList
@@ -165,6 +182,8 @@ global angle_delta
 global detailedMap
 global pixelPorterSize
 global loadMap
+global speedVectorMaxSpeed
+speedVectorMaxSpeed = 0
 angle_delta = 1
 globalWd = 0
 dxy = 0
@@ -177,7 +196,6 @@ adjustedLidarStore = []
 adjustedLidarList = []
 adjustedLidarListReady = False
 encoderVectorAbs = (0,0)
-encoderVectorAbsReady = False
 lidarPolarList = []
 navMap = np.zeros(SLAMOffset)
 detailedMap = np.zeros(SLAMOffset)
@@ -188,7 +206,8 @@ pathMap             = {}
 lidarRun            = ""
 realPorterSize      = (73,70)
 realPorterRadius    = math.sqrt(realPorterSize[0]**2+realPorterSize[1]**2)
-realPorterWheelOffsetY = realPorterSize[1]/4
+realPorterWheelOffsetY = realPorterSize[1]/4 # REVISIT : Make this accurate
+realPorterLIDAROffsetY = realPorterSize[1]/4
 pixelPorterSize    = (realPorterSize[0]/2,realPorterSize[1]/2)
 
 
@@ -448,6 +467,10 @@ class motorDataThread(MultiThreadBase):
                             with threadLock:
                                 leftpulse = self.inputBuf[0]
                                 rightpulse = self.inputBuf[1]
+                                odomLeftPulse += leftpulse
+                                odomRightPulse += rightpulse
+                                LIDARLeftPulse += leftpulse
+                                LIDARRightPulse += rightpulse
                         except Exception as e:
                             logging.error("%s", str(e))
                     elif self.inputBuf[0] == "%":
@@ -629,11 +652,13 @@ class usDataThread(MultiThreadBase):
         global obstruction
         global threadLock
         global usCaution
+        global speedVectorMaxSpeed
 
         if safetyOn:
             try:
                 # If heading forwards - check front USs for obstruction
                 if (speedVector[0] >= 0 ) and (speedVector[1] >= 0):
+                    speedVectorMaxSpeed = min(maxSpeeds[2:3])
                     if (int(USAvgDistances[2]) < USThresholds[0]) or (int(USAvgDistances[3]) < USThresholds[0]):
                         logging.warning("FRONT TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
@@ -652,6 +677,7 @@ class usDataThread(MultiThreadBase):
 
                 # If heading backwards - check backwards USs for obstruction
                 elif (speedVector[0] < 0) and (speedVector[1] < 0 ):
+                    speedVectorMaxSpeed = min(maxSpeeds[6:7])
                     if (int(USAvgDistances[6]) < USThresholds[2]) or (int(USAvgDistances[7]) < USThresholds[2]):
                         logging.warning("BACK TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
@@ -670,6 +696,7 @@ class usDataThread(MultiThreadBase):
 
                 # If heading left - check left USs for obstruction
                 elif (speedVector[0]< 0 ) and (speedVector[1] > 0):
+                    speedVectorMaxSpeed = min(maxSpeeds[0:1])
                     if (int(USAvgDistances[0]) < USThresholds[1]) or (int(USAvgDistances[1]) < USThresholds[1]):
                         logging.warning("LEFT SIDE TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
@@ -682,6 +709,7 @@ class usDataThread(MultiThreadBase):
 
                 # If heading right - check right USs for obstruction
                 elif (speedVector[0] > 0) and (speedVector[1] < 0) :
+                    speedVectorMaxSpeed = min(maxSpeeds[5:6])
                     if (int(USAvgDistances[5]) < USThresholds[1]) or (int(USAvgDistances[6]) < USThresholds[1]):
                         logging.warning("RIGHT SIDE TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
@@ -815,6 +843,8 @@ class lidarInterfaceThread(MultiThreadBase):
     def run(self) :
         global lidarRun
         global threadLock
+        global lidarStartTime
+        global lidarEndTime
         
         self.currentAngle = 0
         
@@ -839,7 +869,12 @@ class lidarInterfaceThread(MultiThreadBase):
                     self.checkLidarConn()
 
             # Read data from lidar 
+            if lidarStartTime == 0 :
+                with threadLock :
+                    lidarStartTime = time.time()
+                    
             input = LIDARConn.readline()[:-2]
+            
             if input == "$" :
                 logging.debug("First sample of LIDAR recieved")
                 self.currentAngle = 0
@@ -850,9 +885,13 @@ class lidarInterfaceThread(MultiThreadBase):
                 except Exception as e:
                     r = 0
                     logging.warning("Invalid lidar sample ignored")
-                    
-                lidarPolarList.append({"angle": self.currentAngle, "dist" : r })
+                
+                with threadLock :
+                    lidarPolarList.append({"angle": self.currentAngle, "dist" : r })
                 self.currentAngle += self.sAngle
+            
+            with threadLock :
+                lidarEndTime = time.time()    
                 
             time.sleep(0.001)
 
@@ -881,65 +920,67 @@ class SLAMThread(MultiThreadBase):
         global dataMap
         global totalR
         global totalWd
-        global encoderVectorAbs
-        global encoderVectorAbsReady
-        return ########################################################################################
-        encoderVectorAbsReady = True
-        if not realCollision :
-            if wheelSpeeds != [0,0] :                
-                leftDelta  = self.simFrameTime * wheelSpeeds[0]
-                rightDelta = self.simFrameTime * wheelSpeeds[1]
-                totalR += (leftDelta + rightDelta)
-                orientation = math.radians(porterOrientation - 90)
-                orientationUnconst = math.radians(porterOrientationUnConst - 90)
-                #orientation = math.radians(realPorterOrientation - 90)
-                x   = porterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)
-                y   = porterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)
-                #with threadLock :
-                #    dataMap.add((int(round(x)),int(round(y))))
 
-                if (math.fabs(leftDelta - rightDelta) < 1.0e-6) : # basically going straight
-                    new_x = x + leftDelta * math.cos(orientation);
-                    new_y = y + rightDelta * math.sin(orientation);
-                    new_heading = orientation;
-                    new_headingUnConst = orientationUnconst;
-                else :
-                    R = pixelPorterSize[0] * (leftDelta + rightDelta) / (2 * (rightDelta - leftDelta))
-                    wd = (rightDelta - leftDelta) / pixelPorterSize[0] ;
-                    new_x = x + R * math.sin(wd + orientation) - R * math.sin(orientation);
-                    new_y = y - R * math.cos(wd + orientation) + R * math.cos(orientation);
-                    
-                    totalWd += wd/ self.scale
-                    new_heading = orientation + wd/ self.scale;
-                    new_headingUnConst = orientationUnconst + wd/ self.scale;
+        if odomLeftPulse != 0 and odomRightPulse != 0 :  
+            with threadLock :
+                leftDelta  = odomLeftPulse * pulseDistConst
+                rightDelta = odomRightPulse * pulseDistConst
+                odomLeftPulse = 0
+                odomRightPulse = 0
                 
-                with threadLock :
-                    encoderVectorAbs = (new_x - x, new_y -y)
+            totalR += (leftDelta + rightDelta)
+            orientation = math.radians(porterOrientation - 90)
+            orientationUnconst = math.radians(porterOrientationUnConst - 90)
+            x   = porterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)
+            y   = porterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)
 
-                    porterLocation = (new_x + realPorterWheelOffsetY*math.cos(orientation),new_y + realPorterWheelOffsetY*math.sin(orientation))
-                    porterOrientation = (math.degrees(new_heading) + 90)*0.5 + porterImuOrientation*0.5
-                    porterOrientationUnConst = (math.degrees(new_headingUnConst) + 90) # + porterImuOrientation*0.5
-                    porterOrientation = constrainAngle360(porterOrientation, 180, -180)
+            if (math.fabs(leftDelta - rightDelta) < 1.0e-6) : # basically going straight
+                new_x = x + leftDelta * math.cos(orientation);
+                new_y = y + rightDelta * math.sin(orientation);
+                new_heading = orientation;
+                new_headingUnConst = orientationUnconst;
+            else :
+                R = pixelPorterSize[0] * (leftDelta + rightDelta) / (2 * (rightDelta - leftDelta))
+                wd = (rightDelta - leftDelta) / pixelPorterSize[0] ;
+                new_x = x + R * math.sin(wd + orientation) - R * math.sin(orientation);
+                new_y = y - R * math.cos(wd + orientation) + R * math.cos(orientation);
+                
+                totalWd += wd/ 2   #   self.scale # REVISIT : why is scale needed?
+                new_heading = orientation + wd/ 2 # self.scale;
+                new_headingUnConst = orientationUnconst + wd/ 2 # self.scale;
+            
+            with threadLock :
+                porterLocation = (new_x + realPorterWheelOffsetY*math.cos(orientation),new_y + realPorterWheelOffsetY*math.sin(orientation))
+                porterOrientation = (math.degrees(new_heading) + 90)*0.5 + porterImuOrientation*0.5
+                porterOrientationUnConst = (math.degrees(new_headingUnConst) + 90) # + porterImuOrientation*0.5
+                porterOrientation = constrainAngle360(porterOrientation, 180, -180)
 
     # REVISIT : encoderVectorAbs needs to be created, work out real rotation times of lidar, 
     def adjustLidar(self) :
         global encoderVectorAbs
-        global encoderVectorAbsReady
         global lidarPolarList
         global adjustedLidarStore
         global adjustedLidarList
         global adjustedLidarListReady
         global dataMap
-        if encoderVectorAbsReady and len(lidarPolarList) > 0 : # this should always be true at this point in simulation
-            # allows lidar to continue getting data during this function
+        global lidarStartTime
+        if len(lidarPolarList) > 0 : # this should always be true at this point in simulation
+        
+            # REVISIT : Get more accurate times?
+            sampleTime =  lidarEndTime - lidarStartTime
+            sampleTimeFraction = sampleTime / len(lidarData)
+            distFraction = (leftDelta*sampleTimeFraction,rightDelta*sampleTimeFraction)
+            
+            # clear variables
             with threadLock :
                 lidarData = list(lidarPolarList)
                 lidarPolarList = []
-        
-            # REVISIT : use actual time values in the real porter although it shouldn't generally make much difference...
-            sampleTime = self.simFrameTime / len(lidarData)
-            sampleTimeFraction = sampleTime / self.simFrameTime
-            distFraction = (encoderVectorAbs[0]*sampleTimeFraction,encoderVectorAbs[1]*sampleTimeFraction)
+                leftDelta  = LIDARLeftPulse * pulseDistConst
+                rightDelta = LIDARRightPulse * pulseDistConst
+                LIDARLeftPulse = 0
+                LIDARRightPulse = 0
+                lidarStartTime = 0
+                lidarEndTime = 0
             
             for i, sample in enumerate(lidarData) :
                 # do calculations else if sample is end sample then push all stored calculated values into output and set ready 
@@ -948,24 +989,19 @@ class SLAMThread(MultiThreadBase):
                     sampleXY = (sample["dist"]*math.cos(math.radians(sample["angle"]-90)),sample["dist"]*math.sin(math.radians(sample["angle"]-90)))
                     # add motion i*distFraction
                     j = len(lidarData) - i # adjust samples to current position
-                    #sampleXY = (sampleXY[0]+distFraction[0]*j,sampleXY[1]+distFraction[1]*j)
-                    #dataMap.add((int(sampleXY[0]+porterLocation[0]), int(sampleXY[1]+porterLocation[1])))
+                    sampleXY = (sampleXY[0]+distFraction[0]*j,sampleXY[1]+distFraction[1]*j)
                     # convert back to polar # REVISIT : ew square root
                     r = math.sqrt(sampleXY[0]**2 + sampleXY[1]**2)
                     # save to store
                     adjustedLidarStore.append(r*10)
                 else : 
                     with threadLock :
-                        #dataMap = set()
                         adjustedLidarList = adjustedLidarStore[-self.lidarTotalNSamples-1:]
                         #with open("adjustLidar.log","a+") as f:
                         #    f.write("new\n" + str(adjustedLidarList) + "\n" + str(adjustedLidarStore)+"\n")
                         adjustedLidarStore = []
                         adjustedLidarListReady = True
             
-
-            with threadLock :
-                encoderVectorAbsready = False
 
                 
     def run(self) :
@@ -1010,7 +1046,7 @@ class SLAMThread(MultiThreadBase):
                         porterOrientation = newPorterOrientation
                         xSim =  y/20
                         ySim =  SLAMOffset[0] - x/20
-                        porterLocation = (xSim,ySim)
+                        porterLocation = (xSim + realPorterLIDAROffsetY*math.cos(porterOrientation),ySim + realPorterLIDAROffsetY*math.sin(porterOrientation))
                         adjustedLidarListReady = False
 
                     pathMap.updateMap()
@@ -1295,39 +1331,8 @@ class controlClass() :
                                     6 : [-1,0,270],
                                     7 : [-1,-1,315],
                                   }
-        # self.angleOffsetLookup       = { 0 : [0,1,0],
-                                    # 1 : [1,1,45],
-                                    # 2 : [1,0,90],
-                                    # 3 : [1,-1,135],
-                                    # 4 : [0,-1,180],
-                                    # 5 : [-1,-1,225],
-                                    # 6 : [-1,0,270],
-                                    # 7 : [-1,1,315],
-                                  # }
         
         
-    def getLidar360(self) :
-        global lidarReady
-        global threadLock
-        global lidarRun
-        global lidarReady
-        global enduserloop
-        
-        while (not lidarReady) and (not enduserloop):
-            time.sleep(0.1)
-
-        with threadLock :
-            lidarRun = "a"
-            lidarReady = False
-                
-        while (not lidarReady) and (not enduserloop):
-            time.sleep(0.1)
-
-    # REVISIT : this will need modification and mods elsewhere as this is not how it usually works
-    def getMaxSpeeds(self) :
-        return [20,20]
-        # REVISIT : STUB
-
     def getDesOrientation(self, start, end) :
         #print("getDesOrient: start: " + str(start) + ", end: " + str(end))
         #print("orientation: " + str(constrainAngle360(-90-math.degrees(math.atan2(end[1] - start[1], end[0] - start[0])), 180, -180)))
@@ -1362,8 +1367,7 @@ class controlClass() :
         prevOrientationAdjust = 9999999
         while (not atDest) and (not atObstacle) and (not enduserloop):
             time.sleep(0.01)
-            maxSpeeds = self.getMaxSpeeds()
-            speed = min(maxSpeeds)
+            speed = speedVectorMaxSpeed
             if speed == 0 :
                 return False
             #print(porterOrientation-desOrientation)
@@ -1428,8 +1432,7 @@ class controlClass() :
             f.write("\tloop start" + "\n")
             f.write("\tporterLocation: " + str(porterLocation) + "\n")
             f.write("\tdesOrientation: " + str(desOrientation) + "\n")
-            maxSpeeds = self.getMaxSpeeds()
-            speed = min(maxSpeeds)
+            speed = speedVectorMaxSpeed
             if speed == 0 :
                 return False
             f.write("\tspeed: " + str(speed) + "\n")
@@ -1474,7 +1477,7 @@ class controlClass() :
         #print("\n\nin moveTurn, origAngle: " + str(porterOrientation) + ", angle: " + str(angle) + "\n")
         
         origOrientation = porterOrientationUnConst
-        maxSpeed = min(self.getMaxSpeeds())
+        maxSpeed = speedVectorMaxSpeed
         if maxSpeed == 0 :
             return False
         sign = 1 if angle > 0 else -1
@@ -1559,7 +1562,7 @@ class controlClass() :
         desOrientation = self.getDesOrientation(porterLocation, dest)
         angle = constrainAngle360(desOrientation - porterOrientation,180,-180)
         
-        maxSpeed = min(self.getMaxSpeeds())
+        maxSpeed = speedVectorMaxSpeed
         if maxSpeed == 0 :
             return False
         sign = 1 if angle > 0 else -1
