@@ -60,6 +60,7 @@ Motor_Enable = True
 Speech_Enable = True
 Debug_Enable = True
 Lidar_Enable = True
+
 ##--Motor Commands
 global speedVector #demanded wheel speeds (left, right)
 
@@ -137,7 +138,7 @@ numSamples = 237
 
 # Slam
 global runSLAM
-runSLAM = 237
+runSLAM = ""
 
 global lidarMap
 global realPorterSize
@@ -163,6 +164,8 @@ global dxy
 global angle_delta
 global detailedMap
 global pixelPorterSize
+global loadMap
+loadMap = np.zeros(SLAMOffset)
 angle_delta = 1
 globalWd = 0
 dxy = 0
@@ -964,7 +967,7 @@ class SLAMThread(MultiThreadBase):
             with threadLock :
                 encoderVectorAbsready = False
 
-                    
+                
     def run(self) :
         global adjustedLidarList
         global adjustedLidarListReady
@@ -986,6 +989,10 @@ class SLAMThread(MultiThreadBase):
             elif runSLAM == "stop" :
                 with threadLock :
                     SLAMRunning = False
+                    runSLAM = ""
+            elif runSLAM == "loadMap" :
+                with threadLock :
+                    SLAMObject.setmap(loadMap)
                     runSLAM = ""
                   
             if SLAMRunning :      
@@ -2115,15 +2122,18 @@ if __name__ == '__main__':
             mappingObj.run()
             with threadLock:
                 system_status = "AwaitingCommands"
-        elif currentcommand["Type"] == "NavigationCommand": # REVISIT : Where is the destination ?
-            recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
+        elif currentcommand["Type"] == "NavigationCommand":
+            loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
+            with threadLock :
+                loadMap = loadMapTemp
+                runSLAM = "loadMap"
             print "Running a Navigation Command"
             with threadLock:
                 system_status = "Navigation"
 
             #Navigation Code Goes Here
             navigationObj = navigationClass(2)
-            navigationObj.run(destination)
+            navigationObj.run((currentCommand["X"], currerntCommand["Y"]))
 
             with threadLock:
                 system_status = "AwaitingCommands"
