@@ -165,7 +165,6 @@ global angle_delta
 global detailedMap
 global pixelPorterSize
 global loadMap
-loadMap = np.zeros(SLAMOffset)
 angle_delta = 1
 globalWd = 0
 dxy = 0
@@ -182,6 +181,7 @@ encoderVectorAbsReady = False
 lidarPolarList = []
 navMap = np.zeros(SLAMOffset)
 detailedMap = np.zeros(SLAMOffset)
+loadMap = np.zeros(SLAMOffset)
 totalR          = 0
 totalWd          = 0
 pathMap             = {}
@@ -1311,16 +1311,16 @@ class controlClass() :
         global threadLock
         global lidarRun
         global lidarReady
-        global exitFlag
+        global enduserloop
         
-        while (not lidarReady) and (not exitFlag):
+        while (not lidarReady) and (not enduserloop):
             time.sleep(0.1)
 
         with threadLock :
             lidarRun = "a"
             lidarReady = False
                 
-        while (not lidarReady) and (not exitFlag):
+        while (not lidarReady) and (not enduserloop):
             time.sleep(0.1)
 
     # REVISIT : this will need modification and mods elsewhere as this is not how it usually works
@@ -1341,7 +1341,7 @@ class controlClass() :
         global porterOrientation
         global porterOrientationUnConst
         global speedVector
-        global exitFlag
+        global enduserloop
         global threadLock
         
         origLocation = porterLocation
@@ -1360,7 +1360,7 @@ class controlClass() :
         atObstacle = False
         orientationAdjust = 0
         prevOrientationAdjust = 9999999
-        while (not atDest) and (not atObstacle) and (not exitFlag):
+        while (not atDest) and (not atObstacle) and (not enduserloop):
             time.sleep(0.01)
             maxSpeeds = self.getMaxSpeeds()
             speed = min(maxSpeeds)
@@ -1386,7 +1386,7 @@ class controlClass() :
         global porterOrientation
         global porterOrientationUnConst
         global speedVector
-        global exitFlag
+        global enduserloop
         global threadLock
         #print("in moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest))
         f.write("\n\nin moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest) + "\n")
@@ -1423,7 +1423,7 @@ class controlClass() :
         atObstacle = False
         orientationAdjust = 0
         prevOrientationAdjust = 9999999
-        while (not atDest) and (not atObstacle) and (not exitFlag):
+        while (not atDest) and (not atObstacle) and (not enduserloop):
             desOrientation = constrainAngle360(self.getDesOrientation(porterLocation, dest), porterOrientationUnConst + 180, porterOrientationUnConst - 180)
             f.write("\tloop start" + "\n")
             f.write("\tporterLocation: " + str(porterLocation) + "\n")
@@ -1512,7 +1512,7 @@ class controlClass() :
         totalTurn = 0
         prevOrientation = origOrientation
         done = False
-        # while (not exitFlag) and (not done) :
+        # while (not enduserloop) and (not done) :
             # rot = porterOrientation - prevOrientation
             # prevOrientation = porterOrientation
             # if angle > 0 :
@@ -1536,7 +1536,7 @@ class controlClass() :
         #print("(porterOrientationUnConst-desOrientation)*sign: " + str((porterOrientationUnConst-desOrientation)*sign))
             
             
-        while not (desOrientation-porterOrientationUnConst)*sign < 0  and not exitFlag:
+        while not (desOrientation-porterOrientationUnConst)*sign < 0  and not enduserloop:
             #print("porterOrientationUn: " + str(porterOrientationUnConst))
             #print("desOrientation: " + str(desOrientation))
             #print("(porterOrientationUnConst-desOrientation)*sign: " + str((porterOrientationUnConst-desOrientation)*sign))
@@ -1594,7 +1594,7 @@ class controlClass() :
         totalTurn = 0
         prevOrientation = origOrientation
         done = False
-        while (not exitFlag) and (not done) :
+        while (not enduserloop) and (not done) :
             rot = porterOrientation - prevOrientation
             prevOrientation = porterOrientation
             if angle > 0 :
@@ -1620,7 +1620,7 @@ class controlClass() :
     # Modified from pseudocode on https://en.wikipedia.org/wiki/A*_search_algorithm#Pseudocode
     def aStar(self, start, goal, timeout) :
         global pathMap
-        global exitFlag
+        global enduserloop
         global dataMap
         global threadLock
         file = open("aStar.log", "w")
@@ -1663,7 +1663,7 @@ class controlClass() :
         fScore[start] = getLengthSquared(list(start)+list(goal)) #math.sqrt(( start[0] - goal[0] )**2 + ( start[1] - goal[1] )**2) # distance to dest #heuristic_cost_estimate(start, goal)
 
         startTime = time.time()
-        while (len(openSet) != 0) and (not exitFlag) :
+        while (len(openSet) != 0) and (not enduserloop) :
             # check timeout
             timeElapsed = time.time() - startTime
             if timeElapsed > timeout :
@@ -1739,7 +1739,7 @@ class controlClass() :
         navPath = [("end", current)]
         lastKeyNode = current
         #navPath.append(("moveTo", current))
-        while current in cameFrom.keys() and not exitFlag:
+        while current in cameFrom.keys() and not enduserloop:
             previous = current
             current = cameFrom[current]
             if current[2] != previous[2] : # if the angle has changed
@@ -1764,7 +1764,7 @@ class controlClass() :
         global pathMap
         global lidarRun
         f=open("nav.log", "w")    
-        while not exitFlag :
+        while not enduserloop :
             success, path = self.aStar((porterLocation[0],porterLocation[1],0), dest, timeout)
             if not (success or goPartial) :
                 with threadLock :
@@ -1775,7 +1775,7 @@ class controlClass() :
                 if len(path) > 1 :
                     for instruction in path :
                         success = True
-                        if exitFlag :
+                        if enduserloop :
                             break
                         if instruction[0] == "turn" :
                             with threadLock :
@@ -1892,7 +1892,7 @@ class mappingClass(controlClass):
         global speedVector
         global dataReady
         global threadLock
-        global exitFlag
+        global enduserloop
         global USThreashholds
         global stoppingDistance
         global lidarReady
@@ -1918,7 +1918,7 @@ class mappingClass(controlClass):
         locations = self.getScanLocations()
         for loc in locations :
             dataMap.add(loc)
-        while len(locations) > 1  and not exitFlag:
+        while len(locations) > 1  and not enduserloop:
             locations = self.sortLocations(locations)
             success = self.goTo(locations[0], 20, True)
             # REVISIT : If not success - blacklist the area?
@@ -2116,6 +2116,7 @@ if __name__ == '__main__':
             print "Running a Mapping Command"
             with threadLock:
                 system_status = "Mapping"
+                enduserloop = False
 
             #Mapping Code Goes Here
             mappingObj = mappingClass(2)
@@ -2130,6 +2131,7 @@ if __name__ == '__main__':
             print "Running a Navigation Command"
             with threadLock:
                 system_status = "Navigation"
+                enduserloop = False
 
             #Navigation Code Goes Here
             navigationObj = navigationClass(2)
@@ -2142,8 +2144,7 @@ if __name__ == '__main__':
 
     with threadLock:
         speedVector = [0, 0]
-
-    exitFlag.value = True #instruct all the threads to close
+        exitFlag = True #instruct all the threads to close
 
 
     logging.info("Waiting for threads to close...")
