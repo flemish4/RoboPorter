@@ -316,6 +316,7 @@ class debugThread(MultiThreadBase):
                 try:
                     datatosend = json.dumps(debuginfo)
                     self.clientConnection.send(datatosend)
+					self.sendMap
                     self.loopsdone += 1 #increment loops done by 1
                     time.sleep(0.5)
 
@@ -2127,10 +2128,13 @@ if __name__ == '__main__':
             with threadLock:
                 system_status = "AwaitingCommands"
         elif currentcommand["Type"] == "NavigationCommand":
-            loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
-            with threadLock :
-                loadMap = loadMapTemp
-                runSLAM = "loadMap"
+			try :
+				loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
+				with threadLock :
+					loadMap = loadMapTemp
+					runSLAM = "loadMap"
+			except KeyError :
+				pass
             print "Running a Navigation Command"
             with threadLock:
                 system_status = "Navigation"
