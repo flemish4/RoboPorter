@@ -9,9 +9,7 @@ $(document).ready(function () {
     $("#MapCanvas2").hide();
     $("#MapCanvas3").hide();
     $("#nav_command_sent").hide();
-    $("#map-2").hide();
-    $("#map-3").hide();
-    $("#map-4").hide();
+
 
 
     //variables for WASD control
@@ -136,14 +134,24 @@ $(document).ready(function () {
         s.send(jsonstring + "$")
     }
 
-    function mappingcommand(name, mapid) {
+    function mappingcommand() {
+
         var json = {
-            'Type': 'MappingCommand',
-            'MapName': name,
-            'TableName': mapid,
+            'Type': 'CancelEnterUserCommand',
         }
         var jsonstring = JSON.stringify(json);
         s.send(jsonstring + "$")
+
+
+        setTimeout(function() {
+            var json = {
+                'Type': 'MappingCommand',
+            }
+            var jsonstring = JSON.stringify(json);
+            s.send(jsonstring + "$")
+          },500);
+        
+
     }
 
     function cancel() {
@@ -155,14 +163,26 @@ $(document).ready(function () {
     }
 
     function navigationcommand(X, Y, map) {
+
         var json = {
-            'Type': 'NavigationCommand',
-            'X': X,
-            'Y': Y,
-            'Map_Filename' : map,
+            'Type': 'CancelEnterUserCommand',
         }
         var jsonstring = JSON.stringify(json);
         s.send(jsonstring + "$")
+
+        setTimeout(function() {
+            var json = {
+                'Type': 'NavigationCommand',
+                'X': X,
+                'Y': Y,
+                'Map_Filename' : map,
+            }
+            var jsonstring = JSON.stringify(json);
+            s.send(jsonstring + "$")
+          },500);
+
+
+        
     }
 
     function usercommand() {
@@ -196,6 +216,8 @@ $(document).ready(function () {
 
     }
 
+
+
     function mapload() {
         var link = "/php/map_generation_temp.php?" + (new Date().getTime()) // Forces a reload not from the cache
         $("#current_map_image").attr("src", link);
@@ -211,7 +233,7 @@ $(document).ready(function () {
         $("#noconnection-modal").modal("hide");
         data = JSON.parse(e.data); // parses the JSON string into a Javascript object
 
-        $("#debugdata").html(""); // Clear previous values
+        $(".debugdata").html(""); // Clear previous values
 
         debug_context2.clearRect(0, 0, csize + 0.5, csize + 0.5); // Deletes all of the ultrasonic bars already drawn on the canvas
         // Write to ultrasonic debug screen
@@ -282,7 +304,7 @@ $(document).ready(function () {
 
             //Print any remaining debug data to the debug data div
             $.each(data, function (i, j) {
-                $("#debugdata").append("<br>" + i + " : " + j);
+                $(".debugdata").append("<br>" + i + " : " + j);
             })
 
             //Print data to home screen debug card
@@ -438,10 +460,7 @@ $(document).ready(function () {
     $('#man-control-send').click(function () {
         var left = $("#left-motor-amount").val()
         var right = $("#right-motor-amount").val()
-
         userspeed(left, right);
-
-        //s.send("m"+left+","+right)
     });
 
     // The following command colapses the nv bar when clicked
@@ -463,11 +482,9 @@ $(document).ready(function () {
 
     $("#link-control").click(function () {
         if(curr_status == "UserCommand"){
-            alert("Hi")
             $("#usercontrol-modal").modal("hide")
         }else{
             $("#usercontrol-modal").modal("show")
-            alert("Hi")
         }
         $('div[id^="div-"]').hide();
         $('a[id^="link-"]').removeClass("active");
@@ -620,6 +637,7 @@ $(document).ready(function () {
 
     $("#Auto-map").click(function () {
         $("#map-1").fadeOut(function () {
+            mappingcommand()
             $("#map-2").fadeIn();
         })
     });
@@ -631,12 +649,21 @@ $(document).ready(function () {
     });
 
     $("#new-map-btn").click(function () {
-        $("#map-2").hide();
-        $("#map-3").hide();
-        $("#map-4").hide();
-        $("#map-1").show();
-        map_reload = setInterval(mapload, 1000);
-        $('#save-map-btn').prop('disabled', false);
+        $.ajax({
+            type: 'POST',
+            url: 'php/delete_temp.php',
+        }).done(function (msg) {
+            if(msg == "Success"){
+                alert(msg)
+                $("#map-2").hide();
+                $("#map-3").hide();
+                $("#map-4").hide();
+                $("#map-1").show();
+                map_reload = setInterval(mapload, 1000);
+                $('#save-map-btn').prop('disabled', false); 
+            }
+        })
+        
     });
 
     $(".end-mapping").click(function () {
@@ -646,7 +673,7 @@ $(document).ready(function () {
         clearInterval(map_reload);
         var link = "/php/map_generation_temp.php?" + (new Date().getTime()) // Forces a reload not from the cache
         $("#final_map").attr("src", link);
-        $(this).parent().parent().fadeOut(function () {
+        $(this).parent().parent().parent().parent().fadeOut(function () {
             $("#map-4").fadeIn();
         })
     });

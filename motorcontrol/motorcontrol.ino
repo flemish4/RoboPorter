@@ -153,6 +153,8 @@ void setup() {
   // Set up hardware interrupts
   attachInterrupt(digitalPinToInterrupt(leftSensorPin_A) , leftSensorISR , RISING);
   attachInterrupt(digitalPinToInterrupt(rightSensorPin_A), rightSensorISR, RISING);
+  leftWheelServo.write(90);
+  rightWheelServo.write(90);
 
   // Set up timer interrupt
   TCCR2A = 0;
@@ -174,6 +176,9 @@ void setup() {
 
   // Initialise serial communication
   Serial.begin(19200);
+  
+  while(Serial.available())
+    Serial.read(); // flush the serial buffer
 }
 
 //
@@ -235,7 +240,7 @@ ISR (TIMER2_COMPA_vect) {
     // leftCountString = String(abs(leftSensorDistanceCount), HEX);
     // rightCountString = String(abs(rightSensorDistanceCount), HEX);
 
-  Serial.print(String("&")+String(leftSensorDistanceCount)+","+String(rightSensorDistanceCount)) ; 
+  Serial.print(String("&")+String(leftSensorDistanceCount)+","+String(rightSensorDistanceCount)+"\n") ; 
 
 
 
@@ -488,7 +493,7 @@ void loop() {
 
     if (startByte == '$'){    
       while(Serial.available() < 8){}
-      
+      Serial.println("%VALID COMMAND dollar\n");
       leftHex[0] = Serial.read();
       leftHex[1] = Serial.read();
       leftHex[2] = Serial.read();
@@ -525,9 +530,9 @@ void loop() {
     timeout = 0 ;
   }
   if(timeout2 >= printfreq*10){
-     stringtosend =  String("$") + "," + String(millis()) + ","+ String(leftSensorDistanceCount) + "," + rightSensorDistanceCount + "," + current1 + "," + batteryVoltage1 + "," + watts1 + "," + ampHours1 + "," + wattHours1 + "," + current2 + "," + batteryVoltage2 + "," + watts2 + "," + ampHours2 + "," + wattHours2 + "," + motoramps1 + "," + motoramps2 + "\n" ;
-     Serial.print(stringtosend) ;
-     timeout2 = 0 ;
+//     stringtosend =  String("$") + "," + String(millis()) + ","+ String(leftSensorDistanceCount) + "," + rightSensorDistanceCount + "," + current1 + "," + batteryVoltage1 + "," + watts1 + "," + ampHours1 + "," + wattHours1 + "," + current2 + "," + batteryVoltage2 + "," + watts2 + "," + ampHours2 + "," + wattHours2 + "," + motoramps1 + "," + motoramps2 + "\n" ;
+//     Serial.print(stringtosend) ;
+//     timeout2 = 0 ;
     }
 //  BatteryCurrentSensor1() ; 
 //  BatteryCurrentSensor2() ;

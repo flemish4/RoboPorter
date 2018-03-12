@@ -8,7 +8,7 @@
 #
 ###---Imports-------------------
 
-from bresenham import bresenham
+#from bresenham import bresenham
 import MySQLdb 
 import Queue
 import base64
@@ -26,8 +26,8 @@ import struct
 import sys
 import threading
 import time
-from breezyslam.algorithms import RMHC_SLAM
-from roboPorterTestFunctions import roboPorterLaser
+#from breezyslam.algorithms import RMHC_SLAM
+#from roboPorterTestFunctions import roboPorterLaser
 
 from sys import platform
 #if on linux, import functions for IMU and ip
@@ -362,8 +362,8 @@ class debugThread(MultiThreadBase):
             logging.debug("Binding the socket...")
             
             self.SeverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.SeverSocket.bind((HOST, PORT))
             self.SeverSocket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
+            self.SeverSocket.bind((HOST, PORT))
             self.SeverSocket.settimeout(5)
 
             # listen to incoming connections on PORT
@@ -390,6 +390,7 @@ class motorDataThread(MultiThreadBase):
             try:
                 logging.info("Trying to open serial port")
                 MotorConn.open()
+                MotorConn.flushInput()
             except Exception as e:
                 logging.error("%s", str(e))
             finally:
@@ -413,11 +414,15 @@ class motorDataThread(MultiThreadBase):
         global rightpulse
         global odomLeftPulse
         global odomRightPulse
+        global LIDARLeftPulse
+        global LIDARRightPulse
+
    
         # Loop until told to stop
         while not exitFlag:
             # Check that motor arduino connection is good
             self.checkMotorConn()
+            
             # If the ultrasonic sensors have detected an obstruction
             if obstruction:
                 if safetyOn: #if the safety is on
@@ -453,10 +458,8 @@ class motorDataThread(MultiThreadBase):
                     logging.error("%s", str(e))
             
             # Read from arduino
-            print("Before MotorConn inWaiting: " + str(MotorConn.inWaiting()))
             if MotorConn.inWaiting() > 0:
                 self.inputBuf = MotorConn.readline()
-                print self.inputBuf
                 try:
                     if self.inputBuf[0] == "$":
                         try:
@@ -469,8 +472,10 @@ class motorDataThread(MultiThreadBase):
                             logging.error("%s", str(e))
                     elif self.inputBuf[0] == "&":
                         try:
+                            self.inputBuf = self.inputBuf.rstrip("\n")
                             self.inputBuf = self.inputBuf.lstrip("&") 
                             self.inputBuf = self.inputBuf.rsplit(",")
+                            # print self.inputBuf
                             with threadLock:
                                 leftpulse = self.inputBuf[0]
                                 rightpulse = self.inputBuf[1]
@@ -751,8 +756,8 @@ class datafromUI(MultiThreadBase):
             # create a socket to establish a server
             logging.debug("Binding recieveing Socket")   
             self.ServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.ServerSocket.bind((HOST, PORT))
             self.ServerSocket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1) 
+            self.ServerSocket.bind((HOST, PORT))
             self.ServerSocket.settimeout(5)
 
             # listen to incoming connections on PORT
@@ -814,10 +819,13 @@ class datafromUI(MultiThreadBase):
 
                         # add code to end loops # REVISIT : Is this not above?
 
-
                     elif dataInput['Type'] == "CancelEnterUserCommand": # When the user wants to enter a command immediatly it clears the queue. This is called straight before a switch to the User Control mode occurs
                         with commandqueue.mutex:
                             commandqueue.queue.clear()
+                        with threadLock:
+                            enduserloop = True
+                        stop = {"Left":0, "Right":0}
+                        speedsqueue.put(stop)
 
                         # add code to end loops 
 
@@ -2095,11 +2103,13 @@ if __name__ == '__main__':
 
 
     # Create pathMap and SLAMObject
-    pathMapTemp = pathMapClass(realPorterSize[0])
-    with threadLock :
-        pathMap = pathMapTemp
-        SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
-            
+    try:
+        pathMapTemp = pathMapClass(realPorterSize[0])
+        with threadLock :
+            pathMap = pathMapTemp
+            SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
+    except:
+        pass 
     # Main Control Loop
     while sysRunning: #while the main loop is not in shutdown mode...
         time.sleep(1)
@@ -2112,16 +2122,13 @@ if __name__ == '__main__':
             with threadLock:
                 enduserloop = False
             while not enduserloop:
-
                 # Add new user code here and delete code below
-
                 currentspeed = speedsqueue.get()
                 with threadLock:
                     speedVector[0] = int(currentspeed["Left"])
                     speedVector[1] = int(currentspeed["Right"])
 
-                # Delete code above and replace with any new usermode code
-
+            # Delete code above and replace with any new usermode code
             with threadLock:
                 system_status == "AwaitingCommands"
         elif currentcommand["Type"] == "MappingCommand":
@@ -2150,7 +2157,7 @@ if __name__ == '__main__':
 
             #Navigation Code Goes Here
             navigationObj = navigationClass(2)
-            navigationObj.run((currentCommand["X"], currentCommand["Y"]))
+            navigationObj.run((currentcommand["X"], currentcommand["Y"]))
 
             with threadLock:
                 system_status = "AwaitingCommands"
