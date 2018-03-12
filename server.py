@@ -316,7 +316,7 @@ class debugThread(MultiThreadBase):
                 try:
                     datatosend = json.dumps(debuginfo)
                     self.clientConnection.send(datatosend)
-					self.sendMap
+					self.sendMap(detailedMap)
                     self.loopsdone += 1 #increment loops done by 1
                     time.sleep(0.5)
 
@@ -2153,12 +2153,16 @@ if __name__ == '__main__':
         speedVector = [0, 0]
         exitFlag = True #instruct all the threads to close
 
-
     logging.info("Waiting for threads to close...")
     for t in threads:
         logging.info("Closing %s thread", t)
         t.join()
 
+	# Closing serial connections
+	USConn1.close()
+	USConn2.close()
+	MotorConn.close()
+	LIDARConn.close()
     logging.info("Exiting main Thread... BYEEEE")
 
 #######END of Program
