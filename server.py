@@ -144,7 +144,7 @@ LIDARRightPulse = 0
 # odometry
 global pulseDistConst
 # distance = number of pulses * ( diameter of wheels / number of divisions in encoder)
-pulseDistConst = 12 / 360 # REVISIT : this is a complete guess
+pulseDistConst = 785 / 500 # REVISIT : this is a complete guess
 
 # Lidar
 global numSamples
