@@ -74,7 +74,7 @@ global cursor
 global MotorConn #serial handle for the motor controller
 global USConn1 #serial handle for the Ultrasonic controller 1
 global USConn2 #serial handle for the Ultrasonic controller 2
-global lidarConn
+global LIDARConn
 
 ##--Safety
 global safetyOn #Boolean for the state of the safety toggle (used only in manual control)
@@ -316,7 +316,7 @@ class debugThread(MultiThreadBase):
                 try:
                     datatosend = json.dumps(debuginfo)
                     self.clientConnection.send(datatosend)
-					self.sendMap(detailedMap)
+                    #self.sendMap(detailedMap)
                     self.loopsdone += 1 #increment loops done by 1
                     time.sleep(0.5)
 
@@ -360,8 +360,10 @@ class debugThread(MultiThreadBase):
 
             # create a socket to establish a server
             logging.debug("Binding the socket...")
+            
             self.SeverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.SeverSocket.bind((HOST, PORT))
+            self.SeverSocket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
             self.SeverSocket.settimeout(5)
 
             # listen to incoming connections on PORT
@@ -409,6 +411,8 @@ class motorDataThread(MultiThreadBase):
         logging.info("Starting %s", self.name)
         global leftpulse
         global rightpulse
+        global odomLeftPulse
+        global odomRightPulse
    
         # Loop until told to stop
         while not exitFlag:
@@ -449,8 +453,10 @@ class motorDataThread(MultiThreadBase):
                     logging.error("%s", str(e))
             
             # Read from arduino
+            print("Before MotorConn inWaiting: " + str(MotorConn.inWaiting()))
             if MotorConn.inWaiting() > 0:
                 self.inputBuf = MotorConn.readline()
+                print self.inputBuf
                 try:
                     if self.inputBuf[0] == "$":
                         try:
@@ -468,10 +474,10 @@ class motorDataThread(MultiThreadBase):
                             with threadLock:
                                 leftpulse = self.inputBuf[0]
                                 rightpulse = self.inputBuf[1]
-                                odomLeftPulse += leftpulse
-                                odomRightPulse += rightpulse
-                                LIDARLeftPulse += leftpulse
-                                LIDARRightPulse += rightpulse
+                                odomLeftPulse += float(leftpulse)
+                                odomRightPulse += float(rightpulse)
+                                LIDARLeftPulse += float(leftpulse)
+                                LIDARRightPulse += float(rightpulse)
                         except Exception as e:
                             logging.error("%s", str(e))
                     elif self.inputBuf[0] == "%":
@@ -562,7 +568,7 @@ class usDataThread(MultiThreadBase):
         global stoppingDistance
         global maxSpeeds
         global threadLock
-        tempMaxSpeeds [0,0,0,0,0,0,0,0]
+        tempMaxSpeeds = [0,0,0,0,0,0,0,0]
         #aMax = (2*np.pi*1000)/(60*0.12)
         aMax = 872.664626 # Calculated from line above which was supplied by a previous group 
         #radToRPM = 60/(2*np.pi)
@@ -579,7 +585,7 @@ class usDataThread(MultiThreadBase):
 
     def run(self):
         global speedVector
-        logging.info("Starting")
+        logging.info("US Starting")
         try:
             USConn1.flushInput()
             if UShosts == 2:
@@ -665,7 +671,7 @@ class usDataThread(MultiThreadBase):
                         if obstruction != True:
                             with threadLock:
                                 obstruction = True
-                        print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[2])) + ", " + str(int(USAvgDistances[2])))
+                        #print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[2])) + ", " + str(int(USAvgDistances[2])))
                     elif obstruction != False:
                         with threadLock:
                             obstruction = False
@@ -743,9 +749,10 @@ class datafromUI(MultiThreadBase):
             PORT = 5002
             HOST = ''
             # create a socket to establish a server
-            logging.debug("Binding recieveing Socket")
+            logging.debug("Binding recieveing Socket")   
             self.ServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.ServerSocket.bind((HOST, PORT))
+            self.ServerSocket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1) 
             self.ServerSocket.settimeout(5)
 
             # listen to incoming connections on PORT
@@ -831,22 +838,23 @@ class lidarInterfaceThread(MultiThreadBase):
         self.sAngle  = 360 / numSamples
         self.currentAngle  = 0
          
-    def checkLidarConn(self) :
-        if lidarConn.closed:
+    def checkLIDARConn(self) :
+        global LIDARConn
+        if LIDARConn.closed:
             try:
                 logging.info("Trying to open lidar port")
-                lidarConn.open()
+                LIDARConn.open()
             except Exception as e:
                 logging.error("%s", str(e))
             finally:
-                logging.info("No lidarConn Comms... Looping back to listening mode")
+                logging.info("No LIDARConn Comms... Looping back to listening mode")
 
     def run(self) :
         global lidarRun
         global threadLock
         global lidarStartTime
         global lidarEndTime
-        
+        global LIDARConn
         self.currentAngle = 0
         
          # Loop until told to stop
@@ -859,7 +867,7 @@ class lidarInterfaceThread(MultiThreadBase):
                     LIDARConn.write("4\n") # run continuous
                 except Exception as e :
                     logging.error("%s", str(e))
-                    self.checkLidarConn()
+                    self.checkLIDARConn()
             elif lidarRun == "s" :                
                 with threadLock :
                     lidarRun = ""
@@ -867,7 +875,7 @@ class lidarInterfaceThread(MultiThreadBase):
                     LIDARConn.write("1\n") # stop!
                 except Exception as e :
                     logging.error("%s", str(e))
-                    self.checkLidarConn()
+                    self.checkLIDARConn()
 
             # Read data from lidar 
             if lidarStartTime == 0 :
@@ -901,7 +909,7 @@ class lidarInterfaceThread(MultiThreadBase):
             LIDARConn.write("4\n") # run continuous
         except Exception as e :
             logging.error("%s", str(e))
-            self.checkLidarConn()
+            self.checkLIDARConn()
                     
   
 class SLAMThread(MultiThreadBase):
@@ -1723,7 +1731,7 @@ class controlClass() :
                 #file.write("tentative_gScor: " + str(tentative_gScore) + "\n")
                 if (neighbor in gScore) and (tentative_gScore >= gScore[neighbor]) :
                     #file.write("Not better" + "\n")
-                    continue		# This is not a better path.
+                    continue        # This is not a better path.
                 #file.write("Better" + "\n")
                 # This path is the best until now. Record it!
                 cameFrom[neighbor] = current
@@ -2022,7 +2030,7 @@ if __name__ == '__main__':
         logging.info("Trying to connect to motor controller")
         try: #try to connect
             if (platform == "linux") or (platform == "linux2"):
-                MotorConn = serial.Serial('/dev/ttyACM0', 19200,timeout=5)
+                MotorConn = serial.Serial('/dev/ttyACM1', 19200,timeout=5)
             elif (platform == "win32"):
                 MotorConn = serial.Serial('COM7', 19200)
 
@@ -2043,10 +2051,10 @@ if __name__ == '__main__':
         logging.info("Trying to connect to Ultrasonic controller")
         try:
             if (platform == "linux") or (platform == "linux2"):
-                USConn1 = serial.Serial('/dev/ttyACM1', 9600)
+                USConn1 = serial.Serial('/dev/ttyACM2', 9600)
                 logging.info("Connected to Ultrasonic sensors at %s", str(USConn1))
                 if UShosts == 2:
-                    USConn2 = serial.Serial('/dev/ttyACM2', 9600)
+                    USConn2 = serial.Serial('/dev/ttyACM3', 9600)
                     logging.info("Connected to Ultrasonic sensors at %s", str(USConn2))
 
             elif (platform == "win32"):
@@ -2070,11 +2078,11 @@ if __name__ == '__main__':
         logging.info("Trying to connect to LidarInterface")
         try: #try to connect
             if (platform == "linux") or (platform == "linux2"):
-                LidarConn = serial.Serial('/dev/ttyACM3', 2000000,timeout=5)
+                LIDARConn = serial.Serial('/dev/ttyACM0', 2000000,timeout=5)
             elif (platform == "win32"):
-                LidarConn = serial.Serial('COM5', 2000000)
+                LIDARConn = serial.Serial('COM5', 2000000)
 
-            logging.info('Connected to Lidar %s', str(LidarConn))
+            logging.info('Connected to Lidar %s', str(LIDARConn))
             lidarThread = lidarInterfaceThread(20, "Lidar thread")
             lidarThread.start()
             
@@ -2128,13 +2136,13 @@ if __name__ == '__main__':
             with threadLock:
                 system_status = "AwaitingCommands"
         elif currentcommand["Type"] == "NavigationCommand":
-			try :
-				loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
-				with threadLock :
-					loadMap = loadMapTemp
-					runSLAM = "loadMap"
-			except KeyError :
-				pass
+            try :
+                loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
+                with threadLock :
+                    loadMap = loadMapTemp
+                    runSLAM = "loadMap"
+            except KeyError :
+                pass
             print "Running a Navigation Command"
             with threadLock:
                 system_status = "Navigation"
@@ -2158,11 +2166,11 @@ if __name__ == '__main__':
         logging.info("Closing %s thread", t)
         t.join()
 
-	# Closing serial connections
-	USConn1.close()
-	USConn2.close()
-	MotorConn.close()
-	LIDARConn.close()
+    # Closing serial connections
+    USConn1.close()
+    USConn2.close()
+    MotorConn.close()
+    LIDARConn.close()
     logging.info("Exiting main Thread... BYEEEE")
 
 #######END of Program
