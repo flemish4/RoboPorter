@@ -204,10 +204,10 @@ totalR          = 0
 totalWd          = 0
 pathMap             = {}
 lidarRun            = ""
-realPorterSize      = (73,70)
+realPorterSize      = (50,50)
 realPorterRadius    = math.sqrt(realPorterSize[0]**2+realPorterSize[1]**2)
-realPorterWheelOffsetY = realPorterSize[1]/4 # REVISIT : Make this accurate
-realPorterLIDAROffsetY = realPorterSize[1]/4
+realPorterWheelOffsetY = -8 # REVISIT : Make this accurate
+realPorterLIDAROffsetY = 26
 pixelPorterSize    = (realPorterSize[0]/2,realPorterSize[1]/2)
 
 
