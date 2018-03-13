@@ -308,7 +308,9 @@ class debugThread(MultiThreadBase):
                         'System Status': str(system_status),
                         'Battery': str("50"),
                         'Left Pulses' : str(leftpulse),
-                        'Right Pulses' : str(rightpulse)
+                        'Right Pulses' : str(rightpulse),
+                        'Location' : str(porterLocation),
+                        'Max Speeds': str(maxSpeeds)
                     }
                 except:
                     logging.warning("%s", str(e))
@@ -993,7 +995,13 @@ class SLAMThread(MultiThreadBase):
         global adjustedLidarList
         global adjustedLidarListReady
         global dataMap
+        global lidarData
         global lidarStartTime
+        global lidarEndTime
+        global leftDelta
+        global rightDelta
+        
+
         if len(lidarPolarList) > 0 : # this should always be true at this point in simulation
         
             # REVISIT : Get more accurate times?
@@ -2126,24 +2134,28 @@ if __name__ == '__main__':
         time.sleep(1)
         currentcommand = commandqueue.get()
         if currentcommand["Type"] == "UserCommand": 
+            logging.info("Entering User Command Mode")
             with threadLock:
                 system_status = "UserCommand"
+                enduserloop = False
+                SLAMRun = "start"
+                lidarRun = "a"
+                time.sleep(1)
             with commandqueue.mutex:
                 speedsqueue.queue.clear()
-            with threadLock:
-                enduserloop = False
             while not enduserloop:
-                # Add new user code here and delete code below
                 currentspeed = speedsqueue.get()
                 with threadLock:
                     speedVector[0] = int(currentspeed["Left"])
                     speedVector[1] = int(currentspeed["Right"])
-
-            # Delete code above and replace with any new usermode code
             with threadLock:
+                SLAMRun = "stop" # Stop slap and lidar
+                lidarRun = "s"
                 system_status == "AwaitingCommands"
+
+
         elif currentcommand["Type"] == "MappingCommand":
-            print "Running a Mapping Command"
+            logging.info("Entering Mapping Mode")
             with threadLock:
                 system_status = "Mapping"
                 enduserloop = False
@@ -2153,7 +2165,10 @@ if __name__ == '__main__':
             mappingObj.run()
             with threadLock:
                 system_status = "AwaitingCommands"
+
+
         elif currentcommand["Type"] == "NavigationCommand":
+            logging.info("Entering Navigation Mode")
             try :
                 loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
                 with threadLock :
@@ -2161,7 +2176,7 @@ if __name__ == '__main__':
                     runSLAM = "loadMap"
             except KeyError :
                 pass
-            print "Running a Navigation Command"
+            
             with threadLock:
                 system_status = "Navigation"
                 enduserloop = False
