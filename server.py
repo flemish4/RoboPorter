@@ -8,7 +8,7 @@
 #
 ###---Imports-------------------
 
-#from bresenham import bresenham
+from bresenham import bresenham
 import MySQLdb 
 import Queue
 import base64
@@ -26,8 +26,8 @@ import struct
 import sys
 import threading
 import time
-#from breezyslam.algorithms import RMHC_SLAM
-#from roboPorterTestFunctions import roboPorterLaser
+from breezyslam.algorithms import RMHC_SLAM
+from roboPorterTestFunctions import roboPorterLaser
 
 from sys import platform
 #if on linux, import functions for IMU and ip
@@ -316,7 +316,10 @@ class debugThread(MultiThreadBase):
                 try:
                     datatosend = json.dumps(debuginfo)
                     self.clientConnection.send(datatosend)
-                    #self.sendMap(detailedMap)
+                    try:
+                        self.sendMap(detailedMap)
+                    except Exception as e:
+                        logging.error("%s", str(e))
                     self.loopsdone += 1 #increment loops done by 1
                     time.sleep(0.5)
 
@@ -808,6 +811,14 @@ class datafromUI(MultiThreadBase):
                     dataInput = json.loads(dataInputTidied[0]) 
                     if (dataInput['Type'] == "MiscCommand"):
                         if dataInput['Command'] == "x":
+                            with threadLock:
+                                enduserloop = True
+                            if system_status == "UserCommand":
+                                with commandqueue.mutex:
+                                    commandqueue.queue.clear()
+                                stop = {"Left":0, "Right":0}
+                                speedsqueue.put(stop)
+
                             sysRunning = False
                             commandqueue.put("Close")
                         elif dataInput['Command'] == "s":
@@ -937,6 +948,8 @@ class SLAMThread(MultiThreadBase):
         global dataMap
         global totalR
         global totalWd
+        global odomLeftPulse
+        global odomRightPulse
 
         if odomLeftPulse != 0 and odomRightPulse != 0 :  
             with threadLock :
@@ -952,15 +965,15 @@ class SLAMThread(MultiThreadBase):
             y   = porterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)
 
             if (math.fabs(leftDelta - rightDelta) < 1.0e-6) : # basically going straight
-                new_x = x + leftDelta * math.cos(orientation);
-                new_y = y + rightDelta * math.sin(orientation);
-                new_heading = orientation;
-                new_headingUnConst = orientationUnconst;
+                new_x = x + leftDelta * math.cos(orientation)
+                new_y = y + rightDelta * math.sin(orientation)
+                new_heading = orientation
+                new_headingUnConst = orientationUnconst
             else :
                 R = pixelPorterSize[0] * (leftDelta + rightDelta) / (2 * (rightDelta - leftDelta))
-                wd = (rightDelta - leftDelta) / pixelPorterSize[0] ;
-                new_x = x + R * math.sin(wd + orientation) - R * math.sin(orientation);
-                new_y = y - R * math.cos(wd + orientation) + R * math.cos(orientation);
+                wd = (rightDelta - leftDelta) / pixelPorterSize[0] 
+                new_x = x + R * math.sin(wd + orientation) - R * math.sin(orientation)
+                new_y = y - R * math.cos(wd + orientation) + R * math.cos(orientation)
                 
                 totalWd += wd/ 2   #   self.scale # REVISIT : why is scale needed?
                 new_heading = orientation + wd/ 2 # self.scale;
@@ -1069,7 +1082,6 @@ class SLAMThread(MultiThreadBase):
                     pathMap.updateMap()
     
 # Class definitions 
-
 
 class pathMapClass() :
     def __init__(self, dilateAmount) :
@@ -1233,7 +1245,6 @@ class pathMapClass() :
     def getDataMap(self) :
         return self.wallMap
 
-
 # https://github.com/ivmech/ivPID/blob/master/PID.py
 class PID:
     """PID Controller
@@ -1334,7 +1345,7 @@ class PID:
         """
         self.sample_time = sample_time
 
-                    
+                  
 class controlClass() :
     
     def __init__(self, scale):
@@ -2038,7 +2049,7 @@ if __name__ == '__main__':
         logging.info("Trying to connect to motor controller")
         try: #try to connect
             if (platform == "linux") or (platform == "linux2"):
-                MotorConn = serial.Serial('/dev/ttyACM1', 19200,timeout=5)
+                MotorConn = serial.Serial('/dev/ttyACM0', 19200,timeout=5)
             elif (platform == "win32"):
                 MotorConn = serial.Serial('COM7', 19200)
 
@@ -2086,7 +2097,7 @@ if __name__ == '__main__':
         logging.info("Trying to connect to LidarInterface")
         try: #try to connect
             if (platform == "linux") or (platform == "linux2"):
-                LIDARConn = serial.Serial('/dev/ttyACM0', 2000000,timeout=5)
+                LIDARConn = serial.Serial('/dev/ttyACM1', 2000000,timeout=5)
             elif (platform == "win32"):
                 LIDARConn = serial.Serial('COM5', 2000000)
 
