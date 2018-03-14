@@ -61,6 +61,7 @@ Speech_Enable = True
 Debug_Enable = True
 Lidar_Enable = True
 SLAM_Enable = True
+Recieve_Enable = True
 
 ##--Motor Commands
 global speedVector #demanded wheel speeds (left, right)
@@ -283,7 +284,6 @@ class debugThread(MultiThreadBase):
         self.dataStore = ""
 
     def run(self):
-        
         logging.info("Starting %s", self.name)
         while not exitFlag:
             debuginfo = 0 
@@ -386,7 +386,7 @@ class debugThread(MultiThreadBase):
             time.sleep(5)
     
     def send_map(self,map_to_send):
-        cv2.imwrite('map.jpg', map_to_send)
+        #cv2.imwrite('map.jpg', map_to_send)
         img_string = cv2.imencode('.jpg',map_to_send)[1].tostring()
         img_string = base64.b64encode(img_string)
         query = "INSERT INTO temp (data,type) VALUES ('%s','image')" %img_string
@@ -421,11 +421,8 @@ class motorDataThread(MultiThreadBase):
         global motordata
         global motortest
         global lastSent
-        lastSent = [0,0]
         global last_time_sent
-        last_time_sent = 0
         global text_file
-        logging.info("Starting %s", self.name)
         global leftpulse
         global rightpulse
         global odomLeftPulse
@@ -433,12 +430,15 @@ class motorDataThread(MultiThreadBase):
         global LIDARLeftPulse
         global LIDARRightPulse
 
-   
+        lastSent = [0,0]
+        last_time_sent = 0
+
+        logging.info("Starting %s", self.name)
+
         # Loop until told to stop
         while not exitFlag:
             # Check that motor arduino connection is good
             self.checkMotorConn()
-            
             # If the ultrasonic sensors have detected an obstruction
             if obstruction:
                 if safetyOn: #if the safety is on
@@ -455,9 +455,6 @@ class motorDataThread(MultiThreadBase):
                     self.checkMotorConn()
                     
             elif (speedVector != lastSent) or ((time.time() - last_time_sent)>=1):
-                last_time_sent = 0 
-                print "Sending Data"
-                logging.debug("Data Ready")
                 logging.info("Data Ready")
                 try:
                     if safetyOn:
@@ -509,6 +506,7 @@ class motorDataThread(MultiThreadBase):
                             logging.error("%s", str(e))
                 except Exception as e:
                     logging.error("%s", str(e))
+
             time.sleep(0.001)
         logging.info("Exiting")
 
@@ -2000,11 +1998,7 @@ class navigationClass(controlClass):
         self.goTo(destination, 20, False)
         
         logging.info("Done navigation")
-        
-        
-
-
-    
+           
 #Retrieve map from database
 def recieve_map(filename):
     query = "SELECT data FROM `%u` ORDER BY id DESC LIMIT 1" %filename
@@ -2031,8 +2025,9 @@ if __name__ == '__main__':
     logging.info("Starting system...")
     sysRunning = True
 
-    #Try to strat thread to recieve data from UI
-    try:
+    #Try to start thread to recieve data from UI
+    if Recieve_Enable:
+        try:
         logging.info("Trying to Run Recieve Thread")
         recieveChannel = datafromUI(6, "Recieve Data ")
         #recieveChannel.daemon = True
@@ -2042,30 +2037,28 @@ if __name__ == '__main__':
         logging.info('Recieve Thread Running - %s', str(recieveChannel))
         logging.info("Running Recieve Server")
         #time.sleep(1)
-
-    except Exception as e:
-        logging.error("%s", str(e))
-
+        except Exception as e:
+            logging.error("%s", str(e))
 
     #Try to start thread to send data from UI
-    try:
-        logging.info("Trying to Run Debug Server")
-        debugChannel = debugThread(3, "Debug Thread")
-        #debugChannel.daemon = True
-        debugChannel.start()
-        
-        threads.append(debugChannel)
-        logging.info('Debug Thread Running - %s', str(debugChannel))
-        logging.info("Running Debug Server")
-        #time.sleep(1)
+    if Debug_Enable:
+        try:
+            logging.info("Trying to Run Debug Server")
+            debugChannel = debugThread(3, "Debug Thread")
+            #debugChannel.daemon = True
+            debugChannel.start()
+            
+            threads.append(debugChannel)
+            logging.info('Debug Thread Running - %s', str(debugChannel))
+            logging.info("Running Debug Server")
+            #time.sleep(1)
 
-    except Exception as e:
-        logging.error("%s", str(e))
+        except Exception as e:
+            logging.error("%s", str(e))
 
-    # setup serial connection to motor controller
-    logging.info("Trying to connect to serial devices")
-
+    # setup serial connection to motor controller  
     if Motor_Enable: 
+        logging.info("Trying to connect to serial devices")
         logging.info("Trying to connect to motor controller")
         try: #try to connect
             if (platform == "linux") or (platform == "linux2"):
@@ -2110,8 +2103,7 @@ if __name__ == '__main__':
             print ('Unable to establish serial comms to US device')
             logging.error("%s", str(e))
             # USConnected = False
-            
-            
+                  
     # Setup serial conn to LidarInterface
     if Lidar_Enable: 
         logging.info("Trying to connect to LidarInterface")
