@@ -60,6 +60,7 @@ Motor_Enable = True
 Speech_Enable = True
 Debug_Enable = True
 Lidar_Enable = True
+SLAM_Enable = True
 
 ##--Motor Commands
 global speedVector #demanded wheel speeds (left, right)
@@ -116,6 +117,7 @@ speedsqueue = Queue.Queue()
 global porterLocation #vector holding global location [x,y] in cm
 global porterOrientation #angle from north (between -180,180) in degrees
 porterOrientation = 0  # from north heading (in degrees?)
+porterLocation = [0,0]
 
 ##-System State Variables
 sysRunning = False #
@@ -281,6 +283,7 @@ class debugThread(MultiThreadBase):
         self.dataStore = ""
 
     def run(self):
+        
         logging.info("Starting %s", self.name)
         while not exitFlag:
             debuginfo = 0 
@@ -312,14 +315,15 @@ class debugThread(MultiThreadBase):
                         'Location' : str(porterLocation),
                         'Max Speeds': str(maxSpeeds)
                     }
-                except:
+                except Exception as e:
                     logging.warning("%s", str(e))
                     
                 try:
                     datatosend = json.dumps(debuginfo)
                     self.clientConnection.send(datatosend)
                     try:
-                        self.sendMap(detailedMap)
+                        #print str(detailedMap)
+                        self.send_map(detailedMap)
                     except Exception as e:
                         logging.error("%s", str(e))
                     self.loopsdone += 1 #increment loops done by 1
@@ -380,6 +384,13 @@ class debugThread(MultiThreadBase):
             self.debugServer = False
             logging.debug("Sleeping...")
             time.sleep(5)
+    
+    def send_map(self,map_to_send):
+        cv2.imwrite('map.jpg', map_to_send)
+        img_string = cv2.imencode('.jpg',map_to_send)[1].tostring()
+        img_string = base64.b64encode(img_string)
+        query = "INSERT INTO temp (data,type) VALUES ('%s','image')" %img_string
+        cursor.execute(query)
 
             
 class motorDataThread(MultiThreadBase):
@@ -443,7 +454,7 @@ class motorDataThread(MultiThreadBase):
                 except Exception as e:
                     self.checkMotorConn()
                     
-            elif (speedVector != lastSent) or (last_time_sent >= 1):
+            elif (speedVector != lastSent) or ((time.time() - last_time_sent)>=1):
                 last_time_sent = 0 
                 print "Sending Data"
                 logging.debug("Data Ready")
@@ -499,12 +510,12 @@ class motorDataThread(MultiThreadBase):
                 except Exception as e:
                     logging.error("%s", str(e))
             time.sleep(0.001)
-            last_time_sent +=0.001
         logging.info("Exiting")
 
     def send_serial_data(self, sendCommand):
         global lastSent
         global threadLock
+        global last_time_sent
         #print "Sending Speed Vector"
         logging.info("Sending Speed Vector - %s", str(sendCommand))
         if self.hexData: #construct the command to be sent.
@@ -535,6 +546,7 @@ class motorDataThread(MultiThreadBase):
             logging.info("Successfully sent... - %s", str(sendData))
             with threadLock :
                 lastSent = sendCommand[:]
+                last_time_sent = time.time()
             # time.sleep(10)
             # print MotorConn.read(MotorConn.inWaiting())
         except Exception as e:
@@ -674,7 +686,7 @@ class usDataThread(MultiThreadBase):
         if safetyOn:
             try:
                 # If heading forwards - check front USs for obstruction
-                if (speedVector[0] >= 0 ) and (speedVector[1] >= 0):
+                if (speedVector[0] > 0 ) and (speedVector[1] > 0):
                     speedVectorMaxSpeed = min(maxSpeeds[2:3])
                     if (int(USAvgDistances[2]) < USThresholds[0]) or (int(USAvgDistances[3]) < USThresholds[0]):
                         logging.warning("FRONT TOO CLOSE. STOPPPPP!!!")
@@ -877,7 +889,7 @@ class lidarInterfaceThread(MultiThreadBase):
         global lidarEndTime
         global LIDARConn
         self.currentAngle = 0
-        
+
          # Loop until told to stop
         while not exitFlag:
             # Enact any user requests
@@ -904,18 +916,18 @@ class lidarInterfaceThread(MultiThreadBase):
                     lidarStartTime = time.time()
                     
             input = LIDARConn.readline()[:-2]
-            
+
             if input == "$" :
                 logging.debug("First sample of LIDAR recieved")
                 self.currentAngle = 0
-            else :
+            else :     
                 # Attempt to convert to float - else set to 0
                 try :
                     r = float(input)
                 except Exception as e:
                     r = 0
                     logging.warning("Invalid lidar sample ignored")
-                
+
                 with threadLock :
                     lidarPolarList.append({"angle": self.currentAngle, "dist" : r })
                 self.currentAngle += self.sAngle
@@ -937,7 +949,7 @@ class SLAMThread(MultiThreadBase):
     def __init__(self, threadID, name):
         threading.Thread.__init__(self)
         self.threadID = threadID
-        self.name = name
+        self.name = name 
         
     # REVISIT : THIS WILL NOT WORK - NEEDS UPDATING FOR REAL PORTER
     def calculatePorterPosition(self) :
@@ -1000,10 +1012,19 @@ class SLAMThread(MultiThreadBase):
         global lidarEndTime
         global leftDelta
         global rightDelta
+        global LIDARLeftPulse
+        global LIDARRightPulse
+        global numSamples
         
 
         if len(lidarPolarList) > 0 : # this should always be true at this point in simulation
-        
+            with threadLock:
+                lidarData = list(lidarPolarList)
+                lidarPolarList = []
+                leftDelta  = LIDARLeftPulse * pulseDistConst
+                rightDelta = LIDARRightPulse * pulseDistConst
+            # print "new loop"
+            #print str(lidarData)
             # REVISIT : Get more accurate times?
             sampleTime =  lidarEndTime - lidarStartTime
             sampleTimeFraction = sampleTime / len(lidarData)
@@ -1011,18 +1032,15 @@ class SLAMThread(MultiThreadBase):
             
             # clear variables
             with threadLock :
-                lidarData = list(lidarPolarList)
-                lidarPolarList = []
-                leftDelta  = LIDARLeftPulse * pulseDistConst
-                rightDelta = LIDARRightPulse * pulseDistConst
                 LIDARLeftPulse = 0
                 LIDARRightPulse = 0
                 lidarStartTime = 0
                 lidarEndTime = 0
-            
+            #self.lidarTotalNSamples += len(lidarData)
             for i, sample in enumerate(lidarData) :
                 # do calculations else if sample is end sample then push all stored calculated values into output and set ready 
                 if sample != "END" :
+                    print "Adjusting"
                     # convert coordinate to x y 
                     sampleXY = (sample["dist"]*math.cos(math.radians(sample["angle"]-90)),sample["dist"]*math.sin(math.radians(sample["angle"]-90)))
                     # add motion i*distFraction
@@ -1033,15 +1051,14 @@ class SLAMThread(MultiThreadBase):
                     # save to store
                     adjustedLidarStore.append(r*10)
                 else : 
+                    print "Leaving Adjust Lidar"
                     with threadLock :
                         adjustedLidarList = adjustedLidarStore[-self.lidarTotalNSamples-1:]
                         #with open("adjustLidar.log","a+") as f:
                         #    f.write("new\n" + str(adjustedLidarList) + "\n" + str(adjustedLidarStore)+"\n")
                         adjustedLidarStore = []
                         adjustedLidarListReady = True
-            
-
-                
+                         
     def run(self) :
         global adjustedLidarList
         global adjustedLidarListReady
@@ -1068,13 +1085,12 @@ class SLAMThread(MultiThreadBase):
                 with threadLock :
                     SLAMObject.setmap(loadMap)
                     runSLAM = ""
-                  
-            if SLAMRunning :      
+
+            if SLAMRunning :  
                 self.calculatePorterPosition()
                 self.adjustLidar()
                 if adjustedLidarListReady:
                     SLAMObject.update(adjustedLidarList) #, (dxy*20, globalWd, 0.015 ))
-                    
                     # update position
                     with threadLock: 
                         x, y, newPorterOrientation = SLAMObject.getpos()
@@ -1086,8 +1102,9 @@ class SLAMThread(MultiThreadBase):
                         ySim =  SLAMOffset[0] - x/20
                         porterLocation = (xSim + realPorterLIDAROffsetY*math.cos(porterOrientation),ySim + realPorterLIDAROffsetY*math.sin(porterOrientation))
                         adjustedLidarListReady = False
-
+                    print "Slam Map Entering"
                     pathMap.updateMap()
+                time.sleep(0.001)
     
 # Class definitions 
 
@@ -1139,13 +1156,14 @@ class pathMapClass() :
         global navMap
         global detailedMap
         global SLAMObject
-        
+        #print "Slam Map"
         # Make array for SLAM map
         mapbytes = bytearray(MAP_SIZE_PIXELS * MAP_SIZE_PIXELS)
         # Get SLAM map
         SLAMObject.getmap(mapbytes)
         # Convert map into numpy array
         SLAMMap = np.frombuffer(mapbytes, dtype='B')
+        #cv2.imwrite('afterbuffer.jpg', SLAMMap)
         SLAMMap.shape =  (-1,MAP_SIZE_PIXELS)
 
         # Transform SLAMMap - threshold to get walls,reduce size,  dilate to expand walls for safety
@@ -1984,13 +2002,7 @@ class navigationClass(controlClass):
         logging.info("Done navigation")
         
         
-        
-# Sends Maps to the temporary table in the database
-def send_map(map_to_send):
-    img_string = cv2.imencode('.jpg',map_to_send)[1].tostring()
-    img_string = base64.b64encode(img_string)
-    query = "INSERT INTO temp (data) VALUES ('%s')" %img_string
-    cursor.execute(query)
+
 
     
 #Retrieve map from database
@@ -2057,7 +2069,7 @@ if __name__ == '__main__':
         logging.info("Trying to connect to motor controller")
         try: #try to connect
             if (platform == "linux") or (platform == "linux2"):
-                MotorConn = serial.Serial('/dev/ttyACM0', 19200,timeout=5)
+                MotorConn = serial.Serial('/dev/ttyACM1', 19200,timeout=5)
             elif (platform == "win32"):
                 MotorConn = serial.Serial('COM7', 19200)
 
@@ -2105,12 +2117,12 @@ if __name__ == '__main__':
         logging.info("Trying to connect to LidarInterface")
         try: #try to connect
             if (platform == "linux") or (platform == "linux2"):
-                LIDARConn = serial.Serial('/dev/ttyACM1', 2000000,timeout=5)
+                LIDARConn = serial.Serial('/dev/ttyACM0', 2000000,timeout=5)
             elif (platform == "win32"):
                 LIDARConn = serial.Serial('COM5', 2000000)
 
             logging.info('Connected to Lidar %s', str(LIDARConn))
-            lidarThread = lidarInterfaceThread(20, "Lidar thread")
+            lidarThread = lidarInterfaceThread(7, "Lidar thread")
             lidarThread.start()
             
             threads.append(lidarThread)
@@ -2120,6 +2132,11 @@ if __name__ == '__main__':
             logging.error("Unable to establish lidar comms to port /dev/ttyACM3")
             logging.error("%s", str(e))
 
+    if SLAM_Enable:
+        slamthread1 = SLAMThread(8, "SLAM thread")
+        slamthread1.start()
+        threads.append(slamthread1)
+        logging.info('SLAM Thread Running - %s', str(slamthread1))
 
     # Create pathMap and SLAMObject
     try:
@@ -2138,7 +2155,7 @@ if __name__ == '__main__':
             with threadLock:
                 system_status = "UserCommand"
                 enduserloop = False
-                SLAMRun = "start"
+                runSLAM = "start"
                 lidarRun = "a"
                 time.sleep(1)
             with commandqueue.mutex:
@@ -2149,7 +2166,7 @@ if __name__ == '__main__':
                     speedVector[0] = int(currentspeed["Left"])
                     speedVector[1] = int(currentspeed["Right"])
             with threadLock:
-                SLAMRun = "stop" # Stop slap and lidar
+                runSLAM = "stop" # Stop slap and lidar
                 lidarRun = "s"
                 system_status == "AwaitingCommands"
 
