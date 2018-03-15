@@ -94,7 +94,7 @@ $(document).ready(function () {
             //$("#error-modal").modal("hide");
             num_debug_sent = prev_debug_sent;
         }
-    }, 1000);
+    }, 2000);
 
 
     // Function definitions
@@ -220,7 +220,7 @@ $(document).ready(function () {
 
     function mapload() {
         var link = "/php/map_generation_temp.php?" + (new Date().getTime()) // Forces a reload not from the cache
-        $("#current_map_image").attr("src", link);
+        $(".current_map_image").attr("src", link);
     }
 
 
@@ -258,22 +258,22 @@ $(document).ready(function () {
             debug_context2.fillRect((csize / 2) + (dscale * csize / 2) + 0.5, (csize / 2) * (1 - dscale) + dw + 0.5, dh6, dw);
 
             //fill rectangles for the bottom
-            debug_context2.fillRect((csize / 2) * (1 - dscale) + 0.5, (csize / 2) * (1 - dscale) + (csize * dscale) + 0.5, dw, dh7);
-            debug_context2.fillRect((csize / 2) * (1 - dscale) + dw + 0.5, (csize / 2) * (1 - dscale) + (csize * dscale) + 0.5, dw, dh8);
+            debug_context2.fillRect((csize / 2) * (1 - dscale) + 0.5, (csize / 2) * (1 - dscale) + (csize * dscale) + 0.5, dw, dh8);
+            debug_context2.fillRect((csize / 2) * (1 - dscale) + dw + 0.5, (csize / 2) * (1 - dscale) + (csize * dscale) + 0.5, dw, dh7);
 
             //fill rectangles for the left side
             debug_context2.fillRect((csize / 2) - (dscale * csize / 2) - dh1 + 0.5, (csize / 2) * (1 - dscale), dh1 + 0.5, dw);
             debug_context2.fillRect((csize / 2) - (dscale * csize / 2) - dh2 + 0.5, (csize / 2) * (1 - dscale) + dw, dh2 + 0.5, dw);
 
             // Delete ultrasonic data from javascript object. This allows any remaining data to be printed in a for loop
-            delete data["US1"];
-            delete data["US2"];
-            delete data["US3"];
-            delete data["US4"];
-            delete data["US5"];
-            delete data["US6"];
-            delete data["US7"];
-            delete data["US8"];
+            // delete data["US1"];
+            // delete data["US2"];
+            // delete data["US3"];
+            // delete data["US4"];
+            // delete data["US5"];
+            // delete data["US6"];
+            // delete data["US7"];
+            // delete data["US8"];
             delete data["Type"];
 
             num_debug_sent = parseInt(data["Debug Data Sent"], 10);
@@ -296,6 +296,8 @@ $(document).ready(function () {
             
             if ((data["System Status"] == "Mapping") || (data["System Status"] == "Navigation")) {
                 $('.mancontrol').prop('disabled', true);
+            }else{
+                $('.mancontrol').prop('disabled', false);
             }
 
             if(curr_status == "UserCommand"){ // If the mode switched to user command hide the div that alerts the user that the robot is not in user command mode
@@ -644,6 +646,7 @@ $(document).ready(function () {
 
     $("#Manual-map").click(function () {
         $("#map-1").fadeOut(function () {
+            usercommand()
             $("#map-3").fadeIn();
         })
     });
@@ -654,7 +657,6 @@ $(document).ready(function () {
             url: 'php/delete_temp.php',
         }).done(function (msg) {
             if(msg == "Success"){
-                alert(msg)
                 $("#map-2").hide();
                 $("#map-3").hide();
                 $("#map-4").hide();
@@ -667,6 +669,7 @@ $(document).ready(function () {
     });
 
     $(".end-mapping").click(function () {
+        cancel()
         $("#map-saving").hide();
         $("#map-saving-error").hide();
         $("#map-saving-success").hide();
