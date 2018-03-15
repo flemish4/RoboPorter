@@ -117,7 +117,9 @@ speedsqueue = Queue.Queue()
 # -Porter Localisation
 global porterLocation #vector holding global location [x,y] in cm
 global porterOrientation #angle from north (between -180,180) in degrees
+global porterOrientationUnConst #angle from north (between -180,180) in degrees
 porterOrientation = 0  # from north heading (in degrees?)
+porterOrientationUnConst = 0  # from north heading (in degrees?)
 porterLocation = [0,0]
 
 ##-System State Variables
@@ -153,7 +155,7 @@ pulseDistConst = 785 / 500 # REVISIT : this is a complete guess
 global numSamples
 global lidarStartTime
 global lidarEndTime
-numSamples = 237
+numSamples = 236
 lidarStartTime = 0
 lidarEndTime = 0
 
@@ -313,7 +315,8 @@ class debugThread(MultiThreadBase):
                         'Left Pulses' : str(leftpulse),
                         'Right Pulses' : str(rightpulse),
                         'Location' : str(porterLocation),
-                        'Max Speeds': str(maxSpeeds)
+                        'Max Speeds': str(maxSpeeds),
+                        'Orientation': str(porterOrientation)
                     }
                 except Exception as e:
                     logging.warning("%s", str(e))
@@ -687,7 +690,7 @@ class usDataThread(MultiThreadBase):
                 if (speedVector[0] > 0 ) and (speedVector[1] > 0):
                     speedVectorMaxSpeed = min(maxSpeeds[2:3])
                     if (int(USAvgDistances[2]) < USThresholds[0]) or (int(USAvgDistances[3]) < USThresholds[0]):
-                        logging.warning("FRONT TOO CLOSE. STOPPPPP!!!")
+                        #logging.warning("FRONT TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
                             with threadLock:
                                 obstruction = True
@@ -706,7 +709,7 @@ class usDataThread(MultiThreadBase):
                 elif (speedVector[0] < 0) and (speedVector[1] < 0 ):
                     speedVectorMaxSpeed = min(maxSpeeds[6:7])
                     if (int(USAvgDistances[6]) < USThresholds[2]) or (int(USAvgDistances[7]) < USThresholds[2]):
-                        logging.warning("BACK TOO CLOSE. STOPPPPP!!!")
+                        #logging.warning("BACK TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
                             with threadLock:
                                 obstruction = True
@@ -725,7 +728,7 @@ class usDataThread(MultiThreadBase):
                 elif (speedVector[0]< 0 ) and (speedVector[1] > 0):
                     speedVectorMaxSpeed = min(maxSpeeds[0:1])
                     if (int(USAvgDistances[0]) < USThresholds[1]) or (int(USAvgDistances[1]) < USThresholds[1]):
-                        logging.warning("LEFT SIDE TOO CLOSE. STOPPPPP!!!")
+                        #logging.warning("LEFT SIDE TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
                             with threadLock:
                                 obstruction = True
@@ -738,7 +741,7 @@ class usDataThread(MultiThreadBase):
                 elif (speedVector[0] > 0) and (speedVector[1] < 0) :
                     speedVectorMaxSpeed = min(maxSpeeds[5:6])
                     if (int(USAvgDistances[5]) < USThresholds[1]) or (int(USAvgDistances[6]) < USThresholds[1]):
-                        logging.warning("RIGHT SIDE TOO CLOSE. STOPPPPP!!!")
+                        #logging.warning("RIGHT SIDE TOO CLOSE. STOPPPPP!!!")
                         if obstruction != True:
                             with threadLock:
                                 obstruction = True
@@ -839,6 +842,8 @@ class datafromUI(MultiThreadBase):
                     elif dataInput['Type'] == "Cancel": # If the user wants to cancel the mapping or nav command and move onto the next item in the queue this is ran
                         with threadLock:
                             enduserloop = True
+                        stop = {"Left":0, "Right":0}
+                        speedsqueue.put(stop)
 
                         # add code to end loops # REVISIT : Is this not above?
 
@@ -955,7 +960,6 @@ class SLAMThread(MultiThreadBase):
         global porterLocation
         global porterOrientation
         global porterOrientationUnConst
-        global porterImuOrientation
         global wheelSpeeds
         global threadLock
         global dataMap
@@ -994,7 +998,7 @@ class SLAMThread(MultiThreadBase):
             
             with threadLock :
                 porterLocation = (new_x + realPorterWheelOffsetY*math.cos(orientation),new_y + realPorterWheelOffsetY*math.sin(orientation))
-                porterOrientation = (math.degrees(new_heading) + 90)*0.5 + porterImuOrientation*0.5
+                porterOrientation = math.degrees(new_heading) + 90   #(    #)*0.5 + porterImuOrientation*0.5
                 porterOrientationUnConst = (math.degrees(new_headingUnConst) + 90) # + porterImuOrientation*0.5
                 porterOrientation = constrainAngle360(porterOrientation, 180, -180)
 
@@ -1037,7 +1041,7 @@ class SLAMThread(MultiThreadBase):
             for i, sample in enumerate(lidarData) :
                 # do calculations else if sample is end sample then push all stored calculated values into output and set ready 
                 if sample != "END" :
-                    print "Adjusting"
+                    #print "Adjusting"
                     # convert coordinate to x y 
                     sampleXY = (sample["dist"]*math.cos(math.radians(sample["angle"]-90)),sample["dist"]*math.sin(math.radians(sample["angle"]-90)))
                     # add motion i*distFraction
@@ -1048,7 +1052,8 @@ class SLAMThread(MultiThreadBase):
                     # save to store
                     adjustedLidarStore.append(r*10)
                 else : 
-                    print "Leaving Adjust Lidar"
+                    #print "Leaving Adjust Lidar"
+                    print "Num samples: " + str(len(adjustedLidarStore))
                     if len(adjustedLidarStore) >=numSamples :
                         try :
                             with threadLock :
@@ -1100,8 +1105,9 @@ class SLAMThread(MultiThreadBase):
                         porterOrientation = newPorterOrientation
                         xSim =  y/20
                         ySim =  SLAMOffset[0] - x/20
-                        porterLocation = (xSim + realPorterLIDAROffsetY*math.cos(porterOrientation),ySim + realPorterLIDAROffsetY*math.sin(porterOrientation))
+                        porterLocation = (xSim + realPorterLIDAROffsetY*math.cos(math.radians(porterOrientation)),ySim + realPorterLIDAROffsetY*math.sin(math.radians(porterOrientation)))
                         adjustedLidarListReady = False
+                    print("porterOrientation: " + str(porterOrientation))
                     print "Slam Map Entering"
                     pathMap.updateMap()
                 time.sleep(0.001)
@@ -2030,15 +2036,15 @@ if __name__ == '__main__':
     #Try to start thread to recieve data from UI
     if Recieve_Enable:
         try:
-        logging.info("Trying to Run Recieve Thread")
-        recieveChannel = datafromUI(6, "Recieve Data ")
-        #recieveChannel.daemon = True
-        recieveChannel.start()
-        
-        threads.append(recieveChannel)
-        logging.info('Recieve Thread Running - %s', str(recieveChannel))
-        logging.info("Running Recieve Server")
-        #time.sleep(1)
+            logging.info("Trying to Run Recieve Thread")
+            recieveChannel = datafromUI(6, "Recieve Data ")
+            #recieveChannel.daemon = True
+            recieveChannel.start()
+            
+            threads.append(recieveChannel)
+            logging.info('Recieve Thread Running - %s', str(recieveChannel))
+            logging.info("Running Recieve Server")
+            #time.sleep(1)
         except Exception as e:
             logging.error("%s", str(e))
 
@@ -2148,6 +2154,9 @@ if __name__ == '__main__':
             logging.info("Entering User Command Mode")
             with threadLock:
                 system_status = "UserCommand"
+                navMap = np.zeros(SLAMOffset)
+                detailedMap = np.zeros(SLAMOffset)
+                loadMap = np.zeros(SLAMOffset)
                 enduserloop = False
                 runSLAM = "start"
                 lidarRun = "a"
@@ -2169,6 +2178,9 @@ if __name__ == '__main__':
             logging.info("Entering Mapping Mode")
             with threadLock:
                 system_status = "Mapping"
+                navMap = np.zeros(SLAMOffset)
+                detailedMap = np.zeros(SLAMOffset)
+                loadMap = np.zeros(SLAMOffset)
                 enduserloop = False
 
             #Mapping Code Goes Here
@@ -2181,6 +2193,9 @@ if __name__ == '__main__':
         elif currentcommand["Type"] == "NavigationCommand":
             logging.info("Entering Navigation Mode")
             try :
+                navMap = np.zeros(SLAMOffset)
+                detailedMap = np.zeros(SLAMOffset)
+                loadMap = np.zeros(SLAMOffset)
                 loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
                 with threadLock :
                     loadMap = loadMapTemp
