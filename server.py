@@ -917,6 +917,7 @@ class lidarInterfaceThread(MultiThreadBase):
 
             if input == "$" :
                 logging.debug("First sample of LIDAR recieved")
+                lidarPolarList.append("END")
                 self.currentAngle = 0
             else :     
                 # Attempt to convert to float - else set to 0
@@ -1005,7 +1006,6 @@ class SLAMThread(MultiThreadBase):
         global adjustedLidarList
         global adjustedLidarListReady
         global dataMap
-        global lidarData
         global lidarStartTime
         global lidarEndTime
         global leftDelta
@@ -1034,7 +1034,6 @@ class SLAMThread(MultiThreadBase):
                 LIDARRightPulse = 0
                 lidarStartTime = 0
                 lidarEndTime = 0
-            #self.lidarTotalNSamples += len(lidarData)
             for i, sample in enumerate(lidarData) :
                 # do calculations else if sample is end sample then push all stored calculated values into output and set ready 
                 if sample != "END" :
@@ -1050,12 +1049,15 @@ class SLAMThread(MultiThreadBase):
                     adjustedLidarStore.append(r*10)
                 else : 
                     print "Leaving Adjust Lidar"
+                    if len(adjustedLidarStore) >=numSamples :
+                        try :
+                            with threadLock :
+                                adjustedLidarList = adjustedLidarStore[-numSamples:]
+                                adjustedLidarListReady = True
+                        except Exception as e:
+                            logging.error("LIDAR adjust Error : %s", str(e))
                     with threadLock :
-                        adjustedLidarList = adjustedLidarStore[-self.lidarTotalNSamples-1:]
-                        #with open("adjustLidar.log","a+") as f:
-                        #    f.write("new\n" + str(adjustedLidarList) + "\n" + str(adjustedLidarStore)+"\n")
                         adjustedLidarStore = []
-                        adjustedLidarListReady = True
                          
     def run(self) :
         global adjustedLidarList
