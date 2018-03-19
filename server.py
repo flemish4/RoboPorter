@@ -440,38 +440,57 @@ class motorDataThread(MultiThreadBase):
 
         # Loop until told to stop
         while not exitFlag:
-            # Check that motor arduino connection is good
             self.checkMotorConn()
-            # If the ultrasonic sensors have detected an obstruction
-            if obstruction:
-                if safetyOn: #if the safety is on
-                    if lastSent != [0, 0]:
-                        logging.debug("Setting Speed Vector")
-                        with threadLock:
-                            speedVector = [0, 0]
-                elif lastSent != speedVector: #otherwise...
-                    logging.warning("Obstacle Detected But Safety OFF...") #give a warning, but dont do anything to stop
-                
-                try:
-                    self.send_serial_data(speedVector)
-                except Exception as e:
-                    self.checkMotorConn()
-                    
-            elif (speedVector != lastSent) or ((time.time() - last_time_sent)>=1):
-                logging.info("Data Ready")
-                try:
-                    if safetyOn:
-                        logging.info("Trying to send data")
-                    else:
-                        logging.info("Trying to send data no safety")
-                    
+            if(speedVector != lastSent) or ((time.time() - last_time_sent)>=1) :
+                if obstruction:
+                    if safetyOn: #if the safety is on
+                        self.send_serial_data(speedVector)
+                        if lastSent != [0, 0]:
+                            logging.info("Setting Speed Vector to 0,0 due to obstruction")
+                            with threadLock:
+                                speedVector = [0, 0]
+                    elif lastSent != speedVector: #otherwise...
+                        logging.warning("Obstacle Detected But Safety OFF...") #give a warning, but dont do anything to stop
                     try:
                         self.send_serial_data(speedVector)
                     except Exception as e:
                         self.checkMotorConn()
-                        
-                except Exception as e:
-                    logging.error("%s", str(e))
+                else:
+                    logging.info("Data Ready")
+                    try:
+                        if safetyOn:
+                            logging.info("Trying to send data")
+                        else:
+                            logging.info("Trying to send data no safety")
+                        try:
+                            self.send_serial_data(speedVector)
+                        except Exception as e:
+                            self.checkMotorConn()
+                            
+                    except Exception as e:
+                        logging.error("%s", str(e))
+
+
+
+            # Check that motor arduino connection is good
+            # self.checkMotorConn()
+            # # If the ultrasonic sensors have detected an obstruction
+            # if obstruction:
+            #     if safetyOn: #if the safety is on
+            #         if lastSent != [0, 0]:
+            #             logging.debug("Setting Speed Vector")
+            #             with threadLock:
+            #                 speedVector = [0, 0]
+            #     elif lastSent != speedVector: #otherwise...
+            #         logging.warning("Obstacle Detected But Safety OFF...") #give a warning, but dont do anything to stop
+                
+            #     try:
+            #         self.send_serial_data(speedVector)
+            #     except Exception as e:
+            #         self.checkMotorConn()
+                    
+            # elif (speedVector != lastSent) or ((time.time() - last_time_sent)>=1):
+                
             
             # Read from arduino
             if MotorConn.inWaiting() > 0:
