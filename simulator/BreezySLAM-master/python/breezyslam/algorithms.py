@@ -127,6 +127,8 @@ class CoreSLAM(object):
         Sets current map pixels to values in bytearray, where bytearray length is square of map size passed
         to CoreSLAM.__init__().
         '''
+		print("Hello in setmap")
+		print(mapbytes)
         self.map.set(mapbytes)
 
     def __str__(self):

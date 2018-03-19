@@ -326,7 +326,7 @@ class debugThread(MultiThreadBase):
                     self.clientConnection.send(datatosend)
                     try:
                         #print str(detailedMap)
-                        self.send_map(detailedMap)
+                        self.send_map(navMap)
                     except Exception as e:
                         logging.error("%s", str(e))
                     self.loopsdone += 1 #increment loops done by 1
@@ -510,7 +510,7 @@ class motorDataThread(MultiThreadBase):
                             self.inputBuf = self.inputBuf.rstrip("\n")
                             self.inputBuf = self.inputBuf.lstrip("&") 
                             self.inputBuf = self.inputBuf.rsplit(",")
-                            # print self.inputBuf
+                            #print self.inputBuf
                             with threadLock:
                                 leftpulse = self.inputBuf[0]
                                 rightpulse = self.inputBuf[1]
@@ -537,7 +537,7 @@ class motorDataThread(MultiThreadBase):
         global threadLock
         global last_time_sent
         #print "Sending Speed Vector"
-        logging.info("Sending Speed Vector - %s", str(sendCommand))
+        #logging.info("Sending Speed Vector - %s", str(sendCommand))
         if self.hexData: #construct the command to be sent.
             sendData = "$"
             if sendCommand[0] >= 0:
@@ -563,7 +563,7 @@ class motorDataThread(MultiThreadBase):
 
         try:
             MotorConn.write(sendData)
-            logging.info("Successfully sent... - %s", str(sendData))
+            #logging.info("Successfully sent... - %s", str(sendData))
             with threadLock :
                 lastSent = sendCommand[:]
                 last_time_sent = time.time()
@@ -612,13 +612,15 @@ class usDataThread(MultiThreadBase):
         global threadLock
         tempMaxSpeeds = [0,0,0,0,0,0,0,0]
         #aMax = (2*np.pi*1000)/(60*0.12)
-        aMax = 872.664626 # Calculated from line above which was supplied by a previous group 
+        aMax = 100 # 872.664626 # Calculated from line above which was supplied by a previous group 
         #radToRPM = 60/(2*np.pi)
         for i in range(0,len(usData)):
             if int(usData[i]) >= stoppingDistance:
                 tempMaxSpeeds[i] = min(int(np.sqrt(aMax*(((usData[i]/100) -(stoppingDistance/100))))), SLAMMaxSpeed)
             else:
                 tempMaxSpeeds[i] = 0
+                
+            tempMaxSpeeds[i] = 5 # REVISIT : 
         
         
         with threadLock :
@@ -706,7 +708,7 @@ class usDataThread(MultiThreadBase):
         if safetyOn:
             try:
                 # If heading forwards - check front USs for obstruction
-                if (speedVector[0] > 0 ) and (speedVector[1] > 0):
+                if (speedVector[0] >= 0 ) and (speedVector[1] >= 0):
                     speedVectorMaxSpeed = min(maxSpeeds[2:3])
                     if (int(USAvgDistances[2]) < USThresholds[0]) or (int(USAvgDistances[3]) < USThresholds[0]):
                         #logging.warning("FRONT TOO CLOSE. STOPPPPP!!!")
@@ -732,7 +734,7 @@ class usDataThread(MultiThreadBase):
                         if obstruction != True:
                             with threadLock:
                                 obstruction = True
-                        print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[6])) + ", " + str(int(USAvgDistances[7])) )
+                        #print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[6])) + ", " + str(int(USAvgDistances[7])) )
                     elif obstruction != False:
                         with threadLock:
                             obstruction = False
@@ -751,7 +753,7 @@ class usDataThread(MultiThreadBase):
                         if obstruction != True:
                             with threadLock:
                                 obstruction = True
-                        print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[0])) + ", " + str(int(USAvgDistances[1])))
+                        #print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[0])) + ", " + str(int(USAvgDistances[1])))
                     elif obstruction != False:
                         with threadLock:
                             obstruction = False
@@ -764,7 +766,7 @@ class usDataThread(MultiThreadBase):
                         if obstruction != True:
                             with threadLock:
                                 obstruction = True
-                        print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[5])) + ", " + str(int(USAvgDistances[6])))
+                        #print ("\t" + self.name + " Avg Vector - " + str(int(USAvgDistances[5])) + ", " + str(int(USAvgDistances[6])))
                     elif obstruction != False:
                         with threadLock:
                             obstruction = False
@@ -1072,7 +1074,7 @@ class SLAMThread(MultiThreadBase):
                     adjustedLidarStore.append(r*10)
                 else : 
                     #print "Leaving Adjust Lidar"
-                    print "Num samples: " + str(len(adjustedLidarStore))
+                    #print "Num samples: " + str(len(adjustedLidarStore))
                     if len(adjustedLidarStore) >=numSamples :
                         try :
                             with threadLock :
@@ -1126,8 +1128,8 @@ class SLAMThread(MultiThreadBase):
                         ySim =  SLAMOffset[0] - x/20
                         porterLocation = (xSim + realPorterLIDAROffsetY*math.cos(math.radians(porterOrientation)),ySim + realPorterLIDAROffsetY*math.sin(math.radians(porterOrientation)))
                         adjustedLidarListReady = False
-                    print("porterOrientation: " + str(porterOrientation))
-                    print "Slam Map Entering"
+                    #print("porterOrientation: " + str(porterOrientation))
+                    #print "Slam Map Entering"
                     pathMap.updateMap()
                 time.sleep(0.001)
     
@@ -1447,6 +1449,7 @@ class controlClass() :
         while (not atDest) and (not atObstacle) and (not enduserloop):
             time.sleep(0.01)
             speed = speedVectorMaxSpeed
+            print("Moving forwards, speed: " + str(speed))
             if speed == 0 :
                 return False
             #print(porterOrientation-desOrientation)
@@ -1471,7 +1474,7 @@ class controlClass() :
         global speedVector
         global enduserloop
         global threadLock
-        #print("in moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest))
+        print("in moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest))
         f.write("\n\nin moveTo, origLoc: " + str(porterLocation) + ", dest: " + str(dest) + "\n")
         origLocation = porterLocation
         desOrientation = constrainAngle360(self.getDesOrientation(origLocation, dest), porterOrientationUnConst + 180, porterOrientationUnConst - 180)
@@ -1529,6 +1532,7 @@ class controlClass() :
                     speedVector = [max(0.9*(1-orientationAdjust)*speed, 0),min(0.9*(1+orientationAdjust)*speed, speed)]
                     
                 f.write("\tspeedVector: " + str(speedVector) + "\n")
+                print("speed vector: " + str(speedVector))
             # until at destination  
             #print("dest: " + str(dest) + ", current: " + str(porterLocation) + ", angle: " + str(porterOrientation))
             # REVISIT : THIS SHOULD WORK BUT DOESN'T
@@ -1636,12 +1640,13 @@ class controlClass() :
         global porterOrientation
         global porterOrientationUnConst
         global speedVector
-        
+        print("in turnTo")
         origOrientation = porterOrientation
         desOrientation = self.getDesOrientation(porterLocation, dest)
         angle = constrainAngle360(desOrientation - porterOrientation,180,-180)
         
         maxSpeed = speedVectorMaxSpeed
+        print("MAxSpeed: " + str(maxSpeed))
         if maxSpeed == 0 :
             return False
         sign = 1 if angle > 0 else -1
@@ -1671,7 +1676,7 @@ class controlClass() :
         
         #if type == "onRadius" :
         #    pass
-        
+        print("Speed Vector : " + str(speedVector))
         # Wait for angle to have been turned
         totalTurn = 0
         prevOrientation = origOrientation
@@ -1848,14 +1853,17 @@ class controlClass() :
         f=open("nav.log", "w")    
         while not enduserloop :
             success, path = self.aStar((porterLocation[0],porterLocation[1],0), dest, timeout)
+            print("A*: " + str(success))
             if not (success or goPartial) :
                 with threadLock :
                     speedVector = [0,0]
                 return False
             f.write(str(path) +"\n")
+            print("Route: " + str(path))
             try :
                 if len(path) > 1 :
                     for instruction in path :
+                        print(instruction)
                         success = True
                         if enduserloop :
                             break
@@ -1871,6 +1879,7 @@ class controlClass() :
                             success = self.moveStraight(instruction[1], f)
                         elif instruction[0] == "moveTo" :
                             success = self.moveTo(instruction[1], f)
+                            print("Exited moveTo")
                         elif instruction[0] == "turnTo" :
                             with threadLock :
                                 lidarRun = "s"
@@ -1992,7 +2001,7 @@ class mappingClass(controlClass):
                     
         logging.info("Starting auto mapping...")
         with threadLock :
-            SLAMRun = "start"
+            runSLAM = "start"
             lidarRun = "a"
         
         time.sleep(5)
@@ -2007,22 +2016,29 @@ class mappingClass(controlClass):
             time.sleep(2)
             locations = self.getScanLocations()
            
+        with threadLock :
+            runSLAM = "stop"
+            lidarRun = "s"
         logging.info("Done auto mapping...") 
 
     
 class navigationClass(controlClass):
     def run(self, destination) :
         global threadLock
-        global SLAMRun
+        global runSLAM
         global lidarRun
         logging.info("Starting navigation...")
         with threadLock :
-            SLAMRun = "start"
+            runSLAM = "start"
             lidarRun = "a"
         
         time.sleep(5)
 
         self.goTo(destination, 20, False)
+        
+        with threadLock :
+            runSLAM = "stop"
+            lidarRun = "s"
         
         logging.info("Done navigation")
            
@@ -2159,7 +2175,7 @@ if __name__ == '__main__':
 
     # Create pathMap and SLAMObject
     try:
-        pathMapTemp = pathMapClass(realPorterSize[0])
+        pathMapTemp = pathMapClass(realPorterSize[0]/2)
         with threadLock :
             pathMap = pathMapTemp
             SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
@@ -2177,8 +2193,8 @@ if __name__ == '__main__':
                 detailedMap = np.zeros(SLAMOffset)
                 loadMap = np.zeros(SLAMOffset)
                 enduserloop = False
-                runSLAM = "start"
-                lidarRun = "a"
+                #runSLAM = "start"
+                #lidarRun = "a"
                 time.sleep(1)
             with commandqueue.mutex:
                 speedsqueue.queue.clear()
@@ -2216,9 +2232,10 @@ if __name__ == '__main__':
                 detailedMap = np.zeros(SLAMOffset)
                 loadMap = np.zeros(SLAMOffset)
                 loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
-                with threadLock :
-                    loadMap = loadMapTemp
-                    runSLAM = "loadMap"
+                #print(loadMapTemp)
+                #with threadLock :
+                #    loadMap = np.zeros(SLAMOffset) #loadMapTemp
+                #    runSLAM = "loadMap"
             except KeyError :
                 pass
             
