@@ -440,15 +440,16 @@ class motorDataThread(MultiThreadBase):
 
         # Loop until told to stop
         while not exitFlag:
-            self.checkMotorConn()
-            if(speedVector != lastSent) or ((time.time() - last_time_sent)>=1) :
+            self.checkMotorConn()#
+            #print("sv: " + str(speedVector) + ", ls" + str(lastSent))
+            if (speedVector != lastSent) or ((time.time() - last_time_sent)>=1) :
                 if obstruction:
                     if safetyOn: #if the safety is on
-                        self.send_serial_data(speedVector)
-                        if lastSent != [0, 0]:
-                            logging.info("Setting Speed Vector to 0,0 due to obstruction")
-                            with threadLock:
-                                speedVector = [0, 0]
+                        self.send_serial_data([0,0])
+                        # if lastSent != [0, 0]:
+                            # logging.info("Setting Speed Vector to 0,0 due to obstruction")
+                            # with threadLock:
+                                # speedVector = [0, 0]
                     elif lastSent != speedVector: #otherwise...
                         logging.warning("Obstacle Detected But Safety OFF...") #give a warning, but dont do anything to stop
                     try:
@@ -510,10 +511,10 @@ class motorDataThread(MultiThreadBase):
                             self.inputBuf = self.inputBuf.rstrip("\n")
                             self.inputBuf = self.inputBuf.lstrip("&") 
                             self.inputBuf = self.inputBuf.rsplit(",")
-                            #print self.inputBuf
+                            print self.inputBuf
                             with threadLock:
-                                leftpulse = self.inputBuf[0]
-                                rightpulse = self.inputBuf[1]
+                                leftpulse = self.inputBuf[1]
+                                rightpulse = self.inputBuf[0]
                                 odomLeftPulse += float(leftpulse)
                                 odomRightPulse += float(rightpulse)
                                 LIDARLeftPulse += float(leftpulse)
@@ -546,7 +547,7 @@ class motorDataThread(MultiThreadBase):
                 sendData += "-"
             if abs(sendCommand[0]) < 16:
                 sendData += "0"
-            sendData += hex(abs(sendCommand[0]))[2:]
+            sendData += hex(int(round(abs(sendCommand[0]))))[2:]
 
             if sendCommand[1] >= 0:
                 sendData += "+"
@@ -554,7 +555,7 @@ class motorDataThread(MultiThreadBase):
                 sendData += "-"
             if abs(sendCommand[1]) < 16:
                 sendData += "0"
-            sendData += hex(abs(sendCommand[1]))[2:]
+            sendData += hex(int(round(abs(sendCommand[1]))))[2:]
 
             sendData += "R" + "\n"
 
@@ -989,13 +990,15 @@ class SLAMThread(MultiThreadBase):
         global odomLeftPulse
         global odomRightPulse
 
-        if odomLeftPulse != 0 and odomRightPulse != 0 :  
+        if odomLeftPulse != 0 and odomRightPulse != 0 : 
+            print("Calculate! pulses: " + str(odomLeftPulse) + ", " + str(odomRightPulse))
             with threadLock :
                 leftDelta  = odomLeftPulse * pulseDistConst
                 rightDelta = odomRightPulse * pulseDistConst
                 odomLeftPulse = 0
                 odomRightPulse = 0
                 
+            print("Calculate: pulses: " + str(leftDelta) + ", " + str(rightDelta))
             totalR += (leftDelta + rightDelta)
             orientation = math.radians(porterOrientation - 90)
             orientationUnconst = math.radians(porterOrientationUnConst - 90)
@@ -1113,6 +1116,7 @@ class SLAMThread(MultiThreadBase):
                     runSLAM = ""
 
             if SLAMRunning :  
+                print("Before calculatePorterPosition")
                 self.calculatePorterPosition()
                 self.adjustLidar()
                 if adjustedLidarListReady:
@@ -1131,7 +1135,7 @@ class SLAMThread(MultiThreadBase):
                     #print("porterOrientation: " + str(porterOrientation))
                     #print "Slam Map Entering"
                     pathMap.updateMap()
-                time.sleep(0.001)
+                time.sleep(0.05)
     
 # Class definitions 
 
@@ -1532,7 +1536,7 @@ class controlClass() :
                     speedVector = [max(0.9*(1-orientationAdjust)*speed, 0),min(0.9*(1+orientationAdjust)*speed, speed)]
                     
                 f.write("\tspeedVector: " + str(speedVector) + "\n")
-                print("speed vector: " + str(speedVector))
+                print("speed vector: " + str(speedVector) + "location: " + str(porterLocation))
             # until at destination  
             #print("dest: " + str(dest) + ", current: " + str(porterLocation) + ", angle: " + str(porterOrientation))
             # REVISIT : THIS SHOULD WORK BUT DOESN'T
@@ -1544,7 +1548,7 @@ class controlClass() :
                 f.write("\tatDest" + "\n")
                 atDest = True
             # wait
-            time.sleep(0.01)
+            time.sleep(0.1)
                 
         # final speed is the previous speed this must be dealt with later
         return atDest
@@ -1851,50 +1855,50 @@ class controlClass() :
         global pathMap
         global lidarRun
         f=open("nav.log", "w")    
-        while not enduserloop :
-            success, path = self.aStar((porterLocation[0],porterLocation[1],0), dest, timeout)
-            print("A*: " + str(success))
-            if not (success or goPartial) :
-                with threadLock :
-                    speedVector = [0,0]
-                return False
-            f.write(str(path) +"\n")
-            print("Route: " + str(path))
-            try :
-                if len(path) > 1 :
-                    for instruction in path :
-                        print(instruction)
-                        success = True
-                        if enduserloop :
-                            break
-                        if instruction[0] == "turn" :
-                            with threadLock :
-                                lidarRun = "s"
-                                
-                            success = self.moveTurn(instruction[1], "onCentre", f)
+        #while not enduserloop :
+        success, path = self.aStar((porterLocation[0],porterLocation[1],0), dest, timeout)
+        print("A*: " + str(success))
+        if not (success or goPartial) :
+            with threadLock :
+                speedVector = [0,0]
+            return False
+        f.write(str(path) +"\n")
+        print("Route: " + str(path))
+        try :
+            if len(path) > 1 :
+                for instruction in path :
+                    print(instruction)
+                    success = True
+                    if enduserloop :
+                        break
+                    if instruction[0] == "turn" :
+                        with threadLock :
+                            lidarRun = "s"
                             
-                            with threadLock :
-                                lidarRun = "a"
-                        elif instruction[0] == "moveStraight" :
-                            success = self.moveStraight(instruction[1], f)
-                        elif instruction[0] == "moveTo" :
-                            success = self.moveTo(instruction[1], f)
-                            print("Exited moveTo")
-                        elif instruction[0] == "turnTo" :
-                            with threadLock :
-                                lidarRun = "s"
-                            success = self.turnTo(instruction[1], "onCentre", f)
-                            with threadLock :
-                                lidarRun = "a"
+                        success = self.moveTurn(instruction[1], "onCentre", f)
                         
-                        if not success :
-                            break
-                        
-            except TypeError :
-                print("No path found")
-                with threadLock :
-                    speedVector = [0,0]
-                return False
+                        with threadLock :
+                            lidarRun = "a"
+                    elif instruction[0] == "moveStraight" :
+                        success = self.moveStraight(instruction[1], f)
+                    elif instruction[0] == "moveTo" :
+                        success = self.moveTo(instruction[1], f)
+                        print("Exited moveTo")
+                    elif instruction[0] == "turnTo" :
+                        with threadLock :
+                            lidarRun = "s"
+                        success = self.turnTo(instruction[1], "onCentre", f)
+                        with threadLock :
+                            lidarRun = "a"
+                    
+                    if not success :
+                        break
+                    
+        except TypeError :
+            print("No path found")
+            with threadLock :
+                speedVector = [0,0]
+            return False
         with threadLock :
             speedVector = [0,0]
         f.close()
@@ -2193,8 +2197,8 @@ if __name__ == '__main__':
                 detailedMap = np.zeros(SLAMOffset)
                 loadMap = np.zeros(SLAMOffset)
                 enduserloop = False
-                #runSLAM = "start"
-                #lidarRun = "a"
+                runSLAM = "start"
+                lidarRun = "a"
                 time.sleep(1)
             with commandqueue.mutex:
                 speedsqueue.queue.clear()
@@ -2231,7 +2235,7 @@ if __name__ == '__main__':
                 navMap = np.zeros(SLAMOffset)
                 detailedMap = np.zeros(SLAMOffset)
                 loadMap = np.zeros(SLAMOffset)
-                loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
+                #loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
                 #print(loadMapTemp)
                 #with threadLock :
                 #    loadMap = np.zeros(SLAMOffset) #loadMapTemp
