@@ -27,7 +27,7 @@ import sys
 import threading
 import time
 from breezyslam.algorithms import RMHC_SLAM
-from roboPorterTestFunctions import roboPorterLaser
+from roboPorterTestFunctions import roboPorterLaser, RoboPorter
 
 from sys import platform
 #if on linux, import functions for IMU and ip
@@ -139,17 +139,22 @@ global odomLeftPulse
 global odomRightPulse
 global LIDARLeftPulse
 global LIDARRightPulse
+global SLAMLeftPulse
+global SLAMRightPulse
 leftpulse = 0
 rightpulse = 0
 odomLeftPulse = 0
 odomRightPulse = 0
 LIDARLeftPulse = 0
 LIDARRightPulse = 0
+SLAMLeftPulse = 0
+SLAMRightPulse = 0
 
+global robotObject
 # odometry
 global pulseDistConst
 # distance = number of pulses * ( diameter of wheels / number of divisions in encoder)
-pulseDistConst = 785 / 500 # REVISIT : this is a complete guess
+pulseDistConst = float(785)  / 20000
 
 # Lidar
 global numSamples
@@ -188,6 +193,7 @@ global detailedMap
 global pixelPorterSize
 global loadMap
 global speedVectorMaxSpeed
+global realWheelWidth
 speedVectorMaxSpeed = 0
 angle_delta = 1
 globalWd = 0
@@ -214,7 +220,7 @@ realPorterRadius    = math.sqrt(realPorterSize[0]**2+realPorterSize[1]**2)
 realPorterWheelOffsetY = -8 # REVISIT : Make this accurate
 realPorterLIDAROffsetY = 26
 pixelPorterSize    = (realPorterSize[0]/2,realPorterSize[1]/2)
-
+realWheelWidth      = 35.5
 
 #lastSent = [0, 0]
 
@@ -326,7 +332,7 @@ class debugThread(MultiThreadBase):
                     self.clientConnection.send(datatosend)
                     try:
                         #print str(detailedMap)
-                        self.send_map(navMap)
+                        self.send_map(detailedMap)
                     except Exception as e:
                         logging.error("%s", str(e))
                     self.loopsdone += 1 #increment loops done by 1
@@ -410,6 +416,7 @@ class motorDataThread(MultiThreadBase):
                 logging.info("Trying to open serial port")
                 MotorConn.open()
                 MotorConn.flushInput()
+                MotorConn.flushOutput()
             except Exception as e:
                 logging.error("%s", str(e))
             finally:
@@ -432,6 +439,8 @@ class motorDataThread(MultiThreadBase):
         global odomRightPulse
         global LIDARLeftPulse
         global LIDARRightPulse
+        global SLAMLeftPulse
+        global SLAMRightPulse
 
         lastSent = [0,0]
         last_time_sent = 0
@@ -452,10 +461,10 @@ class motorDataThread(MultiThreadBase):
                                 # speedVector = [0, 0]
                     elif lastSent != speedVector: #otherwise...
                         logging.warning("Obstacle Detected But Safety OFF...") #give a warning, but dont do anything to stop
-                    try:
-                        self.send_serial_data(speedVector)
-                    except Exception as e:
-                        self.checkMotorConn()
+                        try:
+                            self.send_serial_data(speedVector)
+                        except Exception as e:
+                            self.checkMotorConn()
                 else:
                     logging.info("Data Ready")
                     try:
@@ -519,6 +528,8 @@ class motorDataThread(MultiThreadBase):
                                 odomRightPulse += float(rightpulse)
                                 LIDARLeftPulse += float(leftpulse)
                                 LIDARRightPulse += float(rightpulse)
+                                SLAMLeftPulse += float(leftpulse)
+                                SLAMRightPulse += float(rightpulse)
                         except Exception as e:
                             logging.error("%s", str(e))
                     elif self.inputBuf[0] == "%":
@@ -538,7 +549,7 @@ class motorDataThread(MultiThreadBase):
         global threadLock
         global last_time_sent
         #print "Sending Speed Vector"
-        #logging.info("Sending Speed Vector - %s", str(sendCommand))
+        logging.info("Sending Speed Vector - %s", str(sendCommand))
         if self.hexData: #construct the command to be sent.
             sendData = "$"
             if sendCommand[0] >= 0:
@@ -621,7 +632,7 @@ class usDataThread(MultiThreadBase):
             else:
                 tempMaxSpeeds[i] = 0
                 
-            tempMaxSpeeds[i] = 5 # REVISIT : 
+            tempMaxSpeeds[i] = 10 # REVISIT : 
         
         
         with threadLock :
@@ -914,11 +925,12 @@ class lidarInterfaceThread(MultiThreadBase):
         global lidarEndTime
         global LIDARConn
         self.currentAngle = 0
-
+        running = False
          # Loop until told to stop
         while not exitFlag:
             # Enact any user requests
-            if lidarRun == "a" :                
+            if lidarRun == "a" :   
+                print("Starting Lidar")
                 with threadLock :
                     lidarRun = ""
                 try :
@@ -926,7 +938,9 @@ class lidarInterfaceThread(MultiThreadBase):
                 except Exception as e :
                     logging.error("%s", str(e))
                     self.checkLIDARConn()
-            elif lidarRun == "s" :                
+                running = True
+            elif lidarRun == "s" :  
+                print("Stopping lidar")
                 with threadLock :
                     lidarRun = ""
                 try :
@@ -934,36 +948,40 @@ class lidarInterfaceThread(MultiThreadBase):
                 except Exception as e :
                     logging.error("%s", str(e))
                     self.checkLIDARConn()
+                running = False
 
-            # Read data from lidar 
-            if lidarStartTime == 0 :
+            if running :
+                print("In running lidar")
+                # Read data from lidar 
+                if lidarStartTime == 0 :
+                    with threadLock :
+                        lidarStartTime = time.time()
+                        
+                input = LIDARConn.readline()[:-2]
+                print("after readline lidar")
+                if input == "$" :
+                    logging.debug("First sample of LIDAR recieved")
+                    lidarPolarList.append("END")
+                    self.currentAngle = 0
+                else :
+                    # Attempt to convert to float - else set to 0
+                    try :
+                        r = float(input)
+                    except Exception as e:
+                        r = 0
+                        logging.warning("Invalid lidar sample ignored")
+
+                    with threadLock :
+                        lidarPolarList.append({"angle": self.currentAngle, "dist" : r })
+                    self.currentAngle += self.sAngle
+                
                 with threadLock :
-                    lidarStartTime = time.time()
-                    
-            input = LIDARConn.readline()[:-2]
-
-            if input == "$" :
-                logging.debug("First sample of LIDAR recieved")
-                lidarPolarList.append("END")
-                self.currentAngle = 0
-            else :     
-                # Attempt to convert to float - else set to 0
-                try :
-                    r = float(input)
-                except Exception as e:
-                    r = 0
-                    logging.warning("Invalid lidar sample ignored")
-
-                with threadLock :
-                    lidarPolarList.append({"angle": self.currentAngle, "dist" : r })
-                self.currentAngle += self.sAngle
-            
-            with threadLock :
-                lidarEndTime = time.time()    
+                    lidarEndTime = time.time()    
                 
             time.sleep(0.001)
 
         # Turn off lidar on shutdown
+        print("Shutting down lidar")
         try :
             LIDARConn.write("4\n") # run continuous
         except Exception as e :
@@ -992,18 +1010,20 @@ class SLAMThread(MultiThreadBase):
 
         if odomLeftPulse != 0 and odomRightPulse != 0 : 
             print("Calculate! pulses: " + str(odomLeftPulse) + ", " + str(odomRightPulse))
+            print("pulseConst/20: " + str(pulseDistConst))
             with threadLock :
-                leftDelta  = odomLeftPulse * pulseDistConst
-                rightDelta = odomRightPulse * pulseDistConst
+                leftDelta  = odomRightPulse * pulseDistConst
+                rightDelta = odomLeftPulse * pulseDistConst
                 odomLeftPulse = 0
                 odomRightPulse = 0
+            print("deltas: " + str(leftDelta) + ", " + str(rightDelta))
                 
-            print("Calculate: pulses: " + str(leftDelta) + ", " + str(rightDelta))
-            totalR += (leftDelta + rightDelta)
+            #print("Calculate: pulses: " + str(leftDelta) + ", " + str(rightDelta))
+            totalR = (leftDelta + rightDelta)
             orientation = math.radians(porterOrientation - 90)
             orientationUnconst = math.radians(porterOrientationUnConst - 90)
-            x   = porterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)
-            y   = porterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)
+            x   = porterLocation[0] - realPorterWheelOffsetY*math.cos(orientation)/2
+            y   = porterLocation[1] - realPorterWheelOffsetY*math.sin(orientation)/2
 
             if (math.fabs(leftDelta - rightDelta) < 1.0e-6) : # basically going straight
                 new_x = x + leftDelta * math.cos(orientation)
@@ -1011,20 +1031,24 @@ class SLAMThread(MultiThreadBase):
                 new_heading = orientation
                 new_headingUnConst = orientationUnconst
             else :
-                R = pixelPorterSize[0] * (leftDelta + rightDelta) / (2 * (rightDelta - leftDelta))
-                wd = (rightDelta - leftDelta) / pixelPorterSize[0] 
+                R = (realWheelWidth/2) * (leftDelta + rightDelta) / (rightDelta - leftDelta)
+                wd = (rightDelta - leftDelta) / (realWheelWidth/2) 
                 new_x = x + R * math.sin(wd + orientation) - R * math.sin(orientation)
                 new_y = y - R * math.cos(wd + orientation) + R * math.cos(orientation)
                 
-                totalWd += wd/ 2   #   self.scale # REVISIT : why is scale needed?
-                new_heading = orientation + wd/ 2 # self.scale;
-                new_headingUnConst = orientationUnconst + wd/ 2 # self.scale;
+                totalWd += wd   #   self.scale # REVISIT : why is scale needed?
+                new_heading = orientation + wd # self.scale;
+                new_headingUnConst = orientationUnconst + wd # self.scale;
+                print("wd/2: " + str(wd/2))
             
             with threadLock :
-                porterLocation = (new_x + realPorterWheelOffsetY*math.cos(orientation),new_y + realPorterWheelOffsetY*math.sin(orientation))
+                porterLocation = (new_x + realPorterWheelOffsetY*math.cos(orientation)/2,new_y + realPorterWheelOffsetY*math.sin(orientation)/2)
                 porterOrientation = math.degrees(new_heading) + 90   #(    #)*0.5 + porterImuOrientation*0.5
                 porterOrientationUnConst = (math.degrees(new_headingUnConst) + 90) # + porterImuOrientation*0.5
                 porterOrientation = constrainAngle360(porterOrientation, 180, -180)
+                
+            print("porterOrientation: " + str(porterOrientation))
+            print("porterOrientationUnconst: " + str(porterOrientationUnConst))
 
     # REVISIT : encoderVectorAbs needs to be created, work out real rotation times of lidar, 
     def adjustLidar(self) :
@@ -1100,13 +1124,16 @@ class SLAMThread(MultiThreadBase):
         global SLAMRunning
         global runSLAM
         global pathMap
+        global robotObject
         
         while not exitFlag :
             if runSLAM == "start" :
+                print("starting slam")
                 with threadLock :
                     SLAMRunning = True
                     runSLAM = ""
             elif runSLAM == "stop" :
+                print("stopping slam")
                 with threadLock :
                     SLAMRunning = False
                     runSLAM = ""
@@ -1116,11 +1143,12 @@ class SLAMThread(MultiThreadBase):
                     runSLAM = ""
 
             if SLAMRunning :  
-                print("Before calculatePorterPosition")
                 self.calculatePorterPosition()
                 self.adjustLidar()
                 if adjustedLidarListReady:
-                    SLAMObject.update(adjustedLidarList) #, (dxy*20, globalWd, 0.015 ))
+                    with threadLock : 
+                        velocities = robotObject.computeVelocities(time.time(), SLAMLeftPulse, SLAMRightPulse)
+                    SLAMObject.update(adjustedLidarList, velocities) #, (dxy*20, globalWd, 0.015 ))
                     # update position
                     with threadLock: 
                         x, y, newPorterOrientation = SLAMObject.getpos()
@@ -1370,6 +1398,7 @@ class PID:
             self.last_error = error
 
             self.output = self.PTerm + (self.Ki * self.ITerm) + (self.Kd * self.DTerm)
+            print("self.output: " + str(self.output))
             return self.output
 
     def setKp(self, proportional_gain):
@@ -1490,9 +1519,9 @@ class controlClass() :
         # orientation is critical as any error will severely affect navigation
         # A PID loop will be used to adjust the speedVector to keep the orientation consistent
         # Stop when within Xcm of final destination OR when travelled distance
-        orientationPID = PID(0.05, 0.01, 0)
+        orientationPID = PID(0.005*0.6, 0.001, 0)
         orientationPID.SetPoint=0
-        orientationPID.setSampleTime(0.01)
+        orientationPID.setSampleTime(0.1)
         # Using angle of initial travel to determine whether final condition tests x or y values
         if (abs(origLocation[0]-dest[0]) > abs(origLocation[1]-dest[1])) : # if line is more vertical than horizontal then # REVISIT : this check is not correct
             # set offset value to select y coordinates
@@ -1527,13 +1556,16 @@ class controlClass() :
             #print("desOrientation: " + str(desOrientation))
             f.write("\terror: " + str(porterOrientationUnConst-desOrientation) + "\n")
             f.write("\terrorconstr: " + str(constrainAngle360(porterOrientationUnConst-desOrientation,180,-180)) + "\n")
-            orientationAdjust = constrainFloat(orientationPID.update(constrainAngle360(porterOrientationUnConst-desOrientation,180,-180)),1,-1)
+            orientationAdjustUnconst = orientationPID.update(constrainAngle360(desOrientation-porterOrientationUnConst,180,-180))
+            f.write("\adjustValUnconst: " + str(orientationAdjustUnconst) + "\n")
+            
+            orientationAdjust = constrainFloat(orientationAdjustUnconst,1,-1)
             f.write("\torientationAdjust: " + str(orientationAdjust) + "\n")
             
             #print("adjustment: " + str(orientationAdjust))
             if (orientationAdjust != None) and (abs(orientationAdjust - prevOrientationAdjust)>0.0001) :
                 with threadLock :
-                    speedVector = [max(0.9*(1-orientationAdjust)*speed, 0),min(0.9*(1+orientationAdjust)*speed, speed)]
+                    speedVector = [min(0.9*(1-orientationAdjust)*speed, speed),min(0.9*(1+orientationAdjust)*speed, speed)]
                     
                 f.write("\tspeedVector: " + str(speedVector) + "\n")
                 print("speed vector: " + str(speedVector) + "location: " + str(porterLocation))
@@ -1645,9 +1677,14 @@ class controlClass() :
         global porterOrientationUnConst
         global speedVector
         print("in turnTo")
-        origOrientation = porterOrientation
+        origOrientation = porterOrientationUnConst
         desOrientation = self.getDesOrientation(porterLocation, dest)
+        f.write("porterLocation: " + str(porterLocation) + "\n")
+        f.write("porterLocation: " + str(dest) + "\n")
+        f.write("orientationUnconst: " + str(origOrientation) + "\n")
+        f.write("orientation: " + str(porterOrientation) + "\n")
         angle = constrainAngle360(desOrientation - porterOrientation,180,-180)
+        f.write("angle: " + str(angle) + "\n")
         
         maxSpeed = speedVectorMaxSpeed
         print("MAxSpeed: " + str(maxSpeed))
@@ -1657,55 +1694,67 @@ class controlClass() :
         
         if angle > 0 :        
             # Calculate final porterOrientation
-            desOrientation = constrainAngle360(porterOrientation+angle,origOrientation+720,origOrientation)
+            desOrientation = porterOrientationUnConst+angle
+            f.write("Angle > 0" + "\n")
         else :
             # Calculate final porterOrientation
-            desOrientation = constrainAngle360(porterOrientation+angle,origOrientation+1,origOrientation-720)
+            desOrientation = porterOrientationUnConst+angle
+            f.write("Angle < 0" + "\n")
 
+        f.write("desOrientation: " + str(desOrientation) + "\n")
+            
         if type == "onWheel" :
             if angle > 0 :        
                 # Turning clockwise therefore right wheel is still
                 with threadLock : 
-                    speedVector = [0, maxSpeed]
+                    speedVector = [maxSpeed,0]
             else :
                 # Turning anti clockwise therefore left wheel is still
                 with threadLock : 
-                    speedVector = [maxSpeed,0]
+                    speedVector = [0, maxSpeed]
             
         
         if type == "onCentre" :
             # Even speed from each wheel but opposite
             with threadLock : 
-                speedVector = [maxSpeed*sign*-1,maxSpeed*sign]
+                speedVector = [0.5*maxSpeed*sign,0.5*maxSpeed*sign*-1]
         
         #if type == "onRadius" :
         #    pass
         print("Speed Vector : " + str(speedVector))
+        f.write("speedVector: " + str(speedVector) + "\n")
         # Wait for angle to have been turned
         totalTurn = 0
         prevOrientation = origOrientation
         done = False
-        while (not enduserloop) and (not done) :
-            rot = porterOrientation - prevOrientation
-            prevOrientation = porterOrientation
-            if angle > 0 :
-                # Must be turning clockwise
-                if rot < 0 :
-                    rot +=360
-                totalTurn += rot
-                if totalTurn >= angle :
-                    done = True
-            else :
-                # Must be turning anticlockwise
-                if rot > 0 :
-                    rot -=360
-                totalTurn += rot
-                if totalTurn <= angle :
-                    done = True
+        # while (not enduserloop) and (not done) :
+            # rot = porterOrientation - prevOrientation
+            # prevOrientation = porterOrientation
+            # if angle > 0 :
+                # # Must be turning clockwise
+                # if rot < 0 :
+                    # rot +=360
+                # totalTurn += rot
+                # if totalTurn >= angle :
+                    # done = True
+            # else :
+                # # Must be turning anticlockwise
+                # if rot > 0 :
+                    # rot -=360
+                # totalTurn += rot
+                # if totalTurn <= angle :
+                    # done = True
                     
-            time.sleep(0.005)
-            
-        return done
+            # time.sleep(0.005)
+        while not (desOrientation-porterOrientationUnConst)*sign < 0  and not enduserloop:
+            #print("porterOrientationUn: " + str(porterOrientationUnConst))
+            #print("desOrientation: " + str(desOrientation))
+            #print("(porterOrientationUnConst-desOrientation)*sign: " + str((porterOrientationUnConst-desOrientation)*sign))
+            time.sleep(0.05)
+
+        f.write("orientationUnconst: " + str(origOrientation) + "\n")
+        f.write("orientation: " + str(porterOrientation) + "\n")
+        return not enduserloop
         
     
     # Modified from pseudocode on https://en.wikipedia.org/wiki/A*_search_algorithm#Pseudocode
@@ -1887,6 +1936,7 @@ class controlClass() :
                     elif instruction[0] == "turnTo" :
                         with threadLock :
                             lidarRun = "s"
+                        time.sleep(1)
                         success = self.turnTo(instruction[1], "onCentre", f)
                         with threadLock :
                             lidarRun = "a"
@@ -2046,6 +2096,46 @@ class navigationClass(controlClass):
         
         logging.info("Done navigation")
            
+class testClass(controlClass):
+    def run(self, destination) :
+        global threadLock
+        global runSLAM
+        global lidarRun
+        global speedVector
+        logging.info("Starting testing...")
+        with threadLock :
+            runSLAM = "start"
+            lidarRun = "a"
+        
+        time.sleep(10)
+
+        #self.goTo(destination, 20, False)
+        f = open("test.log", "w")
+        #self.moveTo(destination, f)
+        
+        with threadLock :
+            lidarRun = "s"
+        
+        time.sleep(1)
+        self.turnTo((800,625,0), "onCentre", f)
+        
+        with threadLock :
+            lidarRun = "a"
+            speedVector = [0,0]
+        time.sleep(5)
+            
+        self.moveTo((750, 625,0), f)
+        f.write("final orientation: " + str(porterOrientation))
+        f.write("final orientationunconst: " + str(porterOrientationUnConst))
+        f.close()
+        with threadLock :
+            runSLAM = "stop"
+            lidarRun = "s"
+        time.sleep(0.5)
+        with threadLock :
+            speedVector = [0,0]
+        logging.info("Done testing")
+           
 #Retrieve map from database
 def recieve_map(filename):
     query = "SELECT data FROM `%u` ORDER BY id DESC LIMIT 1" %filename
@@ -2182,6 +2272,7 @@ if __name__ == '__main__':
         pathMapTemp = pathMapClass(realPorterSize[0]/2)
         with threadLock :
             pathMap = pathMapTemp
+            robotObject = RoboPorter()
             SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
     except:
         pass 
@@ -2197,6 +2288,8 @@ if __name__ == '__main__':
                 detailedMap = np.zeros(SLAMOffset)
                 loadMap = np.zeros(SLAMOffset)
                 enduserloop = False
+                SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
+
                 runSLAM = "start"
                 lidarRun = "a"
                 time.sleep(1)
@@ -2221,6 +2314,8 @@ if __name__ == '__main__':
                 detailedMap = np.zeros(SLAMOffset)
                 loadMap = np.zeros(SLAMOffset)
                 enduserloop = False
+                SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
+
 
             #Mapping Code Goes Here
             mappingObj = mappingClass(2)
@@ -2235,6 +2330,8 @@ if __name__ == '__main__':
                 navMap = np.zeros(SLAMOffset)
                 detailedMap = np.zeros(SLAMOffset)
                 loadMap = np.zeros(SLAMOffset)
+                #SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
+
                 #loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
                 #print(loadMapTemp)
                 #with threadLock :
@@ -2253,6 +2350,30 @@ if __name__ == '__main__':
 
             with threadLock:
                 system_status = "AwaitingCommands"
+                
+        elif currentcommand["Type"] == "TestCommand":
+            logging.info("Entering Test Mode")
+            try :
+                navMap = np.zeros(SLAMOffset)
+                detailedMap = np.zeros(SLAMOffset)
+                loadMap = np.zeros(SLAMOffset)
+            except KeyError :
+                pass
+            
+            with threadLock:
+                system_status = "Test"
+                enduserloop = False
+                SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
+
+
+            #Navigation Code Goes Here
+            testObj = testClass(2)
+            print(currentcommand["X"])
+            testObj.run((int(currentcommand["X"]), int(currentcommand["Y"]), 0))
+
+            with threadLock:
+                system_status = "AwaitingCommands"
+
         else:
             pass
 
