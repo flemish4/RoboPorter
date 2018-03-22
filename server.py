@@ -632,7 +632,7 @@ class usDataThread(MultiThreadBase):
             else:
                 tempMaxSpeeds[i] = 0
                 
-            tempMaxSpeeds[i] = 10 # REVISIT : 
+            tempMaxSpeeds[i] = 5 # REVISIT : 
         
         
         with threadLock :
@@ -951,14 +951,12 @@ class lidarInterfaceThread(MultiThreadBase):
                 running = False
 
             if running :
-                print("In running lidar")
                 # Read data from lidar 
                 if lidarStartTime == 0 :
                     with threadLock :
                         lidarStartTime = time.time()
                         
                 input = LIDARConn.readline()[:-2]
-                print("after readline lidar")
                 if input == "$" :
                     logging.debug("First sample of LIDAR recieved")
                     lidarPolarList.append("END")
@@ -1142,13 +1140,14 @@ class SLAMThread(MultiThreadBase):
                     SLAMObject.setmap(loadMap)
                     runSLAM = ""
 
+            #print("SLAMRunning : " + str(SLAMRunning))
             if SLAMRunning :  
                 self.calculatePorterPosition()
                 self.adjustLidar()
                 if adjustedLidarListReady:
-                    with threadLock : 
-                        velocities = robotObject.computeVelocities(time.time(), SLAMLeftPulse, SLAMRightPulse)
-                    SLAMObject.update(adjustedLidarList, velocities) #, (dxy*20, globalWd, 0.015 ))
+                    #with threadLock : 
+                    #    velocities = robotObject.computeVelocities((time.time(), SLAMLeftPulse, SLAMRightPulse))
+                    SLAMObject.update(adjustedLidarList) #, velocities) #, (dxy*20, globalWd, 0.015 ))
                     # update position
                     with threadLock: 
                         x, y, newPorterOrientation = SLAMObject.getpos()
@@ -1244,6 +1243,41 @@ class pathMapClass() :
         rows,cols = SLAMMap.shape
         M = cv2.getRotationMatrix2D((cols/2,rows/2),90,1)
         SLAMMap = cv2.warpAffine(SLAMMap,M,(cols,rows))
+        #tempPathMap = cv2.resize(tempMap, (self.pathMapLimits["xMax"],self.pathMapLimits["yMax"]))
+        #tempMap = cv2.transpose(tempMap)
+
+        with threadLock :
+            navMap = tempMap
+            detailedMap = SLAMMap
+            
+            
+    def updateMapOffline(self) :
+        global threadLock
+        global navMap
+        global detailedMap
+        global SLAMObject
+        with threadLock :
+            SLAMMap = detailedMap
+
+        # Transform SLAMMap - threshold to get walls,reduce size,  dilate to expand walls for safety
+        # threshold to find all areas that are walls
+        _,tempMap = cv2.threshold(SLAMMap,126,255,cv2.THRESH_BINARY)
+        # Invert to make walls white for dilation
+        tempMap = cv2.bitwise_not(tempMap)
+        # Make kernal for dilation
+        kernel = np.ones((self.dilateAmount,self.dilateAmount),np.uint8)
+        # Dilate to give safety margin to walls
+        tempMap = cv2.dilate(tempMap, kernel)
+        # Convert walls back to black 
+        tempMap = cv2.bitwise_not(tempMap)
+        # Resize to make pathfinding quicker
+        # Rotate map
+        #rows,cols = tempMap.shape
+        #M = cv2.getRotationMatrix2D((cols/2,rows/2),90,1)
+        #tempMap = cv2.warpAffine(tempMap,M,(cols,rows))
+        #rows,cols = SLAMMap.shape
+        #M = cv2.getRotationMatrix2D((cols/2,rows/2),90,1)
+        #SLAMMap = cv2.warpAffine(SLAMMap,M,(cols,rows))
         #tempPathMap = cv2.resize(tempMap, (self.pathMapLimits["xMax"],self.pathMapLimits["yMax"]))
         #tempMap = cv2.transpose(tempMap)
 
@@ -1717,7 +1751,7 @@ class controlClass() :
         if type == "onCentre" :
             # Even speed from each wheel but opposite
             with threadLock : 
-                speedVector = [0.5*maxSpeed*sign,0.5*maxSpeed*sign*-1]
+                speedVector = [maxSpeed*sign,maxSpeed*sign*-1]
         
         #if type == "onRadius" :
         #    pass
@@ -1903,6 +1937,8 @@ class controlClass() :
         global speedVector
         global pathMap
         global lidarRun
+        global threadLock
+        global runSLAM
         f=open("nav.log", "w")    
         #while not enduserloop :
         success, path = self.aStar((porterLocation[0],porterLocation[1],0), dest, timeout)
@@ -1911,6 +1947,13 @@ class controlClass() :
             with threadLock :
                 speedVector = [0,0]
             return False
+            
+        with threadLock :
+            runSLAM = "start"
+            lidarRun = "a"
+            
+        time.sleep(5)
+            
         f.write(str(path) +"\n")
         print("Route: " + str(path))
         try :
@@ -2082,11 +2125,7 @@ class navigationClass(controlClass):
         global runSLAM
         global lidarRun
         logging.info("Starting navigation...")
-        with threadLock :
-            runSLAM = "start"
-            lidarRun = "a"
         
-        time.sleep(5)
 
         self.goTo(destination, 20, False)
         
@@ -2111,20 +2150,30 @@ class testClass(controlClass):
 
         #self.goTo(destination, 20, False)
         f = open("test.log", "w")
-        #self.moveTo(destination, f)
+        self.moveTo((651,460, 0), f)
         
         with threadLock :
             lidarRun = "s"
         
         time.sleep(1)
-        self.turnTo((800,625,0), "onCentre", f)
+        self.turnTo((551,360,0), "onCentre", f)
         
         with threadLock :
             lidarRun = "a"
             speedVector = [0,0]
-        time.sleep(5)
+        time.sleep(10)
+        with threadLock :
+            lidarRun = "s"
+        
+        time.sleep(1)
+        self.turnTo((100,460,0), "onCentre", f)
+        
+        with threadLock :
+            lidarRun = "a"
+            speedVector = [0,0]
+        time.sleep(10)
             
-        self.moveTo((750, 625,0), f)
+        self.moveTo((451, 460,0), f)
         f.write("final orientation: " + str(porterOrientation))
         f.write("final orientationunconst: " + str(porterOrientationUnConst))
         f.close()
@@ -2274,8 +2323,8 @@ if __name__ == '__main__':
             pathMap = pathMapTemp
             robotObject = RoboPorter()
             SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
-    except:
-        pass 
+    except Exception as e:
+        print(e) 
     # Main Control Loop
     while sysRunning: #while the main loop is not in shutdown mode...
         time.sleep(1)
@@ -2327,19 +2376,24 @@ if __name__ == '__main__':
         elif currentcommand["Type"] == "NavigationCommand":
             logging.info("Entering Navigation Mode")
             try :
-                navMap = np.zeros(SLAMOffset)
-                detailedMap = np.zeros(SLAMOffset)
-                loadMap = np.zeros(SLAMOffset)
-                #SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
-
-                #loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
+                loadMapTemp = recieve_map(currentcommand["Map_Filename"])   # REVISIT : Load in map
+                with threadLock :
+                    # navMap = np.zeros(SLAMOffset)
+                    # detailedMap = np.zeros(SLAMOffset)
+                    # loadMap = np.zeros(SLAMOffset)
+                    #SLAMObject = RMHC_SLAM(roboPorterLaser(), MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed=0)
+#                    pathMap.updateMap()
+                    detailedMap = loadMapTemp
+                    porterLocation = (651,625)
+                pathMap.updateMapOffline()
                 #print(loadMapTemp)
                 #with threadLock :
                 #    loadMap = np.zeros(SLAMOffset) #loadMapTemp
                 #    runSLAM = "loadMap"
             except KeyError :
                 pass
-            
+            print("Updated map")
+            time.sleep(4)
             with threadLock:
                 system_status = "Navigation"
                 enduserloop = False
