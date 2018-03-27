@@ -56,22 +56,18 @@ class RoboPorter(WheeledVehicle):
     
     def __init__(self):
         
-        WheeledVehicle.__init__(self, 100, 500)
+        WheeledVehicle.__init__(self, 785, 178)
         
-        self.ticks_per_cycle = 2000
+        self.ticks_per_cycle = 1000
                         
     def __str__(self):
         
         return '<%s ticks_per_cycle=%d>' % (WheeledVehicle.__str__(self), self.ticks_per_cycle)
-        
-    def computeVelocities(self, odometry):
-        
-        return WheeledVehicle.computeVelocities(self, odometry[0], odometry[1], odometry[2])
 
     def extractOdometry(self, timestamp, leftWheel, rightWheel):
                 
-        # Convert microseconds to seconds, ticks to angles        
-        return timestamp / 1e6, \
+        # Convert seconds to seconds, ticks to angles        
+        return timestamp , \
                self._ticks_to_degrees(leftWheel), \
                self._ticks_to_degrees(rightWheel)
                
@@ -82,7 +78,7 @@ class RoboPorter(WheeledVehicle):
                
     def _ticks_to_degrees(self, ticks):
         
-        return ticks * (180. / self.ticks_per_cycle)
+        return ticks * (360. / self.ticks_per_cycle)
         
 
         
