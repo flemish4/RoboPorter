@@ -27,7 +27,7 @@ const byte rightPWMPin_O = 9;
 const int avgSamples = 10; //for ACS712 current sensor
 const unsigned int maxRPM = 120; 
 const unsigned int wheelCircum = 785; //mm (Wheel diameter is 25cm)
-const unsigned int pulsesPerRevolution = 500; //encoder rmp changed to 500 from 360 for new encoders
+const unsigned int pulsesPerRevolution = 1000; //encoder rmp changed to 1000 from 360 for new encoders
 const unsigned int pidPeriod = 100; //ms
 const unsigned int printfreq = 1 ;// Frequency of prints in seconds
 
@@ -151,8 +151,8 @@ int rightCurrent;
 void setup() {
 
   // Set up hardware interrupts
-  attachInterrupt(digitalPinToInterrupt(leftSensorPin_A) , leftSensorISR , RISING);
-  attachInterrupt(digitalPinToInterrupt(rightSensorPin_A), rightSensorISR, RISING);
+  attachInterrupt(digitalPinToInterrupt(leftSensorPin_A) , leftSensorISR , CHANGE);
+  attachInterrupt(digitalPinToInterrupt(rightSensorPin_A), rightSensorISR, CHANGE);
   leftWheelServo.write(90);
   rightWheelServo.write(90);
 
@@ -507,26 +507,26 @@ void loop() {
       rightSerialSpeed = strtol(leftHex, &ptr, 16);
       if((leftSerialSpeed != prevleftSerialSpeed)||(rightSerialSpeed != prevrightSerialSpeed)){
         if (endByte == '\n'){
-        Serial.println("%VALID COMMAND\n");      
+        //Serial.println("%VALID COMMAND\n");      
         moveRobot(leftSerialSpeed, rightSerialSpeed);
         prevleftSerialSpeed = leftSerialSpeed;
         prevrightSerialSpeed = rightSerialSpeed ; 
         }else {  
-        Serial.println("%INVALID COMMAND\n");
+        //Serial.println("%INVALID COMMAND\n");
         moveRobot(0,0);
         }
       }else{
-        Serial.println("%COMMAND SAME AS PREV\n");
+        //Serial.println("%COMMAND SAME AS PREV\n");
       }
       
     } else {
       moveRobot(0,0);
-      Serial.println("%INVALID COMMAND\n");
+      //Serial.println("%INVALID COMMAND\n");
     }
 
   }else if(timeout >= 20){ // if there has been no command for 20 PID iterations(20 x 0.1 seconds) stop robot
     moveRobot(0, 0) ;
-    Serial.println(String("%")+String(millis())+"   TIMEOUT\n") ;
+    //Serial.println(String("%")+String(millis())+"   TIMEOUT\n") ;
     timeout = 0 ;
   }
   if(timeout2 >= printfreq*10){

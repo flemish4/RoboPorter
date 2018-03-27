@@ -185,6 +185,30 @@ $(document).ready(function () {
         
     }
 
+    
+    function testcommand(X, Y, map) {
+
+        var json = {
+            'Type': 'CancelEnterUserCommand',
+        }
+        var jsonstring = JSON.stringify(json);
+        s.send(jsonstring + "$")
+
+        setTimeout(function() {
+            var json = {
+                'Type': 'TestCommand',
+                'X': X,
+                'Y': Y,
+
+            }
+            var jsonstring = JSON.stringify(json);
+            s.send(jsonstring + "$")
+          },500);
+
+
+        
+    }
+
     function usercommand() {
         var json = {
             'Type': 'CancelEnterUserCommand',
@@ -337,27 +361,27 @@ $(document).ready(function () {
                     if (lastcommand != "f") {
                         $(".up-key").addClass("red");
                         lastcommand = "f"
-                        userspeed(20, 20);
+                        userspeed(10, 10);
                     }
                     break;
                 case 65:
                     if (lastcommand != "l") {
                         $(".left-key").addClass("red");
-                        userspeed(-20, 20);
+                        userspeed(-5, 5);
                         lastcommand = "l"
                     }
                     break;
                 case 83:
                     if (lastcommand != "b") {
                         $(".down-key").addClass("red");
-                        userspeed(-20, -20);
+                        userspeed(-10, -10);
                         lastcommand = "b"
                     }
                     break;
                 case 68:
                     if (lastcommand != "r") {
                         $(".right-key").addClass("red");
-                        userspeed(20, -20);
+                        userspeed(5, -5);
                         lastcommand = "r"
                     }
                     break;
@@ -746,6 +770,19 @@ $(document).ready(function () {
         });
 
     })
+
+    $("#cancel-map").click(function(){
+        cancel() ; 
+    })
+
+    // Temp test code 
+    $("#man-submit").click(function(){
+        var manx = $("#x-manual").val() ; 
+        var many = $("#y-manual").val() ; 
+        testcommand(manx,many) ; 
+    })
+    // End of temp code 
+
 
     // The following code handles changing and creating users
     // When the new user form is submited. Run this function:

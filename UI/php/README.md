@@ -7,3 +7,7 @@ This directory contains all the PHP files needed for the UI. It includes
 5. map_generation --- Generates an image from the map data stored in a database
 6. changepass.php -- changes a user password
 7. newuser.php -- creates a new user
+8. Delete_map.php -- Deletes a map from dabase
+9. map_generation_temp.php -- Generates an image from the temp table
+10. map_generation.php -- Generates an image from a chosen table
+ 

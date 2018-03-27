@@ -1,4 +1,4 @@
-import numpy as np
+import numpy
 import cv2
 import MySQLdb 
 import base64
@@ -16,19 +16,19 @@ def send_map(map_to_send):
     cursor.execute(query)
 
 
-def recieve_map(name):
-    img_string = cv2.imencode('.jpg',map_to_send)[1].tostring()
-    img_string = base64.b64encode(img_string)
-    print len(img_string)
-    query = "UPDATE temp SET data = '%s' WHERE type = 'image'" %img_string
+def recieve_map(filename):
+    query = "SELECT data FROM `%u` WHERE type = 'image'" %filename
     cursor.execute(query)
+    result = cursor.fetchone() ; 
+    img_string = base64.b64decode(result[0])
+    nparray = numpy.fromstring(img_string,numpy.uint8) ; 
+    image = cv2.imdecode(nparray, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+    return image
 
+data = recieve_map(3)
 
-data = np.zeros([500,500,3],np.uint8)
-
-cv2.circle(data,(360,456),100,(255,255,255),50)
+cv2.circle(data,(100,150),100,(255,255,255),50)
 
 send_map(data) 
-
 cursor.close()
 connection.close()
